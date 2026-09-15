@@ -30,13 +30,17 @@ class BoardWidget extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final boardWidth = constraints.maxWidth;
-        // 棋盘 9×10，留 padding 让边缘有空间画棋子
-        const pad = 16.0;
-        final cellWidth = (boardWidth - pad * 2) / (BoardConstants.columnCount - 1);
+        // 棋盘 9×10。边缘棋子以最外侧交叉点为圆心，向外伸出 pieceSize/2，
+        // 因此边距按棋子半径动态计算，保证棋子完整显示。
+        const pieceRatio = 0.85;
+        const outerMargin = 4.0;
+        final cellWidth = (boardWidth - outerMargin * 2) /
+            (BoardConstants.columnCount - 1 + pieceRatio);
         final cellHeight = cellWidth; // 方格接近正方形
+        final pad = cellWidth * pieceRatio / 2 + outerMargin;
         final boardHeight = cellHeight * (BoardConstants.rowCount - 1) + pad * 2;
-        final pieceSize = cellWidth * 0.85;
-        final padding = const EdgeInsets.all(pad);
+        final pieceSize = cellWidth * pieceRatio;
+        final padding = EdgeInsets.all(pad);
 
         return SizedBox(
           width: boardWidth,
