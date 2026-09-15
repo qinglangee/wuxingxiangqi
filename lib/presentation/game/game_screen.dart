@@ -19,6 +19,9 @@ class GameScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
+            _AiConfigRow(
+              controller: controller,
+            ),
             StatusBar(state: state, onRestart: controller.restart),
             Expanded(
               child: Center(
@@ -38,6 +41,55 @@ class GameScreen extends StatelessWidget {
       ),
       // 监听结束态，触发弹窗
       floatingActionButton: const _ResultWatcher(),
+    );
+  }
+}
+
+/// AI 配置行：红方电脑 / 黑方电脑 两个 checkbox。
+class _AiConfigRow extends StatelessWidget {
+  const _AiConfigRow({required this.controller});
+
+  final GameController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      color: Colors.white.withValues(alpha: 0.6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: controller.redIsAi,
+                onChanged: (v) => controller.setRedAi(v ?? false),
+              ),
+              const Text('红方电脑'),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Row(
+            children: [
+              Checkbox(
+                value: controller.blackIsAi,
+                onChanged: (v) => controller.setBlackAi(v ?? false),
+              ),
+              const Text('黑方电脑'),
+            ],
+          ),
+          if (controller.aiThinking) ...[
+            const SizedBox(width: 16),
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 6),
+            const Text('电脑思考中...'),
+          ],
+        ],
+      ),
     );
   }
 }

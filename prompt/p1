@@ -9,4 +9,11 @@
 
 > 现在要在界面上添加两个 checkbox 按钮，分别是红方电脑和黑方电脑。当选中红方电脑时，红方电脑会自动走棋子，当选中黑方电脑时，黑方电脑会自动走棋子。
 电脑走子的招数由皮卡鱼象棋引擎负责计算，引擎程序在 engine 目录下。 engine/windows 和 engine/android 下分别放的是 windows 和 android 版本的引擎程序。
-现在开始添加实现以上功能的代码， 使应用能够在 windows 和 android 不同平台下调用正确的引擎程序，正常运行。
+现在开始添加实现以上功能的代码， 使应用能够在 windows 和 android 不同平台下调用正确的引擎程序，正常运行。 你实现功能代码就可以了， 不需要执行程序。
+
+> 皮卡鱼引擎启动时， 没有加载权重文件， 执行请求报错了， 看一下是什么原因引致的， 修改一下。 以后修改代码时都是修改就可以了， 不需要执行程序。
+[pikafish] info string ERROR: Network evaluation parameters compatible with the engine must be available.
+[pikafish] info string ERROR: The network file pikafish.nnue was not loaded successfully.
+[pikafish] info string ERROR: The UCI option EvalFile might need to specify the full path, including the directory name, to the network file.
+> 要限制一下皮卡鱼思考时间不要超过1秒
+> 现在勾选了电脑黑方它也不走子啊， 看一下接收皮卡鱼返回信息再一直到更新黑方走子的流程有没有问题， 找到不走子的原因修正一下

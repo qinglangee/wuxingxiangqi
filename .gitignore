@@ -47,4 +47,5 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-engine/
+# 顶层的 engine 目录
+/engine/

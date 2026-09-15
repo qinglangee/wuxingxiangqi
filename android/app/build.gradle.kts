@@ -17,6 +17,15 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.chess_test"
+        // 皮卡鱼引擎二进制不压缩，保证可正确加载执行
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+        packaging {
+            jniLibs {
+                useLegacyPackaging = true
+            }
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
