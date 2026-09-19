@@ -63,8 +63,6 @@ class BoardWidget extends StatelessWidget {
                   size: Size(boardWidth, boardHeight),
                   painter: _BoardPainter(padding: padding, cellW: cellWidth, cellH: cellHeight),
                 ),
-                // 2. 选中高亮 + 走法提示
-                ..._buildHints(padding, cellWidth, cellHeight, pieceSize),
                 // 3. 棋子
                 ...board.pieces().map((e) => _positionedPiece(
                       e.position,
@@ -74,6 +72,8 @@ class BoardWidget extends StatelessWidget {
                       cellHeight,
                       pieceSize,
                     )),
+                // 2. 选中高亮 + 走法提示
+                ..._buildHints(padding, cellWidth, cellHeight, pieceSize),
               ],
             ),
           ),
@@ -208,7 +208,7 @@ class _BoardPainter extends CustomPainter {
       ..layout();
     tp.paint(
       canvas,
-      Offset(left, top + 4 * cellH + (cellH - tp.height) / 2),
+      Offset(left + cellW, top + 4 * cellH + (cellH - tp.height) / 2),
     );
   }
 
