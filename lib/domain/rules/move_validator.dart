@@ -58,9 +58,8 @@ class MoveValidator {
       Board board, Position from, Position to, Side mover) {
     final snapshot = board.clone();
     snapshot.move(from, to);
-    if (_kingsFacing(snapshot)) return false; // 飞将禁律
-    if (_isInCheck(snapshot, mover)) return false;
-    return true;
+    // 飞将已由 _isInCheck 中「对方将/帅攻击本方将/帅」的逻辑覆盖，无需单独判定
+    return !_isInCheck(snapshot, mover);
   }
 
   /// 是否两将位于同列且中间无任何棋子(飞将)。
@@ -86,7 +85,7 @@ class MoveValidator {
     for (final (:position, :piece) in board.pieces(of: attacker)) {
       // 飞将：对方将正面攻击本方将
       if (piece.type == PieceType.general) {
-        if (position.col == kingPos.col && _kingsFacing(board)) {
+        if (_kingsFacing(board)) {
           return true;
         }
         continue;

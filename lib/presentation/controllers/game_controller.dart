@@ -68,8 +68,8 @@ class GameController extends ChangeNotifier {
 
     final selected = _state.selected!;
     if (selected == pos) {
-      _state.selected = null;
-      notifyListeners();
+      // _state.selected = null;
+      // notifyListeners();
       return;
     }
 
