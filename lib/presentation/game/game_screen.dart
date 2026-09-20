@@ -4,10 +4,13 @@ import 'package:provider/provider.dart';
 import '../controllers/game_controller.dart';
 import 'result_dialog.dart';
 import 'widgets/board_widget.dart';
-import 'widgets/notation_bar.dart';
+import 'widgets/review_panel.dart';
 import 'widgets/status_bar.dart';
 
 /// 主页面：拼装棋盘 + 状态栏 + 结束弹窗。
+///
+/// 布局：顶部 AI 配置 + 状态栏；中部上半为棋盘（约 1/2 高度），
+/// 下半为打谱面板（棋谱注释 / 引擎 / 云库 三个标签）。
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
 
@@ -30,21 +33,22 @@ class GameScreen extends StatelessWidget {
               controller: controller,
             ),
             StatusBar(state: state, onRestart: controller.restart),
-            Expanded(
+            // 上半部分：棋盘（按宽度自适应高度，不抢占下半部分空间）
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: BoardWidget(
-                    board: state.board,
-                    selected: state.selected,
-                    hints: controller.selectedHints.toSet(),
-                    onTap: controller.onTap,
-                  ),
+                child: BoardWidget(
+                  board: state.board,
+                  selected: state.selected,
+                  hints: controller.selectedHints.toSet(),
+                  onTap: controller.onTap,
                 ),
               ),
             ),
-            // 底部棋谱栏：前进 / 后退 / 着法列表
-            NotationBar(controller: controller),
+            // 下半部分：三标签打谱面板（占据棋盘外剩余的全部空间）
+            Expanded(
+              child: ReviewPanel(controller: controller),
+            ),
           ],
         ),
       ),

@@ -141,6 +141,22 @@ class GameController extends ChangeNotifier {
   /// 跳转到棋谱树中的任意节点（点击棋谱步时使用）。
   void jumpTo(NotationNode node) => _jumpTo(node);
 
+  /// 当前步的注释文本（无则返回空字符串）。
+  ///
+  /// 注释属于「到达当前节点的那步棋」，保存于 [MoveRecord.comment]。
+  /// 根节点没有对应走法，注释为空。
+  String get currentComment =>
+      _current.move?.comment ?? '';
+
+  /// 设置当前步的注释。空字符串视为清除注释。
+  void setCurrentComment(String text) {
+    final move = _current.move;
+    if (move == null) return; // 根节点不可加注释
+    final trimmed = text.trim();
+    move.comment = trimmed.isEmpty ? null : trimmed;
+    notifyListeners();
+  }
+
   void _jumpTo(NotationNode? target) {
     if (target == null || _aiThinking || identical(target, _current)) return;
     _current = target;
