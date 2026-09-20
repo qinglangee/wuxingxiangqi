@@ -70,6 +70,8 @@ class _ReviewPanelState extends State<ReviewPanel>
             ),
           ),
           // 底部导航条：任意标签页都可用，控制棋谱前进/后退
+          // 仅当当前节点为分支点时，在导航条上方显示分支选择条
+          if (controller.atBranch) _BranchSelectorBar(controller: controller),
           _NavRow(controller: controller),
         ],
       ),
@@ -171,6 +173,64 @@ class _NotationTabState extends State<_NotationTab> {
         curve: Curves.easeOut,
       );
     }
+  }
+}
+
+/// 分支选择条：浮动在底部导航栏上方，仅在分支点显示。
+///
+/// 一条水平长条，按分支数等分宽度，每段显示一个 1-based 数字。
+/// 点击数字即选择对应分支并跳转。
+class _BranchSelectorBar extends StatelessWidget {
+  const _BranchSelectorBar({required this.controller});
+
+  final GameController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = controller.branchOptions;
+    if (options.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFEFE0B8),
+        border: Border(
+          top: BorderSide(color: Color(0xFFC9B68C), width: 0.6),
+          bottom: BorderSide(color: Color(0xFFC9B68C), width: 0.6),
+        ),
+      ),
+      // 固定高度：只够放下一个数字小圆点
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          for (var i = 0; i < options.length; i++)
+            Expanded(
+              child: Center(
+                child: InkWell(
+                  onTap: () => controller.selectBranch(i),
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: AppTheme.boardLine,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
