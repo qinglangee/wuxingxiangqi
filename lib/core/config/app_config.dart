@@ -8,9 +8,11 @@ class AppConfig {
     EngineConfig? engine,
     UiConfig? ui,
     BoardConfig? board,
+    LibraryConfig? library,
   })  : engine = engine ?? EngineConfig(),
         ui = ui ?? UiConfig(),
-        board = board ?? BoardConfig();
+        board = board ?? BoardConfig(),
+        library = library ?? LibraryConfig();
 
   /// 引擎相关配置（可执行文件路径、权重、思考参数等）。
   EngineConfig engine;
@@ -20,6 +22,9 @@ class AppConfig {
 
   /// 棋子 / 棋盘相关配置（后续支持自定义资源）。
   BoardConfig board;
+
+  /// 棋谱仓库相关配置（目录路径等）。
+  LibraryConfig library;
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
         engine: json['engine'] is Map
@@ -31,23 +36,29 @@ class AppConfig {
         board: json['board'] is Map
             ? BoardConfig.fromJson(Map<String, dynamic>.from(json['board']))
             : BoardConfig(),
+        library: json['library'] is Map
+            ? LibraryConfig.fromJson(Map<String, dynamic>.from(json['library']))
+            : LibraryConfig(),
       );
 
   Map<String, dynamic> toJson() => {
         'engine': engine.toJson(),
         'ui': ui.toJson(),
         'board': board.toJson(),
+        'library': library.toJson(),
       };
 
   AppConfig copyWith({
     EngineConfig? engine,
     UiConfig? ui,
     BoardConfig? board,
+    LibraryConfig? library,
   }) =>
       AppConfig(
         engine: engine ?? this.engine,
         ui: ui ?? this.ui,
         board: board ?? this.board,
+        library: library ?? this.library,
       );
 }
 
@@ -232,5 +243,25 @@ class BoardConfig {
         boardStyle: boardStyle ?? this.boardStyle,
         customPiecePath: customPiecePath ?? this.customPiecePath,
         customBoardPath: customBoardPath ?? this.customBoardPath,
+      );
+}
+
+/// 棋谱仓库相关配置。
+class LibraryConfig {
+  LibraryConfig({this.notationLibraryPath});
+
+  /// 棋谱仓库根目录（绝对路径）。为空表示尚未配置，需要用户先选择。
+  String? notationLibraryPath;
+
+  factory LibraryConfig.fromJson(Map<String, dynamic> json) => LibraryConfig(
+        notationLibraryPath: json['notationLibraryPath'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'notationLibraryPath': notationLibraryPath,
+      };
+
+  LibraryConfig copyWith({String? notationLibraryPath}) => LibraryConfig(
+        notationLibraryPath: notationLibraryPath ?? this.notationLibraryPath,
       );
 }

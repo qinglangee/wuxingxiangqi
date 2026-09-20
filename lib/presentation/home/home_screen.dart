@@ -1,10 +1,14 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/config/config_manager.dart';
 
 /// 首页：中国象棋水墨风主菜单。
 ///
 /// 三个入口卡片：棋谱 / 残局 / 打谱。
+/// - 「棋谱」打开棋谱仓库目录（未配置时引导用户选择目录）。
 /// - 「打谱」跳转到对局页面（/play 路由）。
-/// - 其余按钮暂用 SnackBar 占位。
+/// - 「残局」与右上角设置按钮暂用 SnackBar 占位。
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -33,7 +37,7 @@ class HomeScreen extends StatelessWidget {
                           title: '棋谱',
                           subtitle: '收藏与浏览经典棋谱',
                           icon: const _BoardIcon(),
-                          onTap: () => _placeholder(context, '棋谱'),
+                          onTap: () => _openNotationLibrary(context),
                         ),
                         const SizedBox(height: 24),
                         _MenuCard(
@@ -98,6 +102,101 @@ class HomeScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$name 功能开发中')),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 棋谱仓库：打开已配置目录或引导用户先选择目录
+  // ---------------------------------------------------------------------------
+
+  /// 点击「棋谱」按钮：
+  /// 1. 读取配置中的 [LibraryConfig.notationLibraryPath]；
+  /// 2. 已配置且目录可写入 → 用文件选择器从该目录起手让用户选择棋谱文件；
+  /// 3. 未配置或目录失效 → 提示并引导用户选择目录，验证可写后保存配置，
+  ///    再继续打开文件选择器。
+  Future<void> _openNotationLibrary(BuildContext context) async {
+    final mgr = ConfigManager.instance;
+    var path = mgr.config.library.notationLibraryPath;
+
+    // 已配置：检查目录仍存在且可写
+    if (path != null && path.isNotEmpty) {
+      final ok = await ConfigManager.isDirectoryWritable(path);
+      if (!ok) {
+        // 配置失效（目录被删/权限丢失），清空并走选择流程
+        await mgr.updateLibrary((c) => c.copyWith()..notationLibraryPath = null);
+        path = null;
+      }
+    }
+
+    // 未配置：提示并引导用户选择目录
+    if (path == null || path.isEmpty) {
+      if (!context.mounted) return;
+      final accepted = await _promptChooseDirectory(context);
+      if (!accepted) return;
+      final picked = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: '选择棋谱仓库目录',
+      );
+      if (picked == null || picked.isEmpty) return;
+      final writable = await ConfigManager.isDirectoryWritable(picked);
+      if (!writable) {
+        if (!context.mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('目录不可用'),
+            content: Text('所选目录不存在或不可写入：\n$picked\n请选择其它目录。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      await mgr.updateLibrary(
+        (c) => c.copyWith()..notationLibraryPath = picked,
+      );
+      path = picked;
+    }
+
+    // 已配置：打开文件选择器，让用户在仓库目录中选择棋谱或进入子目录
+    final file = await FilePicker.platform.pickFiles(
+      dialogTitle: '选择棋谱文件',
+      initialDirectory: path,
+      type: FileType.custom,
+      allowedExtensions: const ['pgn', 'xqf', 'cbf', 'txt'],
+    );
+    if (file == null || file.files.isEmpty) return;
+    final pickedPath = file.files.single.path;
+    // 暂只提示已选择，后续接入棋谱加载
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已选择棋谱：${pickedPath ?? file.files.single.name}（加载功能待实现）')),
+    );
+  }
+
+  /// 弹出对话框提示用户先选择棋谱仓库目录。
+  /// 返回 true 表示用户同意继续选择目录；false 表示取消。
+  Future<bool> _promptChooseDirectory(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('尚未配置棋谱仓库'),
+        content: const Text('需要先选择一个目录作为棋谱仓库，是否现在选择？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('选择目录'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 }
 

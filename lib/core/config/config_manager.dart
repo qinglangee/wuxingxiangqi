@@ -106,6 +106,34 @@ class ConfigManager extends ChangeNotifier {
     await save();
   }
 
+  /// 更新棋谱仓库配置。
+  Future<void> updateLibrary(
+      LibraryConfig Function(LibraryConfig current) updater) async {
+    final next = updater(_config.library.copyWith());
+    _config = _config.copyWith(library: next);
+    notifyListeners();
+    await save();
+  }
+
+  /// 检查目录存在且可写入（尝试在该目录下创建并删除一个临时文件）。
+  /// 目录不存在或无写权限时返回 false。
+  static Future<bool> isDirectoryWritable(String path) async {
+    try {
+      final dir = Directory(path);
+      if (!await dir.exists()) return false;
+      final testFile = File(
+        '${dir.path}${Platform.pathSeparator}.wuxing_write_test',
+      );
+      final raf = await testFile.open(mode: FileMode.write);
+      await raf.writeString('ok');
+      await raf.close();
+      await testFile.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 重置为默认配置并保存。
   Future<void> resetToDefaults() async {
     _config = AppConfig();
