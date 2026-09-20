@@ -15,7 +15,13 @@ class GameScreen extends StatelessWidget {
     final controller = context.watch<GameController>();
     final state = controller.state;
     return Scaffold(
-      appBar: AppBar(title: const Text('中国象棋')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('打谱'),
+      ),
       body: SafeArea(
         child: Column(
           children: [
