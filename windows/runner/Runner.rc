@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "chess_test" "\0"
+            VALUE "CompanyName", "com.xmalloc" "\0"
+            VALUE "FileDescription", "五星象棋" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "chess_test" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "chess_test.exe" "\0"
-            VALUE "ProductName", "chess_test" "\0"
+            VALUE "InternalName", "wuxingxiangqi" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.xmalloc. All rights reserved." "\0"
+            VALUE "OriginalFilename", "wuxingxiangqi.exe" "\0"
+            VALUE "ProductName", "五星象棋" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

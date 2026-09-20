@@ -1,3 +1,3 @@
-# chess_test
+# 五星象棋
 
-A new Flutter project.
+A Chinese chess (Xiangqi) application built with Flutter.

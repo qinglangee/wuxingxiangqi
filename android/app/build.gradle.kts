@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.chess_test"
+    namespace = "com.xmalloc.wuxingxiangqi"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.chess_test"
+        applicationId = "com.xmalloc.wuxingxiangqi"
         // 皮卡鱼引擎二进制不压缩，保证可正确加载执行
         ndk {
             abiFilters += listOf("arm64-v8a")
