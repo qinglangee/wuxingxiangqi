@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/board_constants.dart';
@@ -264,8 +266,12 @@ class _BranchMarkerPainter extends CustomPainter {
       Color(0xFF5D4037), // 棕
     ];
 
-    final dotRadius = cellW * 0.22;
-    final fontSize = cellW * 0.32;
+    final dotRadius = cellW * 0.18;
+    final fontSize = cellW * 0.26;
+    // 半个棋子宽度（piece size = cellW * 0.85）
+    final halfPiece = cellW * 0.425;
+    // 箭头尺寸
+    final arrowLen = cellW * 0.28;
 
     for (var i = 0; i < markers.length; i++) {
       final m = markers[i];
@@ -286,16 +292,54 @@ class _BranchMarkerPainter extends CustomPainter {
         padding: padding,
       );
 
-      // 半透明连线
+      // 走法方向单位向量
+      final dx = toCenter.dx - fromCenter.dx;
+      final dy = toCenter.dy - fromCenter.dy;
+      final len = math.sqrt(dx * dx + dy * dy);
+      final ux = len > 0 ? dx / len : 0.0;
+      final uy = len > 0 ? dy / len : 0.0;
+
+      // 半透明连线（终点稍微缩进，留出箭头位置）
+      final lineEnd = Offset(
+        toCenter.dx - ux * arrowLen * 0.5,
+        toCenter.dy - uy * arrowLen * 0.5,
+      );
       final linePaint = Paint()
         ..color = color.withValues(alpha: 0.55)
         ..strokeWidth = cellW * 0.10
         ..strokeCap = StrokeCap.round;
-      canvas.drawLine(fromCenter, toCenter, linePaint);
+      canvas.drawLine(fromCenter, lineEnd, linePaint);
 
-      // 端点圆点 + 数字
-      _drawDot(canvas, fromCenter, dotRadius, color, m.label, fontSize);
-      _drawDot(canvas, toCenter, dotRadius, color, m.label, fontSize);
+      // 终点箭头（三角形，尖端在 toCenter 处，指向走法方向）
+      final tip = toCenter;
+      final baseCenter = Offset(
+        toCenter.dx - ux * arrowLen,
+        toCenter.dy - uy * arrowLen,
+      );
+      // 与方向垂直的基线
+      final px = -uy;
+      final py = ux;
+      final base1 = Offset(
+        baseCenter.dx + px * arrowLen * 0.5,
+        baseCenter.dy + py * arrowLen * 0.5,
+      );
+      final base2 = Offset(
+        baseCenter.dx - px * arrowLen * 0.5,
+        baseCenter.dy - py * arrowLen * 0.5,
+      );
+      final arrowPath = Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(base1.dx, base1.dy)
+        ..lineTo(base2.dx, base2.dy)
+        ..close();
+      canvas.drawPath(arrowPath, Paint()..color = color);
+
+      // 终点数字：在终点之外半个棋子宽度处，沿走法方向偏移
+      final numberCenter = Offset(
+        toCenter.dx - ux * halfPiece,
+        toCenter.dy - uy * halfPiece,
+      );
+      _drawDot(canvas, numberCenter, dotRadius, color, m.label, fontSize);
     }
   }
 
