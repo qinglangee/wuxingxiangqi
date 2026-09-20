@@ -68,6 +68,26 @@ class GameController extends ChangeNotifier {
   /// 是否正处于棋谱末梢（只有末梢上的新走子才触发 AI 续走）。
   bool get atTip => _current.isTip;
 
+  /// 是否存在上一个分支点（沿父链向上的某祖先有多于 1 个续着）。
+  bool get canGoPrevBranch {
+    var n = _current.parent;
+    while (n != null) {
+      if (n.children.length > 1) return true;
+      n = n.parent;
+    }
+    return false;
+  }
+
+  /// 是否存在下一个分支点（沿主线向下的某后代有多于 1 个续着）。
+  bool get canGoNextBranch {
+    var n = _current.mainChild;
+    while (n != null) {
+      if (n.children.length > 1) return true;
+      n = n.mainChild;
+    }
+    return false;
+  }
+
   Iterable<Position> get selectedHints =>
       _state.selected == null ? const [] : _engine.legalMovesFrom(_state.selected!);
 
@@ -140,6 +160,30 @@ class GameController extends ChangeNotifier {
 
   /// 跳转到棋谱树中的任意节点（点击棋谱步时使用）。
   void jumpTo(NotationNode node) => _jumpTo(node);
+
+  /// 跳到上一个分支点（沿父链向上最近的有多个续着的祖先）。
+  void goToPrevBranch() {
+    var n = _current.parent;
+    while (n != null) {
+      if (n.children.length > 1) {
+        _jumpTo(n);
+        return;
+      }
+      n = n.parent;
+    }
+  }
+
+  /// 跳到下一个分支点（沿主线下行最近的有多个续着的后代）。
+  void goToNextBranch() {
+    var n = _current.mainChild;
+    while (n != null) {
+      if (n.children.length > 1) {
+        _jumpTo(n);
+        return;
+      }
+      n = n.mainChild;
+    }
+  }
 
   /// 当前步的注释文本（无则返回空字符串）。
   ///

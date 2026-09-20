@@ -69,6 +69,8 @@ class _ReviewPanelState extends State<ReviewPanel>
               ],
             ),
           ),
+          // 底部导航条：任意标签页都可用，控制棋谱前进/后退
+          _NavRow(controller: controller),
         ],
       ),
     );
@@ -109,7 +111,7 @@ class _NotationTabState extends State<_NotationTab> {
 
     return Row(
       children: [
-        // 左 1/3：着法列表（含前进/后退按钮）
+        // 左 1/3：着法列表
         Expanded(
           flex: 1,
           child: Container(
@@ -118,39 +120,32 @@ class _NotationTabState extends State<_NotationTab> {
                 right: BorderSide(color: Color(0xFFD8C69A), width: 0.6),
               ),
             ),
-            child: Column(
-              children: [
-                _NavRow(controller: controller),
-                Expanded(
-                  child: moveNodes.isEmpty
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Text(
-                              '尚无着法',
-                              style: TextStyle(
-                                  color: Color(0xFF8B6B3D), fontSize: 13),
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: moveNodes.length,
-                          itemExtent: 32,
-                          itemBuilder: (_, i) {
-                            final node = moveNodes[i];
-                            return _MoveRow(
-                              key: _keyFor(node.depth),
-                              node: node,
-                              isCurrent: identical(node, current),
-                              isFuture: node.depth > current.depth,
-                              onTap: () => controller.jumpTo(node),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
+            child: moveNodes.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text(
+                        '尚无着法',
+                        style:
+                            TextStyle(color: Color(0xFF8B6B3D), fontSize: 13),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: moveNodes.length,
+                    itemExtent: 32,
+                    itemBuilder: (_, i) {
+                      final node = moveNodes[i];
+                      return _MoveRow(
+                        key: _keyFor(node.depth),
+                        node: node,
+                        isCurrent: identical(node, current),
+                        isFuture: node.depth > current.depth,
+                        onTap: () => controller.jumpTo(node),
+                      );
+                    },
+                  ),
           ),
         ),
         // 右 2/3：注释区
@@ -188,39 +183,51 @@ class _NavRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
+        color: Color(0xFFF5E6C8),
         border: Border(
-          bottom: BorderSide(color: Color(0xFFD8C69A), width: 0.6),
+          top: BorderSide(color: Color(0xFFC9B68C), width: 0.8),
         ),
       ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          _NavBtn(
+          _NavItem(
             icon: Icons.skip_previous,
-            tooltip: '回到开局',
+            label: '开局',
             enabled: controller.canGoBack,
             onTap: () {
-              // 连续后退到根
               while (controller.canGoBack) {
                 controller.goBack();
               }
             },
           ),
-          _NavBtn(
+          _NavItem(
+            icon: Icons.alt_route,
+            label: '上一分支',
+            enabled: controller.canGoPrevBranch,
+            onTap: controller.goToPrevBranch,
+          ),
+          _NavItem(
             icon: Icons.chevron_left,
-            tooltip: '后退一步',
+            label: '后退',
             enabled: controller.canGoBack,
             onTap: controller.goBack,
           ),
-          const Spacer(),
-          _NavBtn(
+          _NavItem(
             icon: Icons.chevron_right,
-            tooltip: '前进一步',
+            label: '前进',
             enabled: controller.canGoForward,
             onTap: controller.goForward,
           ),
-          _NavBtn(
+          _NavItem(
+            icon: Icons.alt_route,
+            label: '下一分支',
+            enabled: controller.canGoNextBranch,
+            onTap: controller.goToNextBranch,
+          ),
+          _NavItem(
             icon: Icons.skip_next,
-            tooltip: '跳到末尾',
+            label: '末尾',
             enabled: controller.canGoForward,
             onTap: () {
               while (controller.canGoForward) {
@@ -234,31 +241,46 @@ class _NavRow extends StatelessWidget {
   }
 }
 
-class _NavBtn extends StatelessWidget {
-  const _NavBtn({
+/// 底部导航项：图标在上、文字在下，类似 BottomNavigationBar 项。
+class _NavItem extends StatelessWidget {
+  const _NavItem({
     required this.icon,
-    required this.tooltip,
+    required this.label,
     required this.enabled,
     required this.onTap,
   });
 
   final IconData icon;
-  final String tooltip;
+  final String label;
   final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      iconSize: 22,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 32),
-      icon: Icon(icon),
-      tooltip: tooltip,
-      onPressed: enabled ? onTap : null,
-      color: AppTheme.boardLine,
-      disabledColor: const Color(0xFFD0C4A8),
+    final color = enabled ? AppTheme.boardLine : const Color(0xFFD0C4A8);
+    return Expanded(
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 28, color: color),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: enabled
+                      ? const Color(0xFF8B6B3D)
+                      : const Color(0xFFD0C4A8),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
