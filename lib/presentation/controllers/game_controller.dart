@@ -88,6 +88,15 @@ class GameController extends ChangeNotifier {
     return false;
   }
 
+  /// 当前节点是否为分支点（有多条候选续着）。
+  bool get atBranch => _current.children.length > 1;
+
+  /// 当前节点下的所有候选分支（每个对应一步棋）。
+  ///
+  /// 非分支点时返回空列表。
+  List<NotationNode> get branchOptions =>
+      List.unmodifiable(_current.children);
+
   Iterable<Position> get selectedHints =>
       _state.selected == null ? const [] : _engine.legalMovesFrom(_state.selected!);
 
@@ -183,6 +192,16 @@ class GameController extends ChangeNotifier {
       }
       n = n.mainChild;
     }
+  }
+
+  /// 选择当前分支点下的第 [index] 条分支（0-based）。
+  ///
+  /// 把父节点（当前节点）的 [NotationNode.mainChildIndex] 改为 [index]，
+  /// 然后跳到该分支节点。后续「前进」会沿该分支继续走。
+  void selectBranch(int index) {
+    if (index < 0 || index >= _current.children.length) return;
+    _current.mainChildIndex = index;
+    _jumpTo(_current.children[index]);
   }
 
   /// 当前步的注释文本（无则返回空字符串）。

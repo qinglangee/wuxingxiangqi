@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../controllers/game_controller.dart';
 import 'result_dialog.dart';
 import 'widgets/board_widget.dart';
+import 'widgets/branch_marker.dart';
 import 'widgets/review_panel.dart';
 import 'widgets/status_bar.dart';
 
@@ -42,6 +43,7 @@ class GameScreen extends StatelessWidget {
                   selected: state.selected,
                   hints: controller.selectedHints.toSet(),
                   onTap: controller.onTap,
+                  branchMarkers: _buildBranchMarkers(controller),
                 ),
               ),
             ),
@@ -53,8 +55,27 @@ class GameScreen extends StatelessWidget {
         ),
       ),
       // 监听结束态，触发弹窗
-      floatingActionButton: const _ResultWatcher(),
+      floatingActionButton: Stack(
+        children: const [
+          _ResultWatcher(),
+          _BranchDialogWatcher(),
+        ],
+      ),
     );
+  }
+
+  /// 在分支点为每条候选分支生成一个标记（带 1-based 序号）。
+  List<BranchMarker> _buildBranchMarkers(GameController controller) {
+    final options = controller.branchOptions;
+    if (options.isEmpty) return const [];
+    return [
+      for (var i = 0; i < options.length; i++)
+        BranchMarker(
+          from: options[i].move!.from,
+          to: options[i].move!.to,
+          label: i + 1,
+        ),
+    ];
   }
 }
 
@@ -143,5 +164,123 @@ class _ResultWatcherState extends State<_ResultWatcher> {
       }
     }
     return const SizedBox.shrink();
+  }
+}
+
+/// 监听 controller 当前节点变化，到达分支点时弹出分支选择框。
+///
+/// 同一分支节点只弹一次（用 depth 记忆），避免热重载或重复 notify 时反复弹出。
+class _BranchDialogWatcher extends StatefulWidget {
+  const _BranchDialogWatcher();
+
+  @override
+  State<_BranchDialogWatcher> createState() => _BranchDialogWatcherState();
+}
+
+class _BranchDialogWatcherState extends State<_BranchDialogWatcher> {
+  int? _lastBranchDepth;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<GameController>();
+    final atBranch = controller.atBranch;
+    final depth = controller.currentNode.depth;
+
+    if (atBranch && depth != _lastBranchDepth) {
+      _lastBranchDepth = depth;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showBranchDialog(context, controller);
+      });
+    } else if (!atBranch) {
+      _lastBranchDepth = null;
+    }
+    return const SizedBox.shrink();
+  }
+
+  void _showBranchDialog(BuildContext context, GameController controller) {
+    final options = controller.branchOptions;
+    if (options.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('选择分支'),
+          content: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: [
+              for (var i = 0; i < options.length; i++)
+                _BranchNumberButton(
+                  index: i + 1,
+                  notation: options[i].move!.notation,
+                  onPressed: () {
+                    controller.selectBranch(i);
+                    Navigator.of(ctx).pop();
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 分支选择数字按钮：圆形数字 + 下方着法文字。
+class _BranchNumberButton extends StatelessWidget {
+  const _BranchNumberButton({
+    required this.index,
+    required this.notation,
+    required this.onPressed,
+  });
+
+  final int index;
+  final String notation;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$index',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              notation,
+              style: const TextStyle(fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -6,6 +6,7 @@ import '../../../domain/models/board.dart' as m;
 import '../../../domain/models/piece.dart';
 import '../../../domain/models/position.dart';
 import '../../../utils/coordinate_utils.dart';
+import 'branch_marker.dart';
 import 'move_highlight.dart';
 import 'piece_widget.dart';
 
@@ -17,6 +18,7 @@ class BoardWidget extends StatelessWidget {
     required this.selected,
     required this.hints,
     required this.onTap,
+    this.branchMarkers = const [],
   });
 
   /// [hints] 是当前选中棋子的合法终点集合。
@@ -24,6 +26,9 @@ class BoardWidget extends StatelessWidget {
   final Position? selected;
   final Set<Position> hints;
   final void Function(Position pos) onTap;
+
+  /// 分支标记：到达分支点时，可视化各候选分支的走法。
+  final List<BranchMarker> branchMarkers;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +79,17 @@ class BoardWidget extends StatelessWidget {
                     )),
                 // 2. 选中高亮 + 走法提示
                 ..._buildHints(padding, cellWidth, cellHeight, pieceSize),
+                // 4. 分支标记层：在棋子之上绘制候选分支走法
+                if (branchMarkers.isNotEmpty)
+                  CustomPaint(
+                    size: Size(boardWidth, boardHeight),
+                    painter: _BranchMarkerPainter(
+                      padding: padding,
+                      cellW: cellWidth,
+                      cellH: cellHeight,
+                      markers: branchMarkers,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -217,4 +233,104 @@ class _BoardPainter extends CustomPainter {
       oldDelegate.padding != padding ||
       oldDelegate.cellW != cellW ||
       oldDelegate.cellH != cellH;
+}
+
+/// 分支标记绘制器：在棋盘上为每条候选分支画 from→to 连线，
+/// 并在两端绘制带数字的小圆点。
+class _BranchMarkerPainter extends CustomPainter {
+  const _BranchMarkerPainter({
+    required this.padding,
+    required this.cellW,
+    required this.cellH,
+    required this.markers,
+  });
+
+  final EdgeInsets padding;
+  final double cellW;
+  final double cellH;
+  final List<BranchMarker> markers;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 不同分支用不同颜色，便于区分
+    const colors = [
+      Color(0xFFC62828), // 红
+      Color(0xFF1565C0), // 蓝
+      Color(0xFF2E7D32), // 绿
+      Color(0xFF6A1B9A), // 紫
+      Color(0xFFEF6C00), // 橙
+      Color(0xFF00838F), // 青
+      Color(0xFFAD1457), // 玫红
+      Color(0xFF5D4037), // 棕
+    ];
+
+    final dotRadius = cellW * 0.22;
+    final fontSize = cellW * 0.32;
+
+    for (var i = 0; i < markers.length; i++) {
+      final m = markers[i];
+      final color = colors[i % colors.length];
+
+      final fromCenter = CoordinateUtils.toPixel(
+        col: m.from.col,
+        row: m.from.row,
+        cellWidth: cellW,
+        cellHeight: cellH,
+        padding: padding,
+      );
+      final toCenter = CoordinateUtils.toPixel(
+        col: m.to.col,
+        row: m.to.row,
+        cellWidth: cellW,
+        cellHeight: cellH,
+        padding: padding,
+      );
+
+      // 半透明连线
+      final linePaint = Paint()
+        ..color = color.withValues(alpha: 0.55)
+        ..strokeWidth = cellW * 0.10
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(fromCenter, toCenter, linePaint);
+
+      // 端点圆点 + 数字
+      _drawDot(canvas, fromCenter, dotRadius, color, m.label, fontSize);
+      _drawDot(canvas, toCenter, dotRadius, color, m.label, fontSize);
+    }
+  }
+
+  void _drawDot(Canvas canvas, Offset center, double radius, Color color,
+      int label, double fontSize) {
+    // 白色描边底
+    canvas.drawCircle(
+      center,
+      radius + 2,
+      Paint()..color = Colors.white,
+    );
+    // 彩色填充
+    canvas.drawCircle(center, radius, Paint()..color = color);
+
+    final tp = TextPainter(
+      text: TextSpan(
+        text: '$label',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: fontSize,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _BranchMarkerPainter oldDelegate) =>
+      oldDelegate.padding != padding ||
+      oldDelegate.cellW != cellW ||
+      oldDelegate.cellH != cellH ||
+      oldDelegate.markers != markers;
 }
