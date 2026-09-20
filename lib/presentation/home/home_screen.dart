@@ -1,7 +1,13 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/config/config_manager.dart';
+import '../../domain/notation/parsers/notation_exception.dart';
+import '../../domain/notation/parsers/notation_loader.dart';
+import '../../domain/notation/parsers/notation_replay.dart';
+import '../../domain/notation/parsers/parsed_game.dart';
 
 /// 首页：中国象棋水墨风主菜单。
 ///
@@ -169,11 +175,47 @@ class HomeScreen extends StatelessWidget {
     );
     if (file == null || file.files.isEmpty) return;
     final pickedPath = file.files.single.path;
-    // 暂只提示已选择，后续接入棋谱加载
+    if (pickedPath == null || pickedPath.isEmpty) return;
+
+    // 读取文件字节并交给解析器；解析后还会在内存中完整回放一遍校验，
+    // 任何一步失败都弹窗提示，且不跳转到打谱页（避免在页面构建期抛异常）。
+    final bytes = await File(pickedPath).readAsBytes();
+    ParsedGame? parsed;
+    ReplayData? replay;
+    String? errMsg;
+    try {
+      parsed = NotationLoader.load(path: pickedPath, bytes: bytes);
+      // 完整回放验证：起始 FEN、每步坐标反解与规则校验
+      replay = NotationReplay.resolve(parsed);
+    } on NotationParseException catch (e) {
+      errMsg = e.message;
+    } catch (e) {
+      errMsg = '读取或解析文件时出错：$e';
+    }
+
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已选择棋谱：${pickedPath ?? file.files.single.name}（加载功能待实现）')),
-    );
+    if (parsed != null && replay != null) {
+      // 解析与回放均成功：把棋谱与已验证的坐标一起传给打谱页
+      Navigator.of(context).pushNamed(
+        '/play',
+        arguments: (parsed, replay),
+      );
+    } else {
+      // 解析/回放失败：弹出错误对话框显示详情，停留当前页
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('棋谱解析失败'),
+          content: Text(errMsg ?? '未知错误'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   /// 弹出对话框提示用户先选择棋谱仓库目录。

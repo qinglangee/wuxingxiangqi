@@ -21,11 +21,14 @@ class NotationNode {
     this.move,
   });
 
-  /// 创建根节点（初始局面，红先，对局进行中）。
-  factory NotationNode.root(Board board) => NotationNode._(
+  /// 创建根节点（默认初始局面，红先，对局进行中）。
+  ///
+  /// 非标准开局（如让子局、从 FEN 载入）可通过 [sideToMove] 指定首步走子方。
+  factory NotationNode.root(Board board, {Side sideToMove = Side.red}) =>
+      NotationNode._(
         parent: null,
         board: board,
-        sideToMove: Side.red,
+        sideToMove: sideToMove,
         result: const GameResult(status: GameResultStatus.ongoing),
       );
 

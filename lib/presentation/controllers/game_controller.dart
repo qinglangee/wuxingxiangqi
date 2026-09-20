@@ -13,6 +13,9 @@ import '../../domain/models/position.dart';
 import '../../domain/notation/move_record.dart';
 import '../../domain/notation/notation_node.dart';
 import '../../domain/notation/notation_text.dart';
+import '../../domain/notation/parsers/notation_exception.dart';
+import '../../domain/notation/parsers/notation_replay.dart';
+import '../../domain/notation/parsers/parsed_game.dart';
 
 /// UI 控制器：选中态、点击处理、AI 走子、棋谱树记录与前进/后退导航。
 class GameController extends ChangeNotifier {
@@ -157,6 +160,50 @@ class GameController extends ChangeNotifier {
     _resultTick = 0;
     notifyListeners();
     _maybeTriggerAiMove();
+  }
+
+  /// 从外部解析结果（[ParsedGame]）载入棋谱并构建棋谱树。
+  ///
+  /// 流程：
+  /// 1. 通过 [NotationReplay.resolve] 解析起始局面并校验每步着法
+  ///    （调用方通常已在跳转前验证过，[replay] 可直接传入复用）；
+  /// 2. 顺序回放坐标构建棋谱树；
+  /// 3. 完成后跳回根节点，显示棋谱初始状态。
+  ///
+  /// 解析或规则校验失败时抛 [NotationParseException]。
+  void loadParsedGame(ParsedGame game, {ReplayData? replay}) {
+    final data = replay ?? NotationReplay.resolve(game);
+
+    _state.restoreFrom(
+      board: data.startBoard,
+      sideToMove: data.startSide,
+      result: const GameResult(status: GameResultStatus.ongoing),
+      history: const [],
+    );
+    _root = NotationNode.root(data.startBoard.clone(),
+        sideToMove: data.startSide);
+    _current = _root;
+    _aiThinking = false;
+    _resultTick = 0;
+
+    for (var i = 0; i < data.moves.length; i++) {
+      final (from, to) = data.moves[i];
+      if (!_applyAndRecord(from, to)) {
+        // 理论上不会发生（resolve 已验证），这里做防御性兜底
+        throw NotationParseException(
+          '第 ${i + 1} 步着法不符合规则：${game.moves[i].moveText}',
+        );
+      }
+      final comment = game.moves[i].comment;
+      if (comment != null && comment.isNotEmpty) {
+        _current.move?.comment = comment;
+      }
+    }
+
+    // 回放到末尾后，跳回根节点显示初始状态
+    _current = _root;
+    _restoreStateFromCurrent();
+    notifyListeners();
   }
 
   // ---- 棋谱前进 / 后退 / 跳转 ----

@@ -67,4 +67,44 @@ class Fen {
     final col = String.fromCharCode('a'.codeUnitAt(0) + p.col);
     return '$col${p.row}';
   }
+
+  /// 将 FEN 串转换为棋盘与走子方。
+  ///
+  /// FEN 行序与 [Board] 一致（首行 = 黑方底线 row=0）。
+  /// 格式非法时抛出 [FormatException]。
+  static (Board, Side) toBoard(String fen) {
+    final parts = fen.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) {
+      throw const FormatException('FEN 为空');
+    }
+    final rows = parts[0].split('/');
+    if (rows.length != BoardConstants.rowCount) {
+      throw FormatException('FEN 行数应为 ${BoardConstants.rowCount}，实际 ${rows.length}');
+    }
+    final board = Board();
+    final letterToType = <String, PieceType>{
+      for (final e in _pieceLetters.entries) e.value: e.key,
+    };
+    for (var r = 0; r < BoardConstants.rowCount; r++) {
+      var c = 0;
+      for (final ch in rows[r].split('')) {
+        if (RegExp(r'[1-9]').hasMatch(ch)) {
+          c += int.parse(ch);
+          continue;
+        }
+        final type = letterToType[ch.toLowerCase()];
+        if (type == null) {
+          throw FormatException('FEN 含未知棋子字符: $ch');
+        }
+        final side = ch == ch.toUpperCase() ? Side.red : Side.black;
+        if (c >= BoardConstants.columnCount) {
+          throw FormatException('FEN 第 ${r + 1} 行棋子超出棋盘宽度');
+        }
+        board.place(Piece(type: type, side: side), Position(c, r));
+        c++;
+      }
+    }
+    final side = parts.length > 1 && parts[1] == 'b' ? Side.black : Side.red;
+    return (board, side);
+  }
 }
