@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../controllers/game_controller.dart';
 import 'result_dialog.dart';
 import 'widgets/board_widget.dart';
+import 'widgets/notation_bar.dart';
 import 'widgets/status_bar.dart';
 
 /// 主页面：拼装棋盘 + 状态栏 + 结束弹窗。
@@ -42,6 +43,8 @@ class GameScreen extends StatelessWidget {
                 ),
               ),
             ),
+            // 底部棋谱栏：前进 / 后退 / 着法列表
+            NotationBar(controller: controller),
           ],
         ),
       ),
@@ -111,28 +114,29 @@ class _ResultWatcher extends StatefulWidget {
 }
 
 class _ResultWatcherState extends State<_ResultWatcher> {
-  bool _shown = false;
+  int _lastTick = 0;
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<GameController>();
-    if (controller.isOver && !_shown) {
-      _shown = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => ResultDialog(
-            result: controller.result,
-            onRestart: () {
-              controller.restart();
-              _shown = false;
-            },
-          ),
-        ).then((_) => _shown = false);
-      });
-    } else if (!controller.isOver) {
-      _shown = false;
+    final tick = controller.resultTick;
+    if (tick != _lastTick) {
+      _lastTick = tick;
+      // 仅在「新走子将死」时弹窗；前进/后退浏览已记录的终局不弹
+      if (controller.isOver) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => ResultDialog(
+              result: controller.result,
+              onRestart: () {
+                controller.restart();
+              },
+            ),
+          );
+        });
+      }
     }
     return const SizedBox.shrink();
   }

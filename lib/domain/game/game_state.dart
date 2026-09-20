@@ -45,6 +45,27 @@ class GameState {
     _result = result;
   }
 
+  /// 从历史局面快照恢复（棋谱前进/后退/跳转时使用）。
+  ///
+  /// [history] 为到达该局面的走法序列（用于保持 history/captured 一致）。
+  void restoreFrom({
+    required Board board,
+    required Side sideToMove,
+    required GameResult result,
+    List<Move> history = const [],
+  }) {
+    _board.copyFrom(board);
+    _currentSide = sideToMove;
+    _result = result;
+    selected = null;
+    _history
+      ..clear()
+      ..addAll(history);
+    _captured
+      ..clear()
+      ..addAll(history.where((m) => m.captured != null).map((m) => m.captured!));
+  }
+
   /// 重置整局(回到初始布局)。
   void reset() {
     _board.resetToInitial();

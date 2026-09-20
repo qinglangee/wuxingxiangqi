@@ -38,12 +38,17 @@ class Board {
   /// 拷贝当前棋盘(深拷贝)。
   Board clone() {
     final b = Board();
+    b.copyFrom(this);
+    return b;
+  }
+
+  /// 用另一棋盘的内容覆盖本棋盘。
+  void copyFrom(Board other) {
     for (var r = 0; r < 10; r++) {
       for (var c = 0; c < 9; c++) {
-        b._cells[r][c] = _cells[r][c];
+        _cells[r][c] = other._cells[r][c];
       }
     }
-    return b;
   }
 
   /// 查找某阵营某类型棋子的位置(通常用于找将/帅)。

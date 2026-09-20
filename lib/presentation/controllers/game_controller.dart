@@ -7,22 +7,41 @@ import '../../domain/engine/pikafish_engine.dart';
 import '../../domain/game/game_engine.dart';
 import '../../domain/game/game_result.dart';
 import '../../domain/game/game_state.dart';
+import '../../domain/models/move.dart';
 import '../../domain/models/piece.dart';
 import '../../domain/models/position.dart';
+import '../../domain/notation/move_record.dart';
+import '../../domain/notation/notation_node.dart';
+import '../../domain/notation/notation_text.dart';
 
-/// UI 控制器：选中态、点击处理、AI 走子、刷新 UI。
+/// UI 控制器：选中态、点击处理、AI 走子、棋谱树记录与前进/后退导航。
 class GameController extends ChangeNotifier {
   GameController()
       : _state = GameState(),
-        super();
+        super() {
+    _root = NotationNode.root(_state.board.clone());
+    _current = _root;
+  }
 
   final GameState _state;
   late final GameEngine _engine = GameEngine(_state);
   final PikafishEngine _ai = PikafishEngine.instance;
 
+  /// 棋谱树根（初始局面）。
+  late NotationNode _root;
+
+  /// 当前浏览/对弈所在的节点。
+  late NotationNode _current;
+
   bool _redIsAi = false;
   bool _blackIsAi = false;
   bool _aiThinking = false;
+
+  /// 终局事件计数：仅当「新走子」导致对局结束时 +1。
+  ///
+  /// 前进/后退到已记录的终局节点不改变计数，避免浏览棋谱时反复弹结束窗。
+  int _resultTick = 0;
+  int get resultTick => _resultTick;
 
   bool get redIsAi => _redIsAi;
   bool get blackIsAi => _blackIsAi;
@@ -34,6 +53,20 @@ class GameController extends ChangeNotifier {
   bool get isOver => _state.isOver;
   Side get currentSide => _state.currentSide;
   Position? get selected => _state.selected;
+
+  // ---- 棋谱导航相关 ----
+
+  /// 当前棋谱节点。
+  NotationNode get currentNode => _current;
+
+  /// 根 → 末梢的主线（含根节点），用于棋谱栏展示。
+  List<NotationNode> get mainLine => _root.mainLine();
+
+  bool get canGoBack => !_current.isRoot;
+  bool get canGoForward => _current.mainChild != null;
+
+  /// 是否正处于棋谱末梢（只有末梢上的新走子才触发 AI 续走）。
+  bool get atTip => _current.isTip;
 
   Iterable<Position> get selectedHints =>
       _state.selected == null ? const [] : _engine.legalMovesFrom(_state.selected!);
@@ -68,8 +101,6 @@ class GameController extends ChangeNotifier {
 
     final selected = _state.selected!;
     if (selected == pos) {
-      // _state.selected = null;
-      // notifyListeners();
       return;
     }
 
@@ -79,7 +110,7 @@ class GameController extends ChangeNotifier {
       return;
     }
 
-    if (_engine.tryMove(selected, pos)) {
+    if (_applyAndRecord(selected, pos)) {
       debugPrint('人类走子: $selected → $pos');
       notifyListeners();
       _maybeTriggerAiMove();
@@ -91,17 +122,89 @@ class GameController extends ChangeNotifier {
 
   void restart() {
     _state.reset();
+    _root = NotationNode.root(_state.board.clone());
+    _current = _root;
     _aiThinking = false;
+    _resultTick = 0;
     notifyListeners();
     _maybeTriggerAiMove();
+  }
+
+  // ---- 棋谱前进 / 后退 / 跳转 ----
+
+  /// 后退一步：回到上一节点并恢复盘面。导航操作不触发 AI。
+  void goBack() => _jumpTo(_current.parent);
+
+  /// 前进一步：沿当前续着指针前进。
+  void goForward() => _jumpTo(_current.mainChild);
+
+  /// 跳转到棋谱树中的任意节点（点击棋谱步时使用）。
+  void jumpTo(NotationNode node) => _jumpTo(node);
+
+  void _jumpTo(NotationNode? target) {
+    if (target == null || _aiThinking || identical(target, _current)) return;
+    _current = target;
+    _restoreStateFromCurrent();
+    notifyListeners();
+  }
+
+  void _restoreStateFromCurrent() {
+    final path = _current.pathFromRoot();
+    final moves = path
+        .skip(1)
+        .map((n) {
+          final m = n.move!;
+          return Move(from: m.from, to: m.to, moving: m.moving, captured: m.captured);
+        })
+        .toList();
+    _state.restoreFrom(
+      board: _current.board,
+      sideToMove: _current.sideToMove,
+      result: _current.result,
+      history: moves,
+    );
   }
 
   bool _isAiSide(Side side) =>
       side == Side.red ? _redIsAi : _blackIsAi;
 
-  /// 若当前轮次属于 AI 方，则异步调用引擎走子。
+  /// 执行走法并写入棋谱树。
+  ///
+  /// 若当前节点已有续着（后退后另走），新走法作为分支加入，
+  /// 且前进指针自动指向新分支。
+  bool _applyAndRecord(Position from, Position to) {
+    final before = _state.board.clone();
+    final moving = before.pieceAt(from);
+    if (moving == null) return false;
+
+    // 记谱必须基于走子前盘面（同列多子消歧等）
+    final notation = NotationText.describe(before, from, to);
+    final captured = before.pieceAt(to);
+
+    if (!_engine.tryMove(from, to)) return false;
+
+    final record = MoveRecord(
+      from: from,
+      to: to,
+      moving: moving,
+      side: moving.side,
+      notation: notation,
+      captured: captured,
+    );
+    _current = _current.addChild(
+      move: record,
+      board: _state.board.clone(),
+      sideToMove: _state.currentSide,
+      result: _state.result,
+    );
+    if (_state.isOver) _resultTick++;
+    return true;
+  }
+
+  /// 若当前轮次属于 AI 方且处于棋谱末梢，则异步调用引擎走子。
   Future<void> _maybeTriggerAiMove() async {
     if (isOver || _aiThinking) return;
+    if (!atTip) return; // 浏览历史着法时不自动走子
     if (!_isAiSide(currentSide)) return;
 
     _aiThinking = true;
@@ -116,7 +219,7 @@ class GameController extends ChangeNotifier {
         return;
       }
       final (from, to) = Fen.parseUciMove(move);
-      if (_engine.tryMove(from, to)) {
+      if (_applyAndRecord(from, to)) {
         moveApplied = true;
         notifyListeners();
       } else {
