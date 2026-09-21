@@ -1,6 +1,7 @@
-import 'dart:convert';
-import 'dart:developer';
+import 'dart:developer' show log;
 import 'dart:typed_data';
+
+import 'package:gbk_codec/gbk_codec.dart';
 
 import 'notation_exception.dart';
 import 'notation_parser.dart';
@@ -368,13 +369,12 @@ class XqfParser implements NotationParser {
 
   // ---- 文本解码 ------------------------------------------------------------
 
-  /// 解码 GBK 文本。Dart 标准库无 GBK，当前用 latin1 兜底：
-  /// ASCII 部分正确，中文为乱码但不崩溃，且字节可逆（将来引入
-  /// `gbk_codec` 后可重新正确解码）。引入该包后把此处换成
-  /// `gbk_codec.decode(bytes)` 即可。
+  /// 解码 GBK 文本。XQF 的所有文本字段（标题、对弈方、注释等）均为
+  /// GBK 编码。注意必须用 `gbk_bytes`（2 字节配对查表），而非同包的
+  /// `gbk`（单字节查表，中文会错成 "ÖÐ" 之类）。
   String _decodeText(List<int> bytes) {
     if (bytes.isEmpty) return '';
-    return latin1.decode(bytes).trim();
+    return gbk_bytes.decode(bytes).trim();
   }
 }
 
