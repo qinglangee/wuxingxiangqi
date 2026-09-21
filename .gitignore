@@ -49,3 +49,5 @@ app.*.map.json
 
 # 顶层的 engine 目录
 /engine/
+/assets/
+/prompt/data/
