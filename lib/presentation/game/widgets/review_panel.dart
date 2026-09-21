@@ -5,6 +5,7 @@ import '../../../../domain/notation/move_record.dart';
 import '../../../../domain/notation/notation_node.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../controllers/game_controller.dart';
+import '../../shared/adjustable_button_bar.dart';
 
 /// 打谱页面底部面板：三个标签页（棋谱注释 / 引擎 / 云库）。
 ///
@@ -72,7 +73,61 @@ class _ReviewPanelState extends State<ReviewPanel>
           // 底部导航条：任意标签页都可用，控制棋谱前进/后退
           // 仅当当前节点为分支点时，在导航条上方显示分支选择条
           if (controller.atBranch) _BranchSelectorBar(controller: controller),
-          _NavRow(controller: controller),
+          AdjustableButtonBar(
+            defaultPinnedIds: const {'前进', '后退'},
+            buttons: [
+              FreeButton(
+                id: '开局',
+                icon: Icons.skip_previous,
+                label: '开局',
+                enabled: controller.canGoBack,
+                onTap: () {
+                  while (controller.canGoBack) {
+                    controller.goBack();
+                  }
+                },
+              ),
+              FreeButton(
+                id: '上一分支',
+                icon: Icons.alt_route,
+                label: '上一分支',
+                enabled: controller.canGoPrevBranch,
+                onTap: controller.goToPrevBranch,
+              ),
+              FreeButton(
+                id: '后退',
+                icon: Icons.chevron_left,
+                label: '后退',
+                enabled: controller.canGoBack,
+                onTap: controller.goBack,
+              ),
+              FreeButton(
+                id: '前进',
+                icon: Icons.chevron_right,
+                label: '前进',
+                enabled: controller.canGoForward,
+                onTap: controller.goForward,
+              ),
+              FreeButton(
+                id: '下一分支',
+                icon: Icons.alt_route,
+                label: '下一分支',
+                enabled: controller.canGoNextBranch,
+                onTap: controller.goToNextBranch,
+              ),
+              FreeButton(
+                id: '末尾',
+                icon: Icons.skip_next,
+                label: '末尾',
+                enabled: controller.canGoForward,
+                onTap: () {
+                  while (controller.canGoForward) {
+                    controller.goForward();
+                  }
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -229,117 +284,6 @@ class _BranchSelectorBar extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _NavRow extends StatelessWidget {
-  const _NavRow({required this.controller});
-
-  final GameController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5E6C8),
-        border: Border(
-          top: BorderSide(color: Color(0xFFC9B68C), width: 0.8),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          _NavItem(
-            icon: Icons.skip_previous,
-            label: '开局',
-            enabled: controller.canGoBack,
-            onTap: () {
-              while (controller.canGoBack) {
-                controller.goBack();
-              }
-            },
-          ),
-          _NavItem(
-            icon: Icons.alt_route,
-            label: '上一分支',
-            enabled: controller.canGoPrevBranch,
-            onTap: controller.goToPrevBranch,
-          ),
-          _NavItem(
-            icon: Icons.chevron_left,
-            label: '后退',
-            enabled: controller.canGoBack,
-            onTap: controller.goBack,
-          ),
-          _NavItem(
-            icon: Icons.chevron_right,
-            label: '前进',
-            enabled: controller.canGoForward,
-            onTap: controller.goForward,
-          ),
-          _NavItem(
-            icon: Icons.alt_route,
-            label: '下一分支',
-            enabled: controller.canGoNextBranch,
-            onTap: controller.goToNextBranch,
-          ),
-          _NavItem(
-            icon: Icons.skip_next,
-            label: '末尾',
-            enabled: controller.canGoForward,
-            onTap: () {
-              while (controller.canGoForward) {
-                controller.goForward();
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 底部导航项：图标在上、文字在下，类似 BottomNavigationBar 项。
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = enabled ? AppTheme.boardLine : const Color(0xFFD0C4A8);
-    return Expanded(
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 28, color: color),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: enabled
-                      ? const Color(0xFF8B6B3D)
-                      : const Color(0xFFD0C4A8),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
