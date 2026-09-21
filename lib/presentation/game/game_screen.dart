@@ -36,7 +36,7 @@ class GameScreen extends StatelessWidget {
             StatusBar(state: state, onRestart: controller.restart),
             // 上半部分：棋盘（按宽度自适应高度，不抢占下半部分空间）
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
               child: Center(
                 child: BoardWidget(
                   board: state.board,

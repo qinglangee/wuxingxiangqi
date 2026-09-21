@@ -24,3 +24,8 @@ flutter:
   assets:
     - engine/windows/
     - engine/android/
+    - assets/images/
+    - assets/images/boards/
+    - assets/images/pieces/
+    - assets/images/pieces/黑白简约/
+    - assets/images/pieces/红绿石头/

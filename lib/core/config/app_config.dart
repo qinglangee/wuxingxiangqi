@@ -199,17 +199,33 @@ class UiConfig {
 
 /// 棋子 / 棋盘相关配置（后续支持自定义资源）。
 class BoardConfig {
+  /// 显示类型：代码绘制（默认方式）。
+  static const String kTypeClassic = 'classic';
+
+  /// 显示类型：图片。
+  static const String kTypeImage = 'image';
+
   BoardConfig({
+    this.boardType = kTypeClassic,
+    this.pieceType = kTypeClassic,
     this.pieceStyle = 'classic',
     this.boardStyle = 'classic',
     this.customPiecePath,
     this.customBoardPath,
   });
 
-  /// 棋子样式名（内置样式）。后续可扩展为路径，指向用户自定义资源。
+  /// 棋盘显示类型：[kTypeClassic] 代码绘制；[kTypeImage] 图片，
+  /// 此时 [boardStyle] 为 `assets/images/boards/` 下的图片文件名。
+  String boardType;
+
+  /// 棋子显示类型：[kTypeClassic] 代码绘制；[kTypeImage] 图片，
+  /// 此时 [pieceStyle] 为 `assets/images/pieces/` 下的套系目录名。
+  String pieceType;
+
+  /// 棋子样式值：classic 类型下为 'classic'；image 类型下为套系目录名。
   String pieceStyle;
 
-  /// 棋盘样式名（内置样式）。
+  /// 棋盘样式值：classic 类型下为 'classic'；image 类型下为图片文件名。
   String boardStyle;
 
   /// 用户自定义棋子资源路径（目录或图片包）。为空表示使用 [pieceStyle]。
@@ -219,6 +235,8 @@ class BoardConfig {
   String? customBoardPath;
 
   factory BoardConfig.fromJson(Map<String, dynamic> json) => BoardConfig(
+        boardType: json['boardType'] as String? ?? kTypeClassic,
+        pieceType: json['pieceType'] as String? ?? kTypeClassic,
         pieceStyle: json['pieceStyle'] as String? ?? 'classic',
         boardStyle: json['boardStyle'] as String? ?? 'classic',
         customPiecePath: json['customPiecePath'] as String?,
@@ -226,6 +244,8 @@ class BoardConfig {
       );
 
   Map<String, dynamic> toJson() => {
+        'boardType': boardType,
+        'pieceType': pieceType,
         'pieceStyle': pieceStyle,
         'boardStyle': boardStyle,
         'customPiecePath': customPiecePath,
@@ -233,12 +253,16 @@ class BoardConfig {
       };
 
   BoardConfig copyWith({
+    String? boardType,
+    String? pieceType,
     String? pieceStyle,
     String? boardStyle,
     String? customPiecePath,
     String? customBoardPath,
   }) =>
       BoardConfig(
+        boardType: boardType ?? this.boardType,
+        pieceType: pieceType ?? this.pieceType,
         pieceStyle: pieceStyle ?? this.pieceStyle,
         boardStyle: boardStyle ?? this.boardStyle,
         customPiecePath: customPiecePath ?? this.customPiecePath,

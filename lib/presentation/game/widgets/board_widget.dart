@@ -2,6 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/assets/asset_catalog.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/config/config_manager.dart';
 import '../../../core/constants/board_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/models/board.dart' as m;
@@ -34,7 +37,10 @@ class BoardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
+    // 监听配置变化：设置页切换棋盘/棋子样式后，整个棋盘子树立即刷新。
+    return ListenableBuilder(
+      listenable: ConfigManager.instance,
+      builder: (context, _) => LayoutBuilder(
       builder: (context, constraints) {
         final boardWidth = constraints.maxWidth;
         // 棋盘 9×10。边缘棋子以最外侧交叉点为圆心，向外伸出 pieceSize/2，
@@ -48,6 +54,11 @@ class BoardWidget extends StatelessWidget {
         final boardHeight = cellHeight * (BoardConstants.rowCount - 1) + pad * 2;
         final pieceSize = cellWidth * pieceRatio;
         final padding = EdgeInsets.all(pad);
+
+        final boardCfg = ConfigManager.instance.config.board;
+        final useImageBoard =
+            boardCfg.boardType == BoardConfig.kTypeImage &&
+                boardCfg.boardStyle.isNotEmpty;
 
         return SizedBox(
           width: boardWidth,
@@ -65,11 +76,19 @@ class BoardWidget extends StatelessWidget {
             },
             child: Stack(
               children: [
-                // 1. 棋盘背景与网格
-                CustomPaint(
-                  size: Size(boardWidth, boardHeight),
-                  painter: _BoardPainter(padding: padding, cellW: cellWidth, cellH: cellHeight),
-                ),
+                // 1. 棋盘背景与网格：图片棋盘整幅铺满，否则代码绘制
+                if (useImageBoard)
+                  Positioned.fill(
+                    child: Image.asset(
+                      AssetCatalog.boardAsset(boardCfg.boardStyle),
+                      fit: BoxFit.fill,
+                    ),
+                  )
+                else
+                  CustomPaint(
+                    size: Size(boardWidth, boardHeight),
+                    painter: _BoardPainter(padding: padding, cellW: cellWidth, cellH: cellHeight),
+                  ),
                 // 3. 棋子
                 ...board.pieces().map((e) => _positionedPiece(
                       e.position,
@@ -97,6 +116,7 @@ class BoardWidget extends StatelessWidget {
           ),
         );
       },
+      ),
     );
   }
 
