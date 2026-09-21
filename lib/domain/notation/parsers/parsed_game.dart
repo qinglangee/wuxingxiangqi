@@ -11,6 +11,7 @@ class ParsedGame {
     this.startingFen,
     this.startingSide = Side.red,
     required this.moves,
+    this.rootBranches = const [],
   });
 
   /// 棋局元信息（赛事、对弈方、结果等）。
@@ -23,12 +24,19 @@ class ParsedGame {
   /// 若 [startingFen] 中包含轮次，以 FEN 为准。
   final Side startingSide;
 
+  /// 起始局面的变着：替代首着的若干条线（XQF 中首着即有多个分支时出现）。
+  /// 主线首着为 [moves] 的第一步。PGN 当前不产生此字段。
+  final List<List<ParsedMove>> rootBranches;
+
   /// 主线着法序列（按走子顺序）。
   ///
-  /// 当前版本只解析主线着法；分支暂不入树。
+  ///
   /// 每个元素的文本可以是：
   /// - UCI 坐标串，如 `'e3e4'`；
   /// - 中文招法，如 `'炮二平五'`（结合走子前盘面解析）。
+  ///
+  /// 主线分支由各步的 [ParsedMove.branches] 携带（XQF 等格式可解析多分支，
+  /// PGN 当前只解析主线，branches 为空）。
   final List<ParsedMove> moves;
 }
 
@@ -72,6 +80,7 @@ class ParsedMove {
     required this.moveText,
     this.side,
     this.comment,
+    this.branches = const [],
   });
 
   /// 着法文本：UCI 坐标串（如 `'e3e4'`）或中文招法（如 `'炮二平五'`）。
@@ -86,8 +95,16 @@ class ParsedMove {
   /// 该步附带的注释（可选）。
   final String? comment;
 
+  /// 从本步走完后的局面分叉出的变着线（不含主线）。
+  ///
+  /// 每条变着是一条着法序列（第一条即该变着的首着），序列中每步
+  /// 又可带自己的 [branches]，形成递归树。PGN 当前只解析主线，
+  /// 此字段为空；XQF 把整棵着法树拍扁为「主线 + 每步挂变着」。
+  final List<List<ParsedMove>> branches;
+
   @override
   String toString() =>
       '${side == Side.red ? "红" : side == Side.black ? "黑" : ""}$moveText'
-      '${comment == null ? '' : '  {$comment}'}';
+      '${comment == null ? '' : '  {$comment}'}'
+      '${branches.isEmpty ? '' : '  +${branches.length}变着'}';
 }

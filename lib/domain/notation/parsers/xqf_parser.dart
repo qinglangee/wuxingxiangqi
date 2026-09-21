@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:typed_data';
 
 import 'notation_exception.dart';
@@ -6,19 +7,19 @@ import 'notation_parser.dart';
 import 'parsed_game.dart';
 import '../../models/piece.dart' show Side;
 
-/// XQF（XQStudio 棋谱）格式解析器。
+/// XQF（象棋演播室 XQStudio）棋谱文件解析器。
 ///
-/// XQF 是象棋演播室（XQStudio）使用的二进制棋谱格式，是国内最常见的
-/// 二进制棋谱格式之一。本解析器实现了对其基本结构的识别与解析：
+/// 支持：
+/// - 文件头校验、加密参数解析与解密密钥推导；
+/// - 由 32 枚棋子原始位置计算开局 FEN（含让子/排局等非标准局面）；
+/// - 着法段的二叉树遍历：通过 `hasNext`（续着）/`hasChange`（变着）标志
+///   还原完整的多分支着法树，再拍扁为「主线 + 各步 branches + 起始
+///   局面 rootBranches」供下游使用。
 ///
-/// - 文件头校验与解密
-/// - 元信息提取（标题、对弈方、赛事等）
-/// - 主线着法（坐标形式，转换为 UCI 串）
-/// - 步注释
-///
-/// 由于 XQF 在公开规范上有较多不同版本（加密参数与字段布局略有差异），
-/// 本解析器在遇到无法解析的版本时抛出 [NotationParseException]，
-/// 给出明确错误信息而非崩溃。
+/// 文本字段（标题、对弈方、注释等）在 XQF 中为 GBK 编码；Dart 标准库
+/// 不含 GBK 解码器，当前用 latin1 兜底（ASCII 正确、中文显示为乱码但不
+/// 崩溃）。若需正确中文，引入 `gbk_codec` 三方包后替换 [_decodeText]
+/// 即可——这是一处单点改动。
 class XqfParser implements NotationParser {
   const XqfParser();
 
@@ -27,71 +28,288 @@ class XqfParser implements NotationParser {
 
   @override
   ParsedGame parse(List<int> bytes, {String? filename}) {
-    if (bytes.length < 24) {
+    if (bytes.length < 1024) {
       throw NotationParseException('XQF 文件过短，不是有效的棋谱文件',
           cause: 'len=${bytes.length}');
     }
-
-    final data = Uint8List.fromList(bytes);
-    final sig = _readUint32(data, 0);
-    // XQF 文件签名：低 4 字节固定为 0x69766F6C 的版本——这里取常见值做识别。
-    // 不同工具产生的 XQF 头部字节略有差异，无法严格匹配时按扩展名识别。
-    if (sig != _kSignatureV1 && sig != _kSignatureV2) {
-      // 扩展名识别为 XQF 但头部签名不符，仍尝试解析
+    // 文件头标记 'X','Q'
+    if (bytes[0] != 0x58 || bytes[1] != 0x51) {
+      throw NotationParseException('XQF 文件头标记无效（应以 XQ 开头）',
+          cause: 'filename=$filename');
     }
 
+    final data = Uint8List.fromList(bytes);
     try {
-      final info = _parseHeader(data);
-      final moves = _parseMoves(data);
-      if (moves.isEmpty) {
-        throw NotationParseException('XQF 棋谱未包含任何着法',
-            cause: 'filename=$filename');
-      }
-      return ParsedGame(
-        info: info,
-        startingSide: Side.red,
-        moves: moves,
-      );
-    } catch (e) {
-      if (e is NotationParseException) rethrow;
-      throw NotationParseException(
-        'XQF 解析失败：$e',
-        cause: e,
-      );
+      final header = _parseHeader(data);
+      final key = _calculateKey(header);
+      final fen = _calculateFen(header, key);
+      final root = _parseMoveTree(data, header, key);
+      return _toParsedGame(header, fen, root);
+    } on NotationParseException {
+      rethrow;
+    } catch (e, s) {
+      log("XQF 解析失败：$e, $s");
+      throw NotationParseException('XQF 解析失败：$e', cause: e);
     }
   }
 
-  // ---- 常量 ----------------------------------------------------------------
+  // ---- 文件头 -------------------------------------------------------------
 
-  /// XQF 第一版签名（最常见）。
-  static const int _kSignatureV1 = 0x65716658; // 'xqf'e in some encodings
+  /// 32 枚棋子的 FEN 表示顺序（红方车马相士帅士相马车炮炮兵×5 + 黑方同序）。
+  static const String _fenPieces = 'RNBAKABNRCCPPPPPrnbakabnrccppppp';
 
-  /// XQF 第二版签名。
-  static const int _kSignatureV2 = 0x65716678; // alt
+  /// XQF 加密种子（版权串）。
+  static const String _seed = '[(C) Copyright Mr. Dong Shiwei.]';
 
-  // ---- 头部 ---------------------------------------------------------------
+  _XqfHeader _parseHeader(Uint8List b) {
+    final h = _XqfHeader()
+      ..version = b[2] & 0xFF
+      ..keyMask = b[3] & 0xFF
+      ..keyOr = [b[8], b[9], b[10], b[11]]
+      ..keySum = b[12] & 0xFF
+      ..keyXYp = b[13] & 0xFF
+      ..keyXYf = b[14] & 0xFF
+      ..keyXYt = b[15] & 0xFF;
+    h.qiziXY = Uint8List.sublistView(b, 16, 48);
+    h.playStepNo = (b[49] & 0xFF) * 256 + (b[48] & 0xFF);
+    h.whoPlay = b[50] & 0xFF;
+    h.playResult = b[51] & 0xFF;
+    h.type = b[64] & 0xFF;
+    h.title = _readString(b, 80, 128);
+    h.matchName = _readString(b, 208, 64);
+    h.matchTime = _readString(b, 272, 16);
+    h.matchAddr = _readString(b, 288, 16);
+    h.redPlayer = _readString(b, 304, 16);
+    h.blkPlayer = _readString(b, 320, 16);
+    h.timeRule = _readString(b, 336, 64);
+    h.redTime = _readString(b, 400, 16);
+    h.blkTime = _readString(b, 416, 16);
+    h.rmkWriter = _readString(b, 464, 16);
+    h.author = _readString(b, 480, 16);
+    return h;
+  }
 
-  GameInfo _parseHeader(Uint8List data) {
-    // 头部使用 XOR 加密：key = header[0x10] XOR 0x39
-    final key = data[0x10] ^ 0x39;
-    // 解密头部 24 字节
-    final decrypted = Uint8List(24);
-    for (var i = 0; i < 24; i++) {
-      decrypted[i] = data[i] ^ key;
+  /// 从 [offset] 起读取「长度前缀 + GBK 内容」字符串。
+  /// 第一字节为长度，其后为内容，遇 0 提前终止。
+  String _readString(Uint8List b, int offset, int maxLen) {
+    final length = b[offset] & 0xFF;
+    if (length == 0 || length > maxLen - 1) return '';
+    var actual = 0;
+    for (var i = 0; i < length && i < maxLen - 1; i++) {
+      if (b[offset + 1 + i] != 0) {
+        actual++;
+      } else {
+        break;
+      }
+    }
+    if (actual == 0) return '';
+    return _decodeText(b.sublist(offset + 1, offset + 1 + actual));
+  }
+
+  // ---- 密钥 --------------------------------------------------------------
+
+  _XqfKey _calculateKey(_XqfHeader h) {
+    final k = _XqfKey();
+    // XQF 1.0（version <= 10）不加密
+    if (h.version <= 10) return k;
+
+    k.xYp = ((h.keyXYp * h.keyXYp * 54 + 221) * h.keyXYp) & 0xFF;
+    k.xYf = ((h.keyXYf * h.keyXYf * 54 + 221) * k.xYp) & 0xFF;
+    k.xYt = ((h.keyXYt * h.keyXYt * 54 + 221) * k.xYf) & 0xFF;
+    k.rmk = (((h.keySum * 256 + h.keyXYp) % 32000) + 767) & 0xFFFF;
+
+    final fKey = <int>[
+      (h.keySum & h.keyMask) | (h.keyOr[0] & 0xFF),
+      (h.keyXYp & h.keyMask) | (h.keyOr[1] & 0xFF),
+      (h.keyXYf & h.keyMask) | (h.keyOr[2] & 0xFF),
+      (h.keyXYt & h.keyMask) | (h.keyOr[3] & 0xFF),
+    ];
+    for (var i = 0; i < 32; i++) {
+      k.f32[i] = fKey[i % 4] & _seed.codeUnitAt(i);
+    }
+    return k;
+  }
+
+  // ---- FEN ---------------------------------------------------------------
+
+  String _calculateFen(_XqfHeader h, _XqfKey k) {
+    // 10 行 × 9 列，初始填 '*' 表示空
+    final arr = List<int>.filled(90, '*'.codeUnitAt(0));
+    for (var i = 0; i < 32; i++) {
+      final int pieceKey;
+      final int piecePos;
+      if (h.version > 10) {
+        pieceKey = (k.xYp + i + 1) & 31;
+        piecePos = ((h.qiziXY[i] & 0xFF) - k.xYp) & 0xFF;
+      } else {
+        pieceKey = i;
+        piecePos = h.qiziXY[i] & 0xFF;
+      }
+      if (piecePos < 90) {
+        final x = piecePos ~/ 10;
+        final y = 9 - (piecePos % 10);
+        final idx = y * 9 + x;
+        if (idx >= 0 && idx < 90) {
+          arr[idx] = _fenPieces.codeUnitAt(pieceKey);
+        }
+      }
     }
 
-    // 标题位置 0x10..0x60（GBK 字符串），按实际常见布局尝试
-    final title = _readGbkString(data, 0x10, 60);
-    final redName = _readGbkString(data, 0x4C, 16);
-    final blackName = _readGbkString(data, 0x5C, 16);
-    final event = _readGbkString(data, 0x6C, 28);
-    final date = _readGbkString(data, 0x84, 10);
-    final site = _readGbkString(data, 0x8E, 16);
+    final sb = StringBuffer();
+    for (var row = 0; row < 10; row++) {
+      var empty = 0;
+      for (var col = 0; col < 9; col++) {
+        final c = arr[row * 9 + col];
+        if (c == '*'.codeUnitAt(0)) {
+          empty++;
+        } else {
+          if (empty > 0) {
+            sb.write(empty);
+            empty = 0;
+          }
+          sb.writeCharCode(c);
+        }
+      }
+      if (empty > 0) sb.write(empty);
+      if (row < 9) sb.write('/');
+    }
+    // 轮次与步数（参考实现的附加段）
+    sb.write(h.whoPlay == 1 ? ' b - - 0 ' : ' w - - 0 ');
+    sb.write(h.playStepNo > 0 ? (h.playStepNo >> 1) : 1);
+    return sb.toString();
+  }
 
-    // 结果在头部某字节（不同版本略有差异，这里取常见位置）
+  // ---- 着法树 ------------------------------------------------------------
+
+  /// 解析着法段为内部着法树（根节点为「开始局面」，无 move）。
+  _TreeNode _parseMoveTree(Uint8List b, _XqfHeader h, _XqfKey k) {
+    final root = _TreeNode(move: '', remark: '');
+
+    if (b.length <= 1024) return root;
+
+    // 着法段从 0x400(1024) 开始，整体解密
+    final n = b.length - 1024;
+    final decode = Uint8List(n);
+    for (var i = 0; i < n; i++) {
+      if (h.version > 10) {
+        decode[i] = ((b[1024 + i] & 0xFF) - k.f32[i % 32]) & 0xFF;
+      } else {
+        decode[i] = b[1024 + i];
+      }
+    }
+
+    final forkStack = <_TreeNode>[];
+    var parent = root;
+    var pos = 0;
+
+    while (pos < decode.length) {
+      if (pos + 8 > decode.length) break;
+
+      var commentLen = 0;
+      var nextOffset = 4; // 不含注释时的 8 字节节点中后 4 字节为注释长度字段
+      bool hasNext;
+      bool hasChange;
+
+      if (h.version > 10) {
+        hasNext = (decode[pos + 2] & 0x80) != 0;
+        hasChange = (decode[pos + 2] & 0x40) != 0;
+        if ((decode[pos + 2] & 0x20) != 0) {
+          commentLen = _readInt32(decode, pos + 4) - k.rmk;
+          if (commentLen < 0) commentLen = 0;
+          nextOffset = commentLen + 8;
+        }
+      } else {
+        hasNext = (decode[pos + 2] & 0xF0) != 0;
+        hasChange = (decode[pos + 2] & 0x0F) != 0;
+        commentLen = _readInt32(decode, pos + 4);
+        nextOffset = commentLen + 8;
+      }
+
+      // 读取注释（GBK）
+      var comment = '';
+      if (commentLen > 0 && pos + 8 + commentLen <= decode.length) {
+        comment = _decodeText(
+          decode.sublist(pos + 8, pos + 8 + commentLen),
+        );
+      }
+
+      // 第 0 步是空着法，只承载开始局面注释
+      if (pos == 0) {
+        if (comment.isNotEmpty) root.remark = comment;
+        pos += hasNext ? nextOffset : decode.length;
+        continue;
+      }
+
+      // 解析着法坐标（解密后减偏移）
+      final pf = ((decode[pos] & 0xFF) - 24 - k.xYf) & 0xFF;
+      final pt = ((decode[pos + 1] & 0xFF) - 32 - k.xYt) & 0xFF;
+      final move = _toIccs(pf, pt);
+
+      final step = _TreeNode(move: move, remark: comment);
+      parent.children.add(step);
+
+      if (hasNext) {
+        if (hasChange) {
+          // 本步既有续着又有变着：记住当前 fork，之后会回到此父节点加兄弟
+          forkStack.add(parent);
+        }
+        parent = step; // 下一着是本步的子
+      } else {
+        if (!hasChange) {
+          // 既无续着也无变着：本支线到此为止，回到上一个 fork
+          if (forkStack.isNotEmpty) {
+            parent = forkStack.removeLast();
+          }
+        }
+        // 有变着无续着：下一节点是同父兄弟，parent 不变
+      }
+
+      pos += nextOffset;
+    }
+
+    return root;
+  }
+
+  int _readInt32(Uint8List d, int offset) {
+    if (offset + 4 > d.length) return 0;
+    return (d[offset] & 0xFF) |
+        ((d[offset + 1] & 0xFF) << 8) |
+        ((d[offset + 2] & 0xFF) << 16) |
+        ((d[offset + 3] & 0xFF) << 24);
+  }
+
+  /// XQF 坐标（X*10+Y，原点(0,0)在左下角）转 ICCS 串（如 a0a1）。
+  String _toIccs(int fromPos, int toPos) {
+    var fx = fromPos ~/ 10;
+    var fy = fromPos % 10;
+    var tx = toPos ~/ 10;
+    var ty = toPos % 10;
+    fx = fx.clamp(0, 8);
+    fy = fy.clamp(0, 9);
+    tx = tx.clamp(0, 8);
+    ty = ty.clamp(0, 9);
+    return '${String.fromCharCode(0x61 + fx)}$fy'
+        '${String.fromCharCode(0x61 + tx)}$ty';
+  }
+
+  // ---- 拍扁为 ParsedGame ---------------------------------------------------
+
+  _Side _flip(_Side s) => s == _Side.red ? _Side.black : _Side.red;
+
+  ParsedGame _toParsedGame(_XqfHeader h, String fen, _TreeNode root) {
+    final startSide = h.whoPlay == 1 ? Side.black : Side.red;
+    final startEnum = h.whoPlay == 1 ? _Side.black : _Side.red;
+
+    final moves = root.children.isEmpty
+        ? <ParsedMove>[]
+        : _flattenLine(root.children[0], startEnum);
+    final rootBranches = root.children
+        .sublist(1)
+        .map((sib) => _flattenLine(sib, startEnum))
+        .toList();
+
     String? result;
-    final r = data[0xA4];
-    switch (r) {
+    switch (h.playResult) {
       case 1:
         result = '1-0';
         break;
@@ -103,99 +321,106 @@ class XqfParser implements NotationParser {
         break;
     }
 
-    return GameInfo(
-      event: event.isEmpty ? null : event,
-      site: site.isEmpty ? null : site,
-      date: date.isEmpty ? null : date,
-      red: redName.isEmpty ? null : redName,
-      black: blackName.isEmpty ? null : blackName,
-      result: result,
-      note: title.isEmpty ? null : title,
+    // 标题与开始局面注释都归入 note（GameInfo 无独立标题字段）
+    final note = [h.title, root.remark]
+        .where((s) => s != null && s.isNotEmpty)
+        .join('\n\n');
+
+    if (moves.isEmpty) {
+      throw NotationParseException('XQF 棋谱未包含任何着法');
+    }
+
+    return ParsedGame(
+      info: GameInfo(
+        event: (h.matchName?.isEmpty ?? true) ? null : h.matchName,
+        site: (h.matchAddr?.isEmpty ?? true) ? null : h.matchAddr,
+        date: (h.matchTime?.isEmpty ?? true) ? null : h.matchTime,
+        red: (h.redPlayer?.isEmpty ?? true) ? null : h.redPlayer,
+        black: (h.blkPlayer?.isEmpty ?? true) ? null : h.blkPlayer,
+        result: result,
+        note: note.isEmpty ? null : note,
+      ),
+      startingFen: fen,
+      startingSide: startSide,
+      moves: moves,
+      rootBranches: rootBranches,
     );
   }
 
-  // ---- 着法 ---------------------------------------------------------------
-
-  /// 着法段从某个起点开始（通常在头部之后），递归遍历二叉着法树。
-  List<ParsedMove> _parseMoves(Uint8List data) {
-    final moves = <ParsedMove>[];
-    // 起点位置：头部之后第一个着法节点。
-    var offset = _findFirstMoveOffset(data);
-    if (offset >= data.length) return moves;
-
-    // 走子方向编码（XQF 用 4 字节描述一个着法）：
-    //   byte[0]: 起点列 (0..8)
-    //   byte[1]: 起点行 (0..9, 反向编码)
-    //   byte[2]: 终点列
-    //   byte[3]: 终点行
-    // 加密：每字节 XOR 一个基于前一字节与 key 派生的滚动 key
-    final key = data[0x10] ^ 0x39;
-    var rollingKey = key;
-
-    while (offset + 4 <= data.length) {
-      final raw = <int>[];
-      for (var i = 0; i < 4; i++) {
-        final b = data[offset + i] ^ rollingKey;
-        rollingKey = (rollingKey + b) & 0xFF;
-        raw.add(b);
-      }
-      final srcCol = raw[0];
-      final srcRow = raw[1];
-      final dstCol = raw[2];
-      final dstRow = raw[3];
-      offset += 4;
-
-      if (srcCol > 8 || dstCol > 8 || srcRow > 9 || dstRow > 9) {
-        // 哨兵字节或文件末尾，停止解析
-        break;
-      }
-      final uci = _toUci(srcCol, srcRow, dstCol, dstRow);
-      moves.add(ParsedMove(moveText: uci));
-    }
-    return moves;
-  }
-
-  /// 找到第一个着法节点的偏移量。
-  int _findFirstMoveOffset(Uint8List data) {
-    // 头部 24 字节之后开始；如有 Remark 等可变字段需跳过。
-    // 此处取经验值 0x18（24 字节头之后）。
-    return 0x18;
-  }
-
-  /// 把 XQF 内部坐标（col 0..8, row 0..9）转换为 UCI 串。
+  /// 把一个着法节点拍成一条 [ParsedMove] 序列（主线沿 children[0] 走），
+  /// 其余 children 作为本步的变着（递归）。
   ///
-  /// XQF 的 row 0 = 红方底线（与 UCI 一致），无需翻转。
-  String _toUci(int srcCol, int srcRow, int dstCol, int dstRow) {
-    final s = String.fromCharCode('a'.codeUnitAt(0) + srcCol);
-    final d = String.fromCharCode('a'.codeUnitAt(0) + dstCol);
-    return '$s$srcRow$d$dstRow';
+  /// [side] 为走到 [node] 这步时该谁走子；用于填充 [ParsedMove.side]
+  /// 供回放校验回合一致性。
+  List<ParsedMove> _flattenLine(_TreeNode node, _Side side) {
+    final pm = ParsedMove(
+      moveText: node.move,
+      side: side == _Side.red ? Side.red : Side.black,
+      comment: (node.remark?.isEmpty ?? true) ? null : node.remark,
+      branches: node.children
+          .skip(1)
+          .map((sib) => _flattenLine(sib, _flip(side)))
+          .toList(),
+    );
+    if (node.children.isEmpty) return [pm];
+    return [pm, ..._flattenLine(node.children[0], _flip(side))];
   }
 
-  // ---- 工具 ---------------------------------------------------------------
+  // ---- 文本解码 ------------------------------------------------------------
 
-  int _readUint32(Uint8List data, int offset) {
-    return (data[offset] |
-        (data[offset + 1] << 8) |
-        (data[offset + 2] << 16) |
-        (data[offset + 3] << 24));
-  }
-
-  /// 从 [offset] 开始按 GBK 读取最长 [maxLen] 字节的字符串，
-  /// 遇到 `\0` 提前终止，返回去除尾部空白的结果。
-  String _readGbkString(Uint8List data, int offset, int maxLen) {
-    var end = offset;
-    final limit = offset + maxLen;
-    while (end < limit && end < data.length && data[end] != 0) {
-      end++;
-    }
-    final bytes = data.sublist(offset, end);
+  /// 解码 GBK 文本。Dart 标准库无 GBK，当前用 latin1 兜底：
+  /// ASCII 部分正确，中文为乱码但不崩溃，且字节可逆（将来引入
+  /// `gbk_codec` 后可重新正确解码）。引入该包后把此处换成
+  /// `gbk_codec.decode(bytes)` 即可。
+  String _decodeText(List<int> bytes) {
     if (bytes.isEmpty) return '';
-    try {
-      // GBK 在 Dart 中需要 gbk_codec 等三方包；当前用 latin1 兜底，
-      // 多数中文字符可能显示为乱码但不会崩溃。
-      return latin1.decode(bytes).trim();
-    } catch (_) {
-      return utf8.decode(bytes, allowMalformed: true).trim();
-    }
+    return latin1.decode(bytes).trim();
   }
 }
+
+// ---- 内部辅助结构 -----------------------------------------------------------
+
+class _XqfHeader {
+  late int version;
+  late int keyMask;
+  late List<int> keyOr;
+  late int keySum;
+  late int keyXYp;
+  late int keyXYf;
+  late int keyXYt;
+  late Uint8List qiziXY;
+  late int playStepNo;
+  late int whoPlay;
+  late int playResult;
+  late int type;
+  String? title;
+  String? matchName;
+  String? matchTime;
+  String? matchAddr;
+  String? redPlayer;
+  String? blkPlayer;
+  String? timeRule;
+  String? redTime;
+  String? blkTime;
+  String? rmkWriter;
+  String? author;
+}
+
+class _XqfKey {
+  final List<int> f32 = List<int>.filled(32, 0);
+  int xYp = 0;
+  int xYf = 0;
+  int xYt = 0;
+  int rmk = 0;
+}
+
+/// 内部着法树节点（对应 Java 的 ManualRecord，只保留解析所需字段）。
+class _TreeNode {
+  _TreeNode({required this.move, this.remark});
+  String move;
+  String? remark;
+  final List<_TreeNode> children = [];
+}
+
+/// 内部走子方枚举（避免在解析循环里反复与 Flutter 的 Side 互转）。
+enum _Side { red, black }
