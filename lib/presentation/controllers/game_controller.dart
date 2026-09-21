@@ -182,6 +182,7 @@ class GameController extends ChangeNotifier {
     );
     _root = NotationNode.root(data.startBoard.clone(),
         sideToMove: data.startSide);
+    _root.comment = game.rootComment; // 开局评注挂在根节点的局面注释上
     _current = _root;
     _aiThinking = false;
     _resultTick = 0;
@@ -251,19 +252,29 @@ class GameController extends ChangeNotifier {
     _jumpTo(_current.children[index]);
   }
 
-  /// 当前步的注释文本（无则返回空字符串）。
+  /// 当前节点的注释文本（无则返回空字符串）。
   ///
-  /// 注释属于「到达当前节点的那步棋」，保存于 [MoveRecord.comment]。
-  /// 根节点没有对应走法，注释为空。
-  String get currentComment =>
-      _current.move?.comment ?? '';
-
-  /// 设置当前步的注释。空字符串视为清除注释。
-  void setCurrentComment(String text) {
+  /// - 非根节点：注释属于「到达当前节点的那步棋」，保存于
+  ///   [MoveRecord.comment]；
+  /// - 根节点：注释为「开局局面评注」，保存于 [NotationNode.comment]。
+  String get currentComment {
     final move = _current.move;
-    if (move == null) return; // 根节点不可加注释
+    if (move != null) return move.comment ?? '';
+    return _current.comment ?? '';
+  }
+
+  /// 设置当前节点的注释。空字符串视为清除注释。
+  ///
+  /// 根节点写入 [NotationNode.comment]（开局评注），其余节点写入
+  /// 到达该节点那步棋的 [MoveRecord.comment]。
+  void setCurrentComment(String text) {
     final trimmed = text.trim();
-    move.comment = trimmed.isEmpty ? null : trimmed;
+    final move = _current.move;
+    if (move != null) {
+      move.comment = trimmed.isEmpty ? null : trimmed;
+    } else {
+      _current.comment = trimmed.isEmpty ? null : trimmed;
+    }
     notifyListeners();
   }
 

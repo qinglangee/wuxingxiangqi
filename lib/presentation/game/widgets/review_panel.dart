@@ -478,19 +478,18 @@ class _CommentArea extends StatelessWidget {
                   ),
                 ),
               ),
-              if (hasMove)
-                TextButton.icon(
-                  onPressed: () => _editComment(context),
-                  icon: const Icon(Icons.edit_note, size: 18),
-                  label: Text(
-                    comment.isEmpty ? '添加注释' : '编辑注释',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.boardLine,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
+              TextButton.icon(
+                onPressed: () => _editComment(context),
+                icon: const Icon(Icons.edit_note, size: 18),
+                label: Text(
+                  comment.isEmpty ? '添加注释' : '编辑注释',
+                  style: const TextStyle(fontSize: 13),
                 ),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.boardLine,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
             ],
           ),
         ),
@@ -501,7 +500,7 @@ class _CommentArea extends StatelessWidget {
             child: SingleChildScrollView(
               child: Align(
                 alignment: Alignment.topLeft,
-                child: hasMove && comment.isNotEmpty
+                child: comment.isNotEmpty
                     ? SelectableText(
                         comment,
                         style: const TextStyle(
@@ -512,7 +511,7 @@ class _CommentArea extends StatelessWidget {
                       )
                     : Center(
                         child: Text(
-                          hasMove ? '（暂无注释）' : '（开局局面不可加注释）',
+                          '（暂无注释）',
                           style: TextStyle(
                             fontSize: 13,
                             color: const Color(0xFFB0A48A),

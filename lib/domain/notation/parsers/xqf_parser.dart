@@ -322,10 +322,11 @@ class XqfParser implements NotationParser {
         break;
     }
 
-    // 标题与开始局面注释都归入 note（GameInfo 无独立标题字段）
-    final note = [h.title, root.remark]
-        .where((s) => s != null && s.isNotEmpty)
-        .join('\n\n');
+    // 标题归入 note（GameInfo 无独立标题字段）；开局评注单独走 rootComment，
+    // 载入时挂在棋谱树根节点的局面注释上。
+    final note = (h.title?.isEmpty ?? true) ? null : h.title;
+    final rootComment =
+        (root.remark?.isEmpty ?? true) ? null : root.remark;
 
     if (moves.isEmpty) {
       throw NotationParseException('XQF 棋谱未包含任何着法');
@@ -339,10 +340,11 @@ class XqfParser implements NotationParser {
         red: (h.redPlayer?.isEmpty ?? true) ? null : h.redPlayer,
         black: (h.blkPlayer?.isEmpty ?? true) ? null : h.blkPlayer,
         result: result,
-        note: note.isEmpty ? null : note,
+        note: note,
       ),
       startingFen: fen,
       startingSide: startSide,
+      rootComment: rootComment,
       moves: moves,
       rootBranches: rootBranches,
     );

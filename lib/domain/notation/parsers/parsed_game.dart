@@ -12,6 +12,7 @@ class ParsedGame {
     this.startingSide = Side.red,
     required this.moves,
     this.rootBranches = const [],
+    this.rootComment,
   });
 
   /// 棋局元信息（赛事、对弈方、结果等）。
@@ -23,6 +24,10 @@ class ParsedGame {
   /// 起始走子方。绝大多数对局红先，但部分让子局可能黑先。
   /// 若 [startingFen] 中包含轮次，以 FEN 为准。
   final Side startingSide;
+
+  /// 起始局面的注释（开局评注），载入后挂在棋谱树根节点的局面注释上。
+  /// XQF 中第 0 步空着法承载的备注即此；PGN 当前不产生。
+  final String? rootComment;
 
   /// 起始局面的变着：替代首着的若干条线（XQF 中首着即有多个分支时出现）。
   /// 主线首着为 [moves] 的第一步。PGN 当前不产生此字段。
