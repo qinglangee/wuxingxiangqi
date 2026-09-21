@@ -7,6 +7,7 @@ import '../domain/notation/parsers/parsed_game.dart';
 import '../presentation/controllers/game_controller.dart';
 import '../presentation/game/game_screen.dart';
 import '../presentation/home/home_screen.dart';
+import '../presentation/settings/settings_screen.dart';
 
 /// 应用根。
 class App extends StatelessWidget {
@@ -50,6 +51,7 @@ class App extends StatelessWidget {
             child: const GameScreen(),
           );
         },
+        '/settings': (_) => const SettingsScreen(),
       },
     );
   }

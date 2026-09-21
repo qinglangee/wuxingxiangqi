@@ -95,7 +95,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           GestureDetector(
-            onTap: () => _placeholder(context, '设置'),
+            onTap: () => Navigator.of(context).pushNamed('/settings'),
             child: const Icon(Icons.settings, color: Color(0xFF8B6B3D), size: 28),
           ),
           const SizedBox(width: 36),
