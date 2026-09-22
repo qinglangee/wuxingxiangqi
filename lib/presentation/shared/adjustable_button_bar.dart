@@ -62,6 +62,15 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   bool _drawerOpen = false;
   bool _editMode = false;
 
+  /// 抽屉的 OverlayPortal 控制器。用 overlayChildLayoutBuilder 命名构造，
+  /// 在布局阶段即可拿到常驻栏可靠的 paint transform 进行定位
+  ///（不经过 FollowerLayer，可避开 ReorderableListView 的 transform 报错）。
+  final OverlayPortalController _portalController = OverlayPortalController();
+
+  // 注意：dispose 中不要调用 _portalController.hide()。
+  // OverlayPortal 随 widget 销毁时会自动移除浮层；销毁后控制器已与
+  // portal state 断开，此时再 hide() 会触发 SDK 的 _zOrderIndex 断言。
+
   @override
   void initState() {
     super.initState();
@@ -102,21 +111,48 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
       .whereType<FreeButton>()
       .toList();
 
-  void _toggleDrawer() => setState(() {
-        _drawerOpen = !_drawerOpen;
-        // 收起抽屉时退出编辑态
-        if (!_drawerOpen) _editMode = false;
-      });
+  void _toggleDrawer() {
+    if (_drawerOpen) {
+      _closeDrawer();
+    } else {
+      setState(() => _drawerOpen = true);
+      // 待常驻栏完成本帧布局后再插入浮层（此时能拿到准确位置尺寸）
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showOverlay());
+    }
+  }
 
-  void _toggleEdit() => setState(() => _editMode = !_editMode);
+  void _closeDrawer() {
+    _removeOverlay();
+    setState(() {
+      _drawerOpen = false;
+      // 收起抽屉时退出编辑态
+      _editMode = false;
+    });
+  }
 
-  void _togglePin(String id) => setState(() {
-        if (_pinned.contains(id)) {
-          _pinned.remove(id);
-        } else if (_pinned.length < widget.maxPinnedCount) {
-          _pinned.add(id);
-        }
-      });
+  void _showOverlay() {
+    if (!mounted || _portalController.isShowing) return;
+    _portalController.show();
+  }
+
+  void _removeOverlay() {
+    _portalController.hide();
+  }
+
+  void _toggleEdit() {
+    // OverlayPortal 会随本 State 重建而重建浮层内容与尺寸
+    setState(() => _editMode = !_editMode);
+  }
+
+  void _togglePin(String id) {
+    setState(() {
+      if (_pinned.contains(id)) {
+        _pinned.remove(id);
+      } else if (_pinned.length < widget.maxPinnedCount) {
+        _pinned.add(id);
+      }
+    });
+  }
 
   void _reorder(int oldIndex, int newIndex) {
     setState(() {
@@ -128,23 +164,19 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5E6C8),
-        border: Border(
-          top: BorderSide(color: Color(0xFFC9B68C), width: 0.8),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedSize(
-            alignment: Alignment.bottomCenter,
-            duration: const Duration(milliseconds: 180),
-            child: _drawerOpen ? _buildDrawer() : const SizedBox.shrink(),
+    // 常驻栏留在正常布局流中；抽屉面板与遮罩通过 OverlayPortal 浮在
+    // 其正上方，不占据布局空间，出现/编辑都不会影响原有布局。
+    return OverlayPortal.overlayChildLayoutBuilder(
+      controller: _portalController,
+      overlayChildBuilder: (context, info) => _buildOverlay(context, info),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFF5E6C8),
+          border: Border(
+            top: BorderSide(color: Color(0xFFC9B68C), width: 0.8),
           ),
-          _buildPersistentBar(),
-        ],
+        ),
+        child: _buildPersistentBar(),
       ),
     );
   }
@@ -190,21 +222,62 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
     );
   }
 
-  // ---- 抽屉容器 -----------------------------------------------------------
+  // ---- 抽屉浮层 -----------------------------------------------------------
 
-  Widget _buildDrawer() {
-    if (_editMode) return _buildEditDrawer();
-    return _buildNormalDrawer();
+  /// 浮层内容：透明遮罩 + 常驻栏正上方的面板。
+  ///
+  /// 在布局阶段通过 [info] 直接拿到常驻栏尺寸与其在 Overlay 坐标系中的
+  /// paint transform（不经过 FollowerLayer），用 [Positioned] 定位：
+  /// 宽度与常驻栏一致，底边贴常驻栏顶部，向上展开。
+  Widget _buildOverlay(BuildContext context, OverlayChildLayoutInfo info) {
+    // 常驻栏左上角在 Overlay 坐标系中的位置
+    final origin =
+        MatrixUtils.transformPoint(info.childPaintTransform, Offset.zero);
+    final barWidth = info.childSize.width;
+    // 常驻栏顶部以上的可用高度（距 Overlay 顶留 8px）
+    final available = (origin.dy - 8).clamp(120.0, 100000.0).toDouble();
+    // 编辑态：不超过应用高度的一半；普通态：最高 220
+    final maxHeight = _editMode ? info.overlaySize.height / 2 : 220.0;
+    final panelHeight = available < maxHeight ? available : maxHeight;
+    // 底边始终贴常驻栏顶部：高度变小时面板整体下移，不与常驻栏脱离
+    final panelTop = origin.dy - panelHeight;
+
+    return Stack(
+      children: [
+        // 透明遮罩：点击抽屉外任意位置即关闭（非模式，不锁页面）
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _closeDrawer,
+            child: const SizedBox.expand(),
+          ),
+        ),
+        Positioned(
+          left: origin.dx,
+          top: panelTop,
+          width: barWidth,
+          height: panelHeight,
+          child: Material(
+            color: const Color(0xFFF5E6C8),
+            elevation: 10,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(8)),
+            clipBehavior: Clip.antiAlias,
+            child: _editMode ? _buildEditDrawer() : _buildNormalDrawer(),
+          ),
+        ),
+      ],
+    );
   }
 
   /// 普通抽屉：未常驻按钮的多行 Wrap + 顶部编辑按钮。
+  ///
+  /// 宽高由浮层 [Positioned] 给定（紧约束），这里只负责布局。
   Widget _buildNormalDrawer() {
     final unpinned = _unpinnedButtons;
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 220),
+    return Padding(
       padding: const EdgeInsets.fromLTRB(10, 6, 6, 8),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -232,18 +305,15 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
             ],
           ),
           const SizedBox(height: 2),
-          Flexible(
+          Expanded(
             child: unpinned.isEmpty
                 ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        '所有按钮都已设为常驻',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFFB0A48A),
-                          fontStyle: FontStyle.italic,
-                        ),
+                    child: Text(
+                      '所有按钮都已设为常驻',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFB0A48A),
+                        fontStyle: FontStyle.italic,
                       ),
                     ),
                   )
@@ -266,16 +336,16 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   }
 
   /// 编辑抽屉：全部按钮可拖动排序 + 逐个切换常驻。
+  ///
+  /// 宽高由浮层 [Positioned] 给定（编辑态为常驻栏以上全部可用空间）。
   Widget _buildEditDrawer() {
     final all = _order
         .map((id) => _btnMap[id])
         .whereType<FreeButton>()
         .toList();
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 210),
+    return Padding(
       padding: const EdgeInsets.fromLTRB(10, 6, 6, 8),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -300,11 +370,11 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
             ],
           ),
           const SizedBox(height: 2),
-          Flexible(
+          Expanded(
             child: ReorderableListView.builder(
               buildDefaultDragHandles: true,
               itemCount: all.length,
-              onReorderItem: _reorder,
+              onReorder: _reorder,
               proxyDecorator: (child, index, anim) => Material(
                 color: Colors.transparent,
                 elevation: 4,
