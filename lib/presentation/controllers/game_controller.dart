@@ -209,6 +209,25 @@ class GameController extends ChangeNotifier {
 
   // ---- 棋谱前进 / 后退 / 跳转 ----
 
+  /// 直接从 FEN 字符串载入一个起始局面（残局模式）。
+  ///
+  /// 重建棋谱树根节点为该局面，重置当前节点、AI 状态与结果计数。
+  /// 与 [loadParsedGame] 互斥：用于无完整棋谱、仅给定起始 FEN 的场景。
+  void loadFen(String fen) {
+    final (board, side) = Fen.toBoard(fen);
+    _state.restoreFrom(
+      board: board,
+      sideToMove: side,
+      result: const GameResult(status: GameResultStatus.ongoing),
+      history: const [],
+    );
+    _root = NotationNode.root(board.clone(), sideToMove: side);
+    _current = _root;
+    _aiThinking = false;
+    _resultTick = 0;
+    notifyListeners();
+  }
+
   /// 后退一步：回到上一节点并恢复盘面。导航操作不触发 AI。
   void goBack() => _jumpTo(_current.parent);
 

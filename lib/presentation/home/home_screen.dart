@@ -3,11 +3,15 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/canju/canju_library.dart';
+import '../../core/canju/canju_progress.dart';
 import '../../core/config/config_manager.dart';
 import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_loader.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
+import '../canju/canju_controller.dart';
+import '../canju/canju_selector_dialog.dart';
 
 /// 首页：中国象棋水墨风主菜单。
 ///
@@ -53,7 +57,7 @@ class HomeScreen extends StatelessWidget {
                           title: '残局',
                           subtitle: '练习经典残局破解',
                           icon: const _PiecesIcon(),
-                          onTap: () => _placeholder(context, '残局'),
+                          onTap: () => _openCanju(context),
                         ),
                         const SizedBox(height: 24),
                         _MenuCard(
@@ -107,9 +111,62 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _placeholder(BuildContext context, String name) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$name 功能开发中')),
+  // ---------------------------------------------------------------------------
+  // 残局入口：有上次记录直跳，无记录弹窗选择
+  // ---------------------------------------------------------------------------
+
+  Future<void> _openCanju(BuildContext context) async {
+    final store = CanjuStore.instance;
+    if (!store.isLoaded) await store.load();
+    final names = await CanjuLibraryLoader.listNames();
+    if (names.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('assets/canju/ 目录下没有残局库')),
+      );
+      return;
+    }
+
+    final last = store.lastLibrary;
+    if (last != null && names.contains(last)) {
+      // 直跳：载入上次库的上次局
+      final lib = await CanjuLibraryLoader.load(last);
+      if (!context.mounted) return;
+      final rec = store.recordOf(last);
+      final idx = rec.currentIndex.clamp(0, lib.length - 1);
+      _navigateToCanju(context, lib, idx, store);
+      return;
+    }
+
+    // 首次或上次库已不存在：弹窗让用户选
+    final libs = await CanjuLibraryLoader.loadAll();
+    if (!context.mounted) return;
+    final chosen = await CanjuSelectorDialog.show(
+      context,
+      libraries: libs,
+      store: store,
+      currentLibraryName: last,
+    );
+    if (chosen == null) return;
+    await store.setLastLibrary(chosen.name);
+    await store.setCurrentIndex(chosen.name, 0);
+    if (!context.mounted) return;
+    _navigateToCanju(context, chosen, 0, store);
+  }
+
+  void _navigateToCanju(
+    BuildContext context,
+    CanjuLibrary lib,
+    int initialIndex,
+    CanjuStore store,
+  ) {
+    Navigator.of(context).pushNamed(
+      '/play',
+      arguments: CanjuSession(
+        library: lib,
+        initialIndex: initialIndex,
+        store: store,
+      ),
     );
   }
 

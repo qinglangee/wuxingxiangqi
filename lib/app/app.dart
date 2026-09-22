@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
 import '../domain/notation/parsers/notation_replay.dart';
 import '../domain/notation/parsers/parsed_game.dart';
+import '../presentation/canju/canju_controller.dart';
 import '../presentation/controllers/game_controller.dart';
 import '../presentation/game/game_screen.dart';
 import '../presentation/home/home_screen.dart';
@@ -21,17 +22,43 @@ class App extends StatelessWidget {
       theme: AppTheme.light,
       home: const HomeScreen(),
       routes: {
-        // 路由参数为 (ParsedGame, ReplayData)：
-        // 首页已完成解析与完整回放校验，这里只负责载入到控制器。
+        // 路由参数支持三种形态：
+        // - (ParsedGame, ReplayData)：棋谱模式，首页已完成解析与回放校验
+        // - ParsedGame：兼容只传棋谱的情况
+        // - CanjuSession：残局模式，由首页残局入口构造
         '/play': (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments;
+
+          // 残局模式：注入 GameController + CanjuController
+          if (args is CanjuSession) {
+            return MultiProvider(
+              providers: [
+                ChangeNotifierProvider<GameController>(
+                  create: (_) => GameController(),
+                ),
+                ChangeNotifierProvider<CanjuController>(
+                  create: (c) {
+                    final gc = c.read<GameController>();
+                    return CanjuController(
+                      gameController: gc,
+                      library: args.library,
+                      store: args.store,
+                      initialIndex: args.initialIndex,
+                    );
+                  },
+                ),
+              ],
+              child: const GameScreen(),
+            );
+          }
+
+          // 棋谱模式
           ParsedGame? game;
           ReplayData? replay;
           if (args is (ParsedGame, ReplayData)) {
             game = args.$1;
             replay = args.$2;
           } else if (args is ParsedGame) {
-            // 兼容只传 ParsedGame 的情况
             game = args;
           }
           return ChangeNotifierProvider(
