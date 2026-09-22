@@ -141,7 +141,7 @@ class HomeScreen extends StatelessWidget {
       if (!context.mounted) return;
       final accepted = await _promptChooseDirectory(context);
       if (!accepted) return;
-      final picked = await FilePicker.platform.getDirectoryPath(
+      final picked = await FilePicker.getDirectoryPath(
         dialogTitle: '选择棋谱仓库目录',
       );
       if (picked == null || picked.isEmpty) return;
@@ -170,14 +170,14 @@ class HomeScreen extends StatelessWidget {
     }
 
     // 已配置：打开文件选择器，让用户在仓库目录中选择棋谱或进入子目录
-    final file = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFiles(
       dialogTitle: '选择棋谱文件',
       initialDirectory: path,
       type: FileType.custom,
       allowedExtensions: const ['pgn', 'xqf', 'cbf', 'txt'],
     );
-    if (file == null || file.files.isEmpty) return;
-    final pickedPath = file.files.single.path;
+    if (file.isEmpty) return;
+    final pickedPath = file.single.path;
     if (pickedPath == null || pickedPath.isEmpty) return;
 
     // 读取文件字节并交给解析器；解析后还会在内存中完整回放一遍校验，
