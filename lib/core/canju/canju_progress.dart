@@ -6,38 +6,41 @@ import 'package:path_provider/path_provider.dart';
 
 /// 单库的过关位图（16 进制字符串，末尾 '0' 字符省略）。
 ///
-/// 约定：字符串第 i 个 16 进制字符对应残局列表第 i 局的 4 个"关"位，
-/// 每位 1 表示该关已过、0 表示未过。字符串末尾连续的 '0'（即后续局全
-/// 没过关）可以省略，加载时按需补 0。
+/// 约定：每一局就是一关，无多关卡概念。位图按"每局 1 bit"编码，
+/// 每 4 局压缩为 1 个 16 进制字符——
+///   字符串第 i 个字符对应第 4i、4i+1、4i+2、4i+3 局的过关状态，
+/// 低位在前：第 0 个 bit 表示第 4i 局，第 1 个 bit 表示第 4i+1 局，依此
+/// 类推。字符串末尾连续的 '0' 字符（即后续连续 4 局全没过）可省略。
 @immutable
 class CanjuProgress {
   const CanjuProgress([this.hex = '']);
 
   final String hex;
 
-  /// 第 [level] 关 0..3。
-  static const int _levels = 4;
-
-  /// 第 [index] 局的第 [level] 关是否已过。
-  bool isCleared(int index, int level) {
-    if (index < 0 || index >= hex.length) return false;
-    if (level < 0 || level >= _levels) return false;
-    final v = _hexToInt(hex[index]);
-    return (v & (1 << level)) != 0;
+  /// 第 [index] 局（0-based）是否已过关。
+  bool isCleared(int index) {
+    if (index < 0) return false;
+    final charIdx = index ~/ 4;
+    final bitInChar = index % 4;
+    if (charIdx >= hex.length) return false;
+    final v = _hexToInt(hex[charIdx]);
+    return (v & (1 << bitInChar)) != 0;
   }
 
-  /// 把第 [index] 局第 [level] 关置为 [cleared]，返回新的 [CanjuProgress]。
-  CanjuProgress setCleared(int index, int level, bool cleared) {
-    if (index < 0 || level < 0 || level >= _levels) return this;
-    final needed = index + 1;
+  /// 把第 [index] 局置为已过关，返回新的 [CanjuProgress]。
+  /// 末尾连续的 '0' 字符会被裁掉。
+  CanjuProgress setCleared(int index) {
+    if (index < 0) return this;
+    final charIdx = index ~/ 4;
+    final bitInChar = index % 4;
+    final needed = charIdx + 1;
     final chars = List<String>.generate(
       needed > hex.length ? needed : hex.length,
       (i) => i < hex.length ? hex[i] : '0',
     );
-    var v = _hexToInt(chars[index]);
-    v = cleared ? (v | (1 << level)) : (v & ~(1 << level));
-    chars[index] = v.toRadixString(16);
-    // 去末尾连续的 '0'
+    var v = _hexToInt(chars[charIdx]);
+    v |= (1 << bitInChar);
+    chars[charIdx] = v.toRadixString(16);
     var end = chars.length;
     while (end > 0 && chars[end - 1] == '0') {
       end--;
@@ -45,13 +48,11 @@ class CanjuProgress {
     return CanjuProgress(chars.sublist(0, end).join());
   }
 
-  /// 第 [index] 局已过关数（0..4）。
-  int clearedCount(int index) {
-    if (index < 0 || index >= hex.length) return 0;
-    var v = _hexToInt(hex[index]);
+  /// 已过关的最大连续局数（从第 0 局起连续过关的局数）。
+  int get clearedCount {
     var c = 0;
-    for (var i = 0; i < _levels; i++) {
-      if ((v & (1 << i)) != 0) c++;
+    while (isCleared(c)) {
+      c++;
     }
     return c;
   }
@@ -175,16 +176,12 @@ class CanjuStore extends ChangeNotifier {
   Future<void> setCurrentIndex(String libraryName, int index) =>
       updateRecord(libraryName, (c) => c.copyWith(currentIndex: index));
 
-  /// 便捷：设置某局某关为已过。
-  Future<void> markCleared(
-    String libraryName,
-    int index,
-    int level,
-  ) =>
+  /// 便捷：标记第 [index] 局已过关。
+  Future<void> markCleared(String libraryName, int index) =>
       updateRecord(
         libraryName,
         (c) => c.copyWith(
-          progress: c.progress.setCleared(index, level, true),
+          progress: c.progress.setCleared(index),
         ),
       );
 
