@@ -23,8 +23,11 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          // 米黄宣纸底色
-          color: Color(0xFFF5EDD8),
+          // 首屏背景图：整幅铺满
+          image: DecorationImage(
+            image: AssetImage('assets/images/bg/default.jpeg'),
+            fit: BoxFit.cover,
+          ),
         ),
         child: SafeArea(
           child: Center(

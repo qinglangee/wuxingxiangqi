@@ -25,6 +25,7 @@ flutter:
     - engine/windows/
     - engine/android/
     - assets/images/
+    - assets/images/bg/
     - assets/images/boards/
     - assets/images/pieces/
     - assets/images/pieces/黑白简约/
