@@ -24,6 +24,8 @@ class GameController extends ChangeNotifier {
         super() {
     _root = NotationNode.root(_state.board.clone());
     _current = _root;
+    // 标准开局 = 一局新游戏
+    _ai.notifyNewGame(Fen.fromBoard(_state.board, Side.red));
   }
 
   final GameState _state;
@@ -159,6 +161,8 @@ class GameController extends ChangeNotifier {
     _current = _root;
     _aiThinking = false;
     _resultTick = 0;
+    // 重开 = 一局新游戏
+    _ai.notifyNewGame(Fen.fromBoard(_state.board, Side.red));
     notifyListeners();
     _maybeTriggerAiMove();
   }
@@ -180,6 +184,7 @@ class GameController extends ChangeNotifier {
       sideToMove: data.startSide,
       result: const GameResult(status: GameResultStatus.ongoing),
       history: const [],
+      isInitialState: true,
     );
     _root = NotationNode.root(data.startBoard.clone(),
         sideToMove: data.startSide);
@@ -187,6 +192,8 @@ class GameController extends ChangeNotifier {
     _current = _root;
     _aiThinking = false;
     _resultTick = 0;
+    // 导入棋谱 = 一局新游戏，初始局面为棋谱起始 FEN
+    _ai.notifyNewGame(Fen.fromBoard(data.startBoard, data.startSide));
 
     for (var i = 0; i < data.moves.length; i++) {
       final (from, to) = data.moves[i];
@@ -221,11 +228,14 @@ class GameController extends ChangeNotifier {
       sideToMove: side,
       result: const GameResult(status: GameResultStatus.ongoing),
       history: const [],
+      isInitialState: true,
     );
     _root = NotationNode.root(board.clone(), sideToMove: side);
     _current = _root;
     _aiThinking = false;
     _resultTick = 0;
+    // 载入残局局面 = 一局新游戏
+    _ai.notifyNewGame(fen);
     notifyListeners();
   }
 
@@ -319,6 +329,7 @@ class GameController extends ChangeNotifier {
       sideToMove: _current.sideToMove,
       result: _current.result,
       history: moves,
+      isInitialState: _current.isRoot,
     );
   }
 
@@ -369,7 +380,11 @@ class GameController extends ChangeNotifier {
     var moveApplied = false;
     try {
       final fen = Fen.fromBoard(_state.board, currentSide);
-      final move = await _ai.bestMove(fen, moveTimeMs: 500);
+      final move = await _ai.bestMove(
+        fen,
+        moveTimeMs: 3500,
+        isInitialState: _state.isInitialState,
+      );
       if (move == '(none)' || move.isEmpty) {
         // 引擎未给出走法，停止本次自动走子，避免空转循环
         debugPrint('AI 未返回有效走法: $move');
