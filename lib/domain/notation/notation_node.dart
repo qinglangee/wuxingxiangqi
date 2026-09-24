@@ -2,6 +2,7 @@ import '../game/game_result.dart';
 import '../models/board.dart';
 import '../models/piece.dart';
 import 'move_record.dart';
+import 'win_line.dart';
 
 /// 棋谱树节点：表示一个「局面」。
 ///
@@ -55,6 +56,12 @@ class NotationNode {
 
   /// 局面注释（本节点局面的评注）。
   String? comment;
+
+  /// 挂在本节点局面上的胜利招法线（可包含红方/黑方各自的多条线路）。
+  ///
+  /// 每条 [WinLine] 从本节点局面起算；对方若按线首招应对，胜方直接
+  /// 自动应手并把剩余线路传到后续节点。由引擎 PV 分析后写入。
+  final List<WinLine> winLines = [];
 
   bool get isRoot => parent == null;
 

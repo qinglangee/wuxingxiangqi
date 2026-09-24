@@ -6,6 +6,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
+/// 引擎一次思考的结果。
+///
+/// - [move]：最佳走法 UCI（如 "b2c2"），异常时为 "(none)"；
+/// - [pv]：bestmove 之前最后一条首选变化（Principal Variation）的 UCI
+///   招法列表，从当前局面的招法开始，无 PV 时为空；
+/// - [mate]：引擎报告的杀棋步数（`score mate N`）。正数表示当前走子方
+///   N 步内将杀对手，负数表示被将杀；普通分数（cp）时为 null。
+typedef EngineBestMove = ({String move, List<String> pv, int? mate});
+
 /// 皮卡鱼(Pikafish) UCI 象棋引擎封装。
 ///
 /// - Windows: assets/engine/windows/pikafish-bmi2.exe
@@ -30,8 +39,12 @@ class PikafishEngine {
   Completer<void>? _readyokCompleter;
 
   /// 当前等待 bestmove 的请求。
-  Completer<String>? _bestMoveCompleter;
+  Completer<EngineBestMove>? _bestMoveCompleter;
   Timer? _hardTimeoutTimer;
+
+  /// 本次思考周期内最后一条带 pv 的 info 所携带的首选变化与杀棋分数。
+  List<String> _lastPv = const [];
+  int? _lastMate;
 
   /// 新一局通知：true 表示已收到 [notifyNewGame] 但本局引擎尚未被调用过
   /// （惰性——引擎进程此时可能还没启动）。第一次 [bestMove] 时发送一次
@@ -108,6 +121,22 @@ class PikafishEngine {
       _readyokCompleter?.complete();
       return;
     }
+    // info ... score mate 3 ... pv b2c2 ...
+    // 只记录带 pv 的 info（越深的行越靠后，自然覆盖为"最后一条首选 pv"）。
+    if (line.startsWith('info ')) {
+      final pvMatch = RegExp(r' pv (.+)$').firstMatch(line);
+      if (pvMatch != null) {
+        _lastPv = pvMatch
+            .group(1)!
+            .split(RegExp(r'\s+'))
+            .where((tok) => tok.length >= 4)
+            .toList(growable: false);
+        final mateMatch = RegExp(r'score mate (-?\d+)').firstMatch(line);
+        _lastMate =
+            mateMatch != null ? int.tryParse(mateMatch.group(1)!) : null;
+      }
+      return;
+    }
     if (line.startsWith('bestmove')) {
       // bestmove b2c2 ponder ...
       final parts = line.split(RegExp(r'\s+'));
@@ -117,7 +146,11 @@ class PikafishEngine {
         _bestMoveCompleter = null;
         _hardTimeoutTimer?.cancel();
         _hardTimeoutTimer = null;
-        completer.complete(move);
+        completer.complete((
+          move: move,
+          pv: List<String>.unmodifiable(_lastPv),
+          mate: _lastMate,
+        ));
       }
     }
   }
@@ -145,11 +178,16 @@ class PikafishEngine {
   /// [moveTimeMs] 会被限制在 1..[maxMoveTimeMs] 范围内，保证不超过 1 秒。
   /// 若本调用是 [notifyNewGame] 之后引擎本局第一次被调用，会先发送一次
   /// `ucinewgame`，随后发送当前请求的 [fen]。
-  Future<String> bestMove(String fen, {int moveTimeMs = 800}) async {
+  Future<EngineBestMove> bestMove(String fen,
+      {int moveTimeMs = 800}) async {
     await start();
     final effectiveTime = moveTimeMs.clamp(1, maxMoveTimeMs);
 
-    final completer = Completer<String>();
+    // 新一次思考：清空上一周期残留的 pv/mate
+    _lastPv = const [];
+    _lastMate = null;
+
+    final completer = Completer<EngineBestMove>();
     _bestMoveCompleter = completer;
 
     if (_pendingNewGame) {
@@ -173,7 +211,8 @@ class PikafishEngine {
         Timer(const Duration(seconds: 1), () {
           if (!completer.isCompleted) {
             _bestMoveCompleter = null;
-            completer.complete('(none)');
+            completer.complete(
+                (move: '(none)', pv: const <String>[], mate: null));
           }
         });
       },

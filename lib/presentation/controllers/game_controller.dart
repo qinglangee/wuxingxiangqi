@@ -11,6 +11,7 @@ import '../../domain/models/position.dart';
 import '../../domain/notation/move_record.dart';
 import '../../domain/notation/notation_node.dart';
 import '../../domain/notation/notation_text.dart';
+import '../../domain/notation/win_line.dart';
 import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
@@ -146,7 +147,7 @@ class GameController extends ChangeNotifier {
     if (_applyAndRecord(selected, pos)) {
       debugPrint('人类走子: $selected → $pos');
       notifyListeners();
-      _maybeTriggerAiMove();
+      _afterMoveApplied();
     } else {
       _state.selected = null;
       notifyListeners();
@@ -364,39 +365,192 @@ class GameController extends ChangeNotifier {
     return true;
   }
 
-  /// 若当前轮次属于 AI 方且处于棋谱末梢，则异步调用引擎走子。
+  /// 一步棋真正走完后的统一自动处理（人类走子、AI 走子、胜线自动应手
+  /// 后都调用本方法，不可在无新走子时调用——传播判定依赖"刚走的一招"）。
+  ///
+  /// 1. **胜线推进**：若刚走的一招与父节点所挂某条胜利线的首招一致
+  ///    （坐标与走子方都匹配，无论走子方是胜方还是败方、是人还是 AI），
+  ///    就把去掉首招后的剩余线路挂到当前节点，使线路沿实际招法传递；
+  /// 2. **胜方自动应手**：推进后若轮到的胜方是 AI，则 AI 不请求引擎、
+  ///    直接按线上的胜方应手走，并链式继续；胜方是人类时不自动走；
+  /// 3. **败方 AI 跟线**：不满足胜方应手条件时，交给
+  ///    [_maybeTriggerAiMove]——败方若为 AI 同样按线首招跟线（免引擎），
+  ///    败方为人类则等待手动走子；无线可跟时 AI 才请求引擎思考。
+  Future<void> _afterMoveApplied() async {
+    if (isOver) return;
+    if (!atTip) return; // 浏览历史着法时不自动走子
+
+    final node = _current;
+    final parent = node.parent;
+    final record = node.move;
+    if (parent != null && record != null) {
+      WinLine? matched;
+      for (final line in parent.winLines) {
+        if (line.moves.isEmpty) continue;
+        final first = line.moves.first;
+        if (first.moving.side != record.side) continue;
+        if (first.from != record.from || first.to != record.to) continue;
+        matched = line;
+        break;
+      }
+      if (matched != null) {
+        final rest = matched.moves.sublist(1);
+        // 无论是否自动应手，都先把剩余线路挂到当前节点（人类胜方之后
+        // 手动走对招时，还要靠这条剩余线路继续判定与传递）。
+        if (rest.isNotEmpty) {
+          _attachWinLine(
+            node,
+            WinLine(winner: matched.winner, moves: rest),
+          );
+        }
+        // 仅当胜方是 AI 时才自动应手；胜方为人类则等其自行走子。
+        if (rest.isNotEmpty && _isAiSide(matched.winner)) {
+          final reply = rest.first;
+          if (reply.moving.side == matched.winner &&
+              _applyAndRecord(reply.from, reply.to)) {
+            notifyListeners();
+            await _afterMoveApplied();
+            return;
+          }
+        }
+        // 不自动应手（胜方是人类）：败方若为 AI 会在下面按线跟线，
+        // 败方为人类则等待手动走子；都无操作。
+        await _maybeTriggerAiMove();
+        return;
+      }
+    }
+
+    await _maybeTriggerAiMove();
+  }
+
+  /// 若当前轮次属于 AI 方且处于棋谱末梢，则让其走子。
+  ///
+  /// 规则：AI 无论在杀线中是胜方还是败方都**跟线**——只要当前节点
+  /// 挂有首招轮到本方的胜利线，就直接按线首招走，不请求引擎；人类
+  /// 永远不跟线（自动走子只可能由本方法触发，人类走子走 onTap）。
+  /// 无可用线时才请求引擎；引擎返回的 PV 若在本地模拟可成杀（AI 为
+  /// 胜方），则把去掉首招后的胜利线路挂到走子后的节点上。
   Future<void> _maybeTriggerAiMove() async {
     if (isOver || _aiThinking) return;
     if (!atTip) return; // 浏览历史着法时不自动走子
     if (!_isAiSide(currentSide)) return;
+
+    // AI 跟线（胜方应手或败方首招）：直接按线走，免请求引擎
+    final follow = _followLineFor(currentSide);
+    if (follow != null) {
+      final m = follow.moves.first;
+      if (_applyAndRecord(m.from, m.to)) {
+        notifyListeners();
+        await _afterMoveApplied();
+      }
+      return;
+    }
 
     _aiThinking = true;
     notifyListeners();
     var moveApplied = false;
     try {
       final fen = Fen.fromBoard(_state.board, currentSide);
-      final move = await _ai.bestMove(fen, moveTimeMs: 500);
-      if (move == '(none)' || move.isEmpty) {
+      final aiSide = currentSide;
+      final result = await _ai.bestMove(fen, moveTimeMs: 500);
+      final uci = result.move;
+      if (uci == '(none)' || uci.isEmpty) {
         // 引擎未给出走法，停止本次自动走子，避免空转循环
-        debugPrint('AI 未返回有效走法: $move');
+        debugPrint('AI 未返回有效走法: $uci');
         return;
       }
-      final (from, to) = Fen.parseUciMove(move);
+
+      // 组装完整候选线路：以 bestmove 为首，拼上 PV 剩余招法
+      final pv = result.pv;
+      final List<String> lineUci;
+      if (pv.isEmpty) {
+        lineUci = [uci];
+      } else if (pv.first == uci) {
+        lineUci = pv;
+      } else {
+        lineUci = [uci, ...pv];
+      }
+
+      // 走子前在当前局面克隆上模拟整条 PV，确认是否构成杀线
+      final win = _simulateWinLine(lineUci);
+
+      final (from, to) = Fen.parseUciMove(uci);
       if (_applyAndRecord(from, to)) {
         moveApplied = true;
+        // 仅当线路以 AI 方胜利告终时记录；去掉 AI 刚走的首招，
+        // 剩余 [对方应手, 我方应手, ...] 挂到走子后的节点
+        if (win != null && win.winner == aiSide && win.moves.length >= 2) {
+          _attachWinLine(
+            _current,
+            WinLine(winner: aiSide, moves: win.moves.sublist(1)),
+          );
+        }
         notifyListeners();
       } else {
         // 引擎走法未通过本地规则：打印 FEN 与走法以便定位坐标/规则问题
-        debugPrint('AI 走法被本地规则拒绝: $move, $from, $to, fen=$fen');
+        debugPrint('AI 走法被本地规则拒绝: $uci, $from, $to, fen=$fen');
       }
     } catch (e) {
       debugPrint('AI 走子失败: $e');
     } finally {
       _aiThinking = false;
       notifyListeners();
-      // 仅在确实走子成功后，才可能继续触发另一方 AI
-      if (moveApplied) _maybeTriggerAiMove();
+      // 仅在确实走子成功后，才继续后续自动处理（胜线传播/另一方 AI）
+      if (moveApplied) await _afterMoveApplied();
     }
+  }
+
+  /// 在当前局面克隆上按本地规则逐步走 [uciLine]，若整条线路合法且
+  /// 最终分出胜负，返回 (胜利方, 招法列表)；否则返回 null。
+  ({Side winner, List<Move> moves})? _simulateWinLine(
+      List<String> uciLine) {
+    final sim = GameState();
+    sim.restoreFrom(
+      board: _state.board.clone(),
+      sideToMove: currentSide,
+      result: const GameResult(status: GameResultStatus.ongoing),
+      history: const [],
+    );
+    final simEngine = GameEngine(sim);
+    final moves = <Move>[];
+    for (final uci in uciLine) {
+      if (uci.length < 4) return null;
+      final (from, to) = Fen.parseUciMove(uci);
+      final piece = sim.board.pieceAt(from);
+      if (piece == null || piece.side != sim.currentSide) return null;
+      final captured = sim.board.pieceAt(to);
+      if (!simEngine.tryMove(from, to)) return null;
+      moves.add(Move(from: from, to: to, moving: piece, captured: captured));
+    }
+    final status = sim.result.status;
+    if (status == GameResultStatus.redWins) {
+      return (winner: Side.red, moves: moves);
+    }
+    if (status == GameResultStatus.blackWins) {
+      return (winner: Side.black, moves: moves);
+    }
+    return null;
+  }
+
+  /// 查找当前节点上首招轮到 [side] 走的任意胜利线（不区分 [side] 在
+  /// 该线中是胜方还是败方——AI 两种角色都跟线）。
+  WinLine? _followLineFor(Side side) {
+    for (final line in _current.winLines) {
+      if (line.moves.isEmpty) continue;
+      if (line.moves.first.moving.side == side) return line;
+    }
+    return null;
+  }
+
+  /// 向节点挂载胜利线，按胜利方+长度+首招去重。
+  void _attachWinLine(NotationNode node, WinLine line) {
+    final dup = node.winLines.any((l) =>
+        l.winner == line.winner &&
+        l.moves.length == line.moves.length &&
+        l.moves.isNotEmpty &&
+        l.moves.first.from == line.moves.first.from &&
+        l.moves.first.to == line.moves.first.to);
+    if (!dup) node.winLines.add(line);
   }
 
   @override
