@@ -219,7 +219,11 @@ class GameController extends ChangeNotifier {
   ///
   /// 重建棋谱树根节点为该局面，重置当前节点、AI 状态与结果计数。
   /// 与 [loadParsedGame] 互斥：用于无完整棋谱、仅给定起始 FEN 的场景。
-  void loadFen(String fen) {
+  ///
+  /// [notify] 为 false 时只改状态不发通知——用于 Provider build 阶段
+  /// 的首次载入（此时 notifyListeners 会触发 build 期重建异常）；首帧
+  /// 构建会直接读到已改好的状态。用户主动切换残局时保持默认 true。
+  void loadFen(String fen, {bool notify = true}) {
     final (board, side) = Fen.toBoard(fen);
     _state.restoreFrom(
       board: board,
@@ -233,7 +237,7 @@ class GameController extends ChangeNotifier {
     _resultTick = 0;
     // 载入残局局面 = 一局新游戏
     _ai.notifyNewGame();
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   /// 后退一步：回到上一节点并恢复盘面。导航操作不触发 AI。
