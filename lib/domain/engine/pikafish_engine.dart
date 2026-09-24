@@ -33,12 +33,10 @@ class PikafishEngine {
   Completer<String>? _bestMoveCompleter;
   Timer? _hardTimeoutTimer;
 
-  /// 新一局通知：true 表示已收到 [notifyNewGame] 但尚未在本局发送过
-  /// `ucinewgame`（惰性——引擎进程此时可能还没启动）。
+  /// 新一局通知：true 表示已收到 [notifyNewGame] 但本局引擎尚未被调用过
+  /// （惰性——引擎进程此时可能还没启动）。第一次 [bestMove] 时发送一次
+  /// `ucinewgame`。
   bool _pendingNewGame = false;
-
-  /// 本局初始局面 FEN（由 [notifyNewGame] 记录）。
-  String? _initialFen;
 
   StreamSubscription<String>? _stdoutSub;
   StreamSubscription<String>? _stderrSub;
@@ -134,40 +132,32 @@ class PikafishEngine {
 
   /// 通知引擎开始一局新游戏。
   ///
-  /// 必须在每局开始时（新开局、重开、导入棋谱/残局）调用，记录初始 FEN。
-  /// 此方法是惰性的：不会启动引擎进程；真正的 `ucinewgame` 命令延迟到
-  /// 本局首次 [bestMove] 调用（且当前为初始局面）时才发送，同一局后续
-  /// 调用不再重复发送，避免每次思考都重置引擎状态、损失哈希性能。
-  void notifyNewGame(String initialFen) {
-    _initialFen = initialFen;
+  /// 在每局开始时（新开局、重开、导入棋谱/残局）调用。此方法是惰性的：
+  /// 不会启动引擎进程；真正的 `ucinewgame` 命令延迟到本局**引擎第一次
+  /// 被请求** [bestMove] 时才发送——即使此前人类已走若干步，也不影响。
+  /// 同一局后续调用不再发送，避免重复重置引擎状态、损失哈希性能。
+  void notifyNewGame() {
     _pendingNewGame = true;
   }
 
   /// 给定 FEN 与思考时间(毫秒)，返回最佳走法(UCI 字符串，如 "b2c2")。
   ///
   /// [moveTimeMs] 会被限制在 1..[maxMoveTimeMs] 范围内，保证不超过 1 秒。
-  /// [isInitialState] 表示当前是否为本局初始局面；仅当为初始局面且本局
-  /// 尚未发送过 `ucinewgame` 时，才在本次请求前发送一次。
-  Future<String> bestMove(
-    String fen, {
-    int moveTimeMs = 800,
-    bool isInitialState = false,
-  }) async {
+  /// 若本调用是 [notifyNewGame] 之后引擎本局第一次被调用，会先发送一次
+  /// `ucinewgame`，随后发送当前请求的 [fen]。
+  Future<String> bestMove(String fen, {int moveTimeMs = 800}) async {
     await start();
     final effectiveTime = moveTimeMs.clamp(1, maxMoveTimeMs);
 
     final completer = Completer<String>();
     _bestMoveCompleter = completer;
 
-    if (isInitialState && _pendingNewGame) {
-      // 本局首次且处于初始局面：发 ucinewgame + 初始 FEN
+    if (_pendingNewGame) {
+      // 本局引擎首次交互：发 ucinewgame，再让引擎分析当前局面
       _send('ucinewgame');
-      _send('position fen ${_initialFen ?? fen}');
       _pendingNewGame = false;
-    } else {
-      // 同一局后续调用：只更新局面，不再重置引擎
-      _send('position fen $fen');
     }
+    _send('position fen $fen');
     _send('go movetime $effectiveTime');
 
     // 硬超时保护：思考上限 + 余量后仍无 bestmove，则发 stop；
@@ -229,7 +219,6 @@ class PikafishEngine {
     // 被静默丢弃（表现为引擎"没有反应"）。
     _starting = null;
     _pendingNewGame = false;
-    _initialFen = null;
   }
 
   /// 在应用可写目录中准备好引擎可执行文件与权重文件。

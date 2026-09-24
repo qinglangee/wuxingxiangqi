@@ -23,13 +23,6 @@ class GameState {
   GameResult get result => _result;
   bool get isOver => _result.isOver;
 
-  /// 当前局面是否为本局的初始局面（尚未走过任何棋）。
-  ///
-  /// 新开局 / 重置 / 导入棋谱的起始节点为 true；
-  /// 应用一步走法后为 false。用于引擎交互：仅在初始局面首次请求
-  /// 引擎时发送 `ucinewgame`，同一局后续请求不再重复发送。
-  bool isInitialState = true;
-
   /// 是否已有选中棋子(供 UI 高亮)。
   Position? selected;
 
@@ -45,7 +38,6 @@ class GameState {
     if (captured != null) _captured.add(captured);
     _currentSide = _currentSide == Side.red ? Side.black : Side.red;
     selected = null;
-    isInitialState = false;
   }
 
   /// 设置游戏结果(用于引擎判定胜负后回填)。
@@ -56,20 +48,16 @@ class GameState {
   /// 从历史局面快照恢复（棋谱前进/后退/跳转时使用）。
   ///
   /// [history] 为到达该局面的走法序列（用于保持 history/captured 一致）。
-  /// [isInitialState] 标识恢复到的是否为本局初始局面（如导入棋谱后
-  /// 跳回根节点），默认 false。
   void restoreFrom({
     required Board board,
     required Side sideToMove,
     required GameResult result,
     List<Move> history = const [],
-    bool isInitialState = false,
   }) {
     _board.copyFrom(board);
     _currentSide = sideToMove;
     _result = result;
     selected = null;
-    this.isInitialState = isInitialState;
     _history
       ..clear()
       ..addAll(history);
@@ -86,6 +74,5 @@ class GameState {
     _currentSide = Side.red;
     selected = null;
     _result = const GameResult(status: GameResultStatus.ongoing);
-    isInitialState = true;
   }
 }
