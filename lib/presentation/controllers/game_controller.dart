@@ -123,6 +123,7 @@ class GameController extends ChangeNotifier {
 
     final piece = _state.board.pieceAt(pos);
 
+    // 未选中任何棋子时，点击任意棋子选中该棋子
     if (_state.selected == null) {
       if (piece != null && piece.side == currentSide) {
         _state.selected = pos;
@@ -130,12 +131,12 @@ class GameController extends ChangeNotifier {
       }
       return;
     }
-
+    // 已选中棋子时，点击相同位置子不变
     final selected = _state.selected!;
     if (selected == pos) {
       return;
     }
-
+    // 已选中棋子时，点击不同位置子选中该棋子
     if (piece != null && piece.side == currentSide) {
       _state.selected = pos;
       notifyListeners();
