@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../../domain/engine/fen.dart';
@@ -410,8 +408,10 @@ class GameController extends ChangeNotifier {
 
   @override
   void dispose() {
-    // fire-and-forget 关闭引擎子进程
-    unawaited(_ai.dispose());
+    // 引擎是跨页面共享的全局单例，不能在此关闭进程，否则再次进入打谱页
+    // 时进程已死且不会被重新拉起（命令全部丢失）。
+    // 只中止当前思考请求：发 stop 并丢弃待返回的 bestmove。
+    _ai.cancelSearch();
     super.dispose();
   }
 }

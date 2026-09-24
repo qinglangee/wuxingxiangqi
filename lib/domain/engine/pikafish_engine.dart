@@ -197,14 +197,39 @@ class PikafishEngine {
     }
   }
 
+  /// 中止当前思考请求（切换页面/对局时调用，引擎进程保留）。
+  ///
+  /// 若引擎正在思考则发送 `stop` 让其尽快结束当前搜索；同时丢弃等待
+  /// bestmove 的 completer 与超时计时器，使之后到达的旧 bestmove 被忽略，
+  /// 防止它被误关联到下次进入页面后的新请求。
+  void cancelSearch() {
+    if (_bestMoveCompleter != null) {
+      _send('stop');
+      // 不完成旧 completer：其调用方（已销毁页面的控制器）随之放弃等待；
+      // 若完成它，旧调用方继续执行会在已 dispose 的 notifier 上通知而报错。
+      _bestMoveCompleter = null;
+    }
+    _hardTimeoutTimer?.cancel();
+    _hardTimeoutTimer = null;
+  }
+
   Future<void> _teardownProcess() async {
     await _stdoutSub?.cancel();
     await _stderrSub?.cancel();
     _stdoutSub = null;
     _stderrSub = null;
+    _bestMoveCompleter = null;
+    _hardTimeoutTimer?.cancel();
+    _hardTimeoutTimer = null;
     _process?.kill();
     _process = null;
     _ready = false;
+    // 关键：清空启动锁，否则下次 start() 会复用这个已完成的旧 Future，
+    // 误以为已启动而不会重新拉起进程，导致所有命令因 _process 为 null
+    // 被静默丢弃（表现为引擎"没有反应"）。
+    _starting = null;
+    _pendingNewGame = false;
+    _initialFen = null;
   }
 
   /// 在应用可写目录中准备好引擎可执行文件与权重文件。
