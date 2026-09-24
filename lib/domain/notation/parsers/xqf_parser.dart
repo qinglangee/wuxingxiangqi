@@ -305,7 +305,7 @@ class XqfParser implements NotationParser {
         ? <ParsedMove>[]
         : _flattenLine(root.children[0], startEnum);
     final rootBranches = root.children
-        .sublist(1)
+        .skip(1)
         .map((sib) => _flattenLine(sib, startEnum))
         .toList();
 
@@ -328,9 +328,8 @@ class XqfParser implements NotationParser {
     final rootComment =
         (root.remark?.isEmpty ?? true) ? null : root.remark;
 
-    if (moves.isEmpty) {
-      throw NotationParseException('XQF 棋谱未包含任何着法');
-    }
+    // 注意：不校验 moves 非空。纯局面文件（排局/残局 setup）没有任何着法，
+    // 只有文件头里的棋子位置（可能外加开局评注），同样是合法棋谱。
 
     return ParsedGame(
       info: GameInfo(
