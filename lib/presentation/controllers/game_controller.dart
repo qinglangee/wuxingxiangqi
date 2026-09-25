@@ -61,15 +61,10 @@ class GameController extends ChangeNotifier {
 
   /// 提示标记（仅当用户点击「提示」且提示自动关闭时展示）。
   ///
-  /// 值为 bestMove 的 from/to，在棋盘上以高亮圈标注。
+  /// 值为 bestMove 的 from/to，在棋盘上以高亮圈标注；
+  /// 走子（[_applyAndRecord]）或跳转（[_jumpTo]）时清除。
   Position? _hintMark;
   Position? get hintMark => _hintMark;
-  void _clearHintMark() {
-    if (_hintMark != null) {
-      _hintMark = null;
-      notifyListeners();
-    }
-  }
 
   /// 引擎最近一次搜索信息快照（引擎面板展示）；无搜索时为 null。
   EngineSearchInfo? _engineInfo;
@@ -388,7 +383,9 @@ class GameController extends ChangeNotifier {
 
   /// 请求引擎为当前局面给出 bestmove，并根据 [autoMove] 决定处理方式。
   ///
-  /// - [autoMove] 为 true：直接按 bestmove 走子；
+  /// - [autoMove] 为 true：直接按 bestmove 走子，并交给
+  ///   [_afterMoveApplied] 触发后续自动处理（对方为 AI 时继续应手、
+  ///   胜线传播等），残局模式下黑方电脑因此能接着走；
   /// - [autoMove] 为 false：仅把 bestmove 的 from 标记到棋盘上（[hintMark]）。
   Future<void> requestHint({required bool autoMove}) async {
     if (isOver || _aiThinking) return;
@@ -396,6 +393,7 @@ class GameController extends ChangeNotifier {
 
     _aiThinking = true;
     notifyListeners();
+    var moveApplied = false;
     try {
       final fen = Fen.fromBoard(_state.board, currentSide);
       final result = await _ai.bestMove(fen, moveTimeMs: 500);
@@ -404,8 +402,8 @@ class GameController extends ChangeNotifier {
 
       final (from, to) = Fen.parseUciMove(uci);
       if (autoMove) {
-        _clearHintMark();
-        _applyAndRecord(from, to);
+        // _applyAndRecord 内部已清除提示标记
+        moveApplied = _applyAndRecord(from, to);
       } else {
         _hintMark = from;
         notifyListeners();
@@ -415,6 +413,9 @@ class GameController extends ChangeNotifier {
     } finally {
       _aiThinking = false;
       notifyListeners();
+      // 先复位 _aiThinking 再触发后续处理，否则 _maybeTriggerAiMove
+      // 会因思考标志被拦。仅在确实走子成功后继续。
+      if (moveApplied) await _afterMoveApplied();
     }
   }
 
