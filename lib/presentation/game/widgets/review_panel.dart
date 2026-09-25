@@ -7,6 +7,8 @@ import '../../../../domain/notation/notation_node.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../controllers/game_controller.dart';
 import '../../shared/adjustable_button_bar.dart';
+import 'cloud_base_controller.dart';
+import 'cloud_base_panel.dart';
 import 'engine_status_bar.dart';
 import 'pv_view.dart';
 
@@ -15,7 +17,8 @@ import 'pv_view.dart';
 /// - 「棋谱注释」：左 1/3 竖向着法列表 + 右 2/3 注释显示与编辑区。
 /// - 「引擎」：引擎状态条（红黑优势比/深度/nps/用时/评分）+ 将军提示
 ///   + 多路 PV 中文记谱展示，电脑行棋时随引擎 info 实时刷新。
-/// - 「云库」：当前仅占位，后续补充。
+/// - 「云库」：ChessDB 开局库，局面变化时查询并展示按评分排序的候选
+///   着法，点击条目即走子。
 class ReviewPanel extends StatefulWidget {
   const ReviewPanel({super.key, required this.controller});
 
@@ -71,7 +74,11 @@ class _ReviewPanelState extends State<ReviewPanel>
               children: [
                 _NotationTab(controller: controller),
                 _EngineTab(controller: controller),
-                const _PlaceholderTab(label: '云库', hint: '接入在线开局库（待实现）'),
+                CloudBasePanel(
+                  controller: CloudBaseController(
+                    gameController: controller,
+                  ),
+                ),
               ],
             ),
           ),
@@ -649,36 +656,3 @@ class _CheckInfoBar extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // 占位标签
 // ---------------------------------------------------------------------------
-
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({required this.label, required this.hint});
-
-  final String label;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.construction, size: 36, color: const Color(0xFFC9B68C)),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF8B6B3D),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            hint,
-            style: const TextStyle(fontSize: 12, color: Color(0xFFB0A48A)),
-          ),
-        ],
-      ),
-    );
-  }
-}

@@ -354,6 +354,20 @@ class GameController extends ChangeNotifier {
   bool _isAiSide(Side side) =>
       side == Side.red ? _redIsAi : _blackIsAi;
 
+  /// 从外部（如云库面板点击着法）尝试在当前局面走 from → to。
+  ///
+  /// 与人类点击走子等价：合法性校验、写入棋谱树、触发后续
+  /// （AI 应手 / 胜线传播）。返回 true 表示走子成功。
+  bool applyMove(Position from, Position to) {
+    if (isOver) return false;
+    if (_aiThinking) return false;
+    if (_isAiSide(currentSide)) return false;
+    if (!_applyAndRecord(from, to)) return false;
+    notifyListeners();
+    _afterMoveApplied();
+    return true;
+  }
+
   /// 执行走法并写入棋谱树。
   ///
   /// 若当前节点已有续着（后退后另走），新走法作为分支加入，
