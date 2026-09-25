@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../../domain/engine/engine_info.dart';
 import '../../domain/engine/fen.dart';
 import '../../domain/engine/pikafish_engine.dart';
 import '../../domain/game/game_engine.dart';
@@ -25,7 +28,14 @@ class GameController extends ChangeNotifier {
     _current = _root;
     // 标准开局 = 一局新游戏
     _ai.notifyNewGame();
+    // 引擎搜索 info 实时转发给监听方（引擎面板）
+    _infoSub = _ai.infoStream.listen((info) {
+      _engineInfo = info;
+      notifyListeners();
+    });
   }
+
+  StreamSubscription<EngineSearchInfo>? _infoSub;
 
   final GameState _state;
   late final GameEngine _engine = GameEngine(_state);
@@ -40,6 +50,14 @@ class GameController extends ChangeNotifier {
   bool _redIsAi = false;
   bool _blackIsAi = false;
   bool _aiThinking = false;
+
+  /// 引擎最近一次搜索信息快照（引擎面板展示）；无搜索时为 null。
+  EngineSearchInfo? _engineInfo;
+  EngineSearchInfo? get engineInfo => _engineInfo;
+
+  /// 当前走子方是否正被将军（终局后不再提示将军）。
+  bool get currentInCheck =>
+      !_state.isOver && _engine.isInCheck(_state.currentSide);
 
   /// 终局事件计数：仅当「新走子」导致对局结束时 +1。
   ///
@@ -451,6 +469,7 @@ class GameController extends ChangeNotifier {
     }
 
     _aiThinking = true;
+    _engineInfo = null; // 新一次思考：清空上一次的搜索信息
     notifyListeners();
     var moveApplied = false;
     try {
@@ -562,6 +581,7 @@ class GameController extends ChangeNotifier {
     // 引擎是跨页面共享的全局单例，不能在此关闭进程，否则再次进入打谱页
     // 时进程已死且不会被重新拉起（命令全部丢失）。
     // 只中止当前思考请求：发 stop 并丢弃待返回的 bestmove。
+    _infoSub?.cancel();
     _ai.cancelSearch();
     super.dispose();
   }

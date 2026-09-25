@@ -24,6 +24,9 @@ class GameEngine {
     return _validator.legalMoves(_state.board, from);
   }
 
+  /// 指定方的将/帅当前是否正被将军。
+  bool isInCheck(Side side) => _isInCheck(side);
+
   /// 尝试执行 from → to 走法。成功返回 true。
   bool tryMove(Position from, Position to) {
     if (_state.isOver) return false;

@@ -6,6 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
+import '../models/piece.dart';
+import 'engine_info.dart';
+
 /// 引擎一次思考的结果。
 ///
 /// - [move]：最佳走法 UCI（如 "b2c2"），异常时为 "(none)"；
@@ -42,9 +45,22 @@ class PikafishEngine {
   Completer<EngineBestMove>? _bestMoveCompleter;
   Timer? _hardTimeoutTimer;
 
-  /// 本次思考周期内最后一条带 pv 的 info 所携带的首选变化与杀棋分数。
+  /// 本次思考周期内最后一条首选（multipv 1）变化与杀棋分数。
   List<String> _lastPv = const [];
   int? _lastMate;
+
+  /// 本次思考周期内各路 MultiPV 候选（key = multipv 序号）。
+  final Map<int, EnginePvLine> _pvLines = {};
+
+  /// 本次思考的走子方与起始 FEN（随 bestMove 请求确定）。
+  Side _searchSide = Side.red;
+  String _searchFen = '';
+
+  /// 引擎搜索信息广播：每条含 pv 的 info 行产生一个快照。
+  /// UI（引擎面板）监听它实时显示深度/nps/时间/评分/PV。
+  final StreamController<EngineSearchInfo> _infoController =
+      StreamController<EngineSearchInfo>.broadcast();
+  Stream<EngineSearchInfo> get infoStream => _infoController.stream;
 
   /// 新一局通知：true 表示已收到 [notifyNewGame] 但本局引擎尚未被调用过
   /// （惰性——引擎进程此时可能还没启动）。第一次 [bestMove] 时发送一次
@@ -95,6 +111,8 @@ class PikafishEngine {
       );
       // 显式指定权重文件完整路径
       _send('setoption name EvalFile value $evalFilePath');
+      // 输出多路候选变化，引擎面板可同时展示多条 PV
+      _send('setoption name MultiPV value $multiPv');
       _send('isready');
       await readyok.future.timeout(
         const Duration(seconds: 20),
@@ -121,26 +139,20 @@ class PikafishEngine {
       _readyokCompleter?.complete();
       return;
     }
-    // info ... score mate 3 ... pv b2c2 ...
-    // 只记录带 pv 的 info（越深的行越靠后，自然覆盖为"最后一条首选 pv"）。
+    // info ... depth .. multipv N score cp/mate .. time .. nps .. pv ...
+    // 只处理含 pv 的行：更新该路候选并广播一份完整快照。
     if (line.startsWith('info ')) {
-      final pvMatch = RegExp(r' pv (.+)$').firstMatch(line);
-      if (pvMatch != null) {
-        _lastPv = pvMatch
-            .group(1)!
-            .split(RegExp(r'\s+'))
-            .where((tok) => tok.length >= 4)
-            .toList(growable: false);
-        final mateMatch = RegExp(r'score mate (-?\d+)').firstMatch(line);
-        _lastMate =
-            mateMatch != null ? int.tryParse(mateMatch.group(1)!) : null;
-      }
+      _parseInfo(line);
       return;
     }
     if (line.startsWith('bestmove')) {
       // bestmove b2c2 ponder ...
       final parts = line.split(RegExp(r'\s+'));
       final move = parts.length >= 2 ? parts[1] : '(none)';
+      // 首选线取 multipv 1；引擎未输出过 pv 时回退到空。
+      final best = _pvLines[1];
+      _lastPv = best?.moves ?? const [];
+      _lastMate = best?.mate;
       final completer = _bestMoveCompleter;
       if (completer != null && !completer.isCompleted) {
         _bestMoveCompleter = null;
@@ -155,6 +167,78 @@ class PikafishEngine {
     }
   }
 
+  /// 解析一条 info 行；仅含 pv 字段的行更新对应候选并广播快照。
+  void _parseInfo(String line) {
+    // info string ... 是引擎文本输出，不是搜索统计
+    if (line.contains(' string ')) return;
+
+    final tokens = line.split(RegExp(r'\s+'));
+    var depth = 0;
+    var seldepth = 0;
+    var multipv = 1;
+    var timeMs = 0;
+    var nps = 0;
+    int? cp;
+    int? mate;
+    List<String>? pv;
+
+    for (var i = 1; i < tokens.length; i++) {
+      // 需要带值的字段，行末缺值时直接放弃该行，避免越界
+      int? nextValue() => i + 1 < tokens.length ? int.tryParse(tokens[++i]) : null;
+      switch (tokens[i]) {
+        case 'depth':
+          depth = nextValue() ?? depth;
+        case 'seldepth':
+          seldepth = nextValue() ?? seldepth;
+        case 'multipv':
+          multipv = nextValue() ?? multipv;
+        case 'time':
+          timeMs = nextValue() ?? timeMs;
+        case 'nps':
+          nps = nextValue() ?? nps;
+        case 'score':
+          if (i + 2 >= tokens.length) return;
+          final kind = tokens[++i]; // cp / mate
+          final v = int.tryParse(tokens[++i]) ?? 0;
+          if (kind == 'mate') {
+            mate = v;
+            cp = null;
+          } else {
+            cp = v;
+            mate = null;
+          }
+        case 'pv':
+          // pv 是行末字段，剩余 token 全部为招法
+          pv = tokens
+              .sublist(i + 1)
+              .where((t) => t.length >= 4)
+              .toList(growable: false);
+          i = tokens.length;
+      }
+    }
+
+    if (pv == null || pv.isEmpty) return;
+
+    _pvLines[multipv] = EnginePvLine(
+      multipv: multipv,
+      moves: List<String>.unmodifiable(pv),
+      cp: cp,
+      mate: mate,
+    );
+
+    final sorted = _pvLines.values.toList()
+      ..sort((a, b) => a.multipv.compareTo(b.multipv));
+    _infoController.add(EngineSearchInfo(
+      depth: depth,
+      seldepth: seldepth,
+      nps: nps,
+      timeMs: timeMs,
+      sideToMove: _searchSide,
+      fen: _searchFen,
+      lines: List<EnginePvLine>.unmodifiable(sorted),
+    ));
+  }
+
   void _send(String cmd) {
     debugPrint('[pikafish →] $cmd');
     _process?.stdin.writeln(cmd);
@@ -162,6 +246,9 @@ class PikafishEngine {
 
   /// 引擎思考时间硬上限(毫秒)。
   static const int maxMoveTimeMs = 5000;
+
+  /// 同时输出的候选变化路数（MultiPV）。
+  static const int multiPv = 3;
 
   /// 通知引擎开始一局新游戏。
   ///
@@ -183,9 +270,12 @@ class PikafishEngine {
     await start();
     final effectiveTime = moveTimeMs.clamp(1, maxMoveTimeMs);
 
-    // 新一次思考：清空上一周期残留的 pv/mate
+    // 新一次思考：清空上一周期残留的 pv/mate 与各路候选
     _lastPv = const [];
     _lastMate = null;
+    _pvLines.clear();
+    _searchSide = fen.contains(' b ') ? Side.black : Side.red;
+    _searchFen = fen;
 
     final completer = Completer<EngineBestMove>();
     _bestMoveCompleter = completer;
