@@ -53,7 +53,6 @@ class GameScreen extends StatelessWidget {
             _AiConfigRow(
               controller: controller,
             ),
-            if (canju != null) _CanjuBar(controller: canju),
             // 上半部分：棋盘（按宽度自适应高度，不抢占下半部分空间）
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
@@ -68,6 +67,8 @@ class GameScreen extends StatelessWidget {
                 ),
               ),
             ),
+            // 残局切换条（上一局/下一局），位于棋盘下方
+            if (canju != null) _CanjuBar(controller: canju),
             // 下半部分：三标签打谱面板（占据棋盘外剩余的全部空间）
             Expanded(
               child: ReviewPanel(controller: controller),
@@ -121,36 +122,24 @@ class _CanjuBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      color: const Color(0xFFE8C988),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.skip_previous),
-            onPressed: controller.canPrev ? controller.goPrev : null,
-            tooltip: '上一局',
-            visualDensity: VisualDensity.compact,
-          ),
-          Expanded(
-            child: Text(
-              '第 ${controller.currentIndex + 1} / ${controller.total} 局',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF5A3A1A),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.skip_next),
-            onPressed: controller.canNext ? controller.goNext : null,
-            tooltip: '下一局',
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ),
+    return AdjustableButtonBar(
+      defaultPinnedIds: const {'上一局', '下一局'},
+      buttons: [
+        FreeButton(
+          id: '上一局',
+          icon: Icons.chevron_left,
+          label: '上一局',
+          enabled: controller.canPrev,
+          onTap: controller.goPrev,
+        ),
+        FreeButton(
+          id: '下一局',
+          icon: Icons.chevron_right,
+          label: '下一局',
+          enabled: controller.canNext,
+          onTap: controller.goNext,
+        ),
+      ],
     );
   }
 }
