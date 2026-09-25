@@ -18,6 +18,7 @@ import '../../domain/notation/win_line.dart';
 import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
+import 'board_change_notifier.dart';
 
 /// UI 控制器：选中态、点击处理、AI 走子、棋谱树记录与前进/后退导航。
 class GameController extends ChangeNotifier {
@@ -40,6 +41,13 @@ class GameController extends ChangeNotifier {
   final GameState _state;
   late final GameEngine _engine = GameEngine(_state);
   final PikafishEngine _ai = PikafishEngine.instance;
+
+  /// 局面变化专用通知器（供云库等模块订阅）。
+  ///
+  /// 与本类的 notifyListeners 分离——后者在选中棋子、引擎 info 流等
+  /// 场景下高频触发；boardChange 仅在「初始化局面」和「走棋方改变」
+  /// （走子完成、跳转棋谱节点）时发送。
+  final BoardChangeNotifier boardChange = BoardChangeNotifier();
 
   /// 棋谱树根（初始局面）。
   late NotationNode _root;
@@ -180,6 +188,7 @@ class GameController extends ChangeNotifier {
     _resultTick = 0;
     // 重开 = 一局新游戏
     _ai.notifyNewGame();
+    boardChange.emit();
     notifyListeners();
     _maybeTriggerAiMove();
   }
@@ -228,6 +237,7 @@ class GameController extends ChangeNotifier {
     // 回放到末尾后，跳回根节点显示初始状态
     _current = _root;
     _restoreStateFromCurrent();
+    boardChange.emit();
     notifyListeners();
   }
 
@@ -255,6 +265,7 @@ class GameController extends ChangeNotifier {
     _resultTick = 0;
     // 载入残局局面 = 一局新游戏
     _ai.notifyNewGame();
+    boardChange.emit();
     if (notify) notifyListeners();
   }
 
@@ -331,6 +342,8 @@ class GameController extends ChangeNotifier {
     if (target == null || _aiThinking || identical(target, _current)) return;
     _current = target;
     _restoreStateFromCurrent();
+    // 跳转后走棋方恢复为目标节点的行棋方（可能已改变）
+    boardChange.emit();
     notifyListeners();
   }
 
@@ -398,6 +411,9 @@ class GameController extends ChangeNotifier {
       result: _state.result,
     );
     if (_state.isOver) _resultTick++;
+    // 走子完成 = 走棋方改变（loadParsedGame 批量回放时的连续通知
+    // 由订阅方的 FEN 门控与防抖自然合并）
+    boardChange.emit();
     return true;
   }
 
@@ -597,6 +613,7 @@ class GameController extends ChangeNotifier {
     // 只中止当前思考请求：发 stop 并丢弃待返回的 bestmove。
     _infoSub?.cancel();
     _ai.cancelSearch();
+    boardChange.dispose();
     super.dispose();
   }
 }

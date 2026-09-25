@@ -36,17 +36,24 @@ class CloudMoveEntry {
 
 /// 云库面板控制器。
 ///
-/// 监听 [GameController] 的 notify，局面 FEN 变化时防抖后请求 ChessDB
-/// `queryall`，结果按评分降序展示。点击条目即在棋盘上走子（若该着法合法）。
+/// 监听 [GameController.boardChange]（局面变化专用通知，只在初始化局面
+/// 和走棋方改变时触发，与选中棋子、引擎 info 流等高频 notify 隔离），
+/// 局面 FEN 变化时防抖后请求 ChessDB `queryall`，结果按云库排名展示。
+/// 点击条目即在棋盘上走子（若该着法合法）。
 class CloudBaseController extends ChangeNotifier {
   CloudBaseController({required this.gameController}) {
-    gameController.addListener(_onGameChanged);
+    _fen = Fen.fromBoard(
+        gameController.state.board, gameController.currentSide);
+    gameController.boardChange.addListener(_onBoardChanged);
     _refresh();
   }
 
   final GameController gameController;
 
-  /// 最近请求的 FEN 与结果（null 表示未请求或请求失败）。
+  /// 当前已知的局面 FEN。云库查询以它为准。
+  ///
+  /// GameController 的 notify 来源很多（选中棋子、引擎 info 流等），
+  /// 只有当前局面 FEN 真正变化（走子 / 跳转 / 载入新局）才重新查询。
   String? _fen;
   List<CloudMoveEntry>? _moves;
   bool _loading = false;
@@ -57,8 +64,13 @@ class CloudBaseController extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
-  /// 局面变化回调：防抖后请求云库。
-  void _onGameChanged() {
+  /// 局面变化回调：boardChange 保证只在真实局面变化时触发，
+  /// FEN 比较作为兜底去重，确认变化后才防抖请求云库。
+  void _onBoardChanged() {
+    final fen = Fen.fromBoard(
+        gameController.state.board, gameController.currentSide);
+    if (fen == _fen) return;
+    _fen = fen;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), _refresh);
   }
@@ -79,9 +91,8 @@ class CloudBaseController extends ChangeNotifier {
       return;
     }
 
-    final fen = Fen.fromBoard(gameController.state.board, gameController.currentSide);
-    if (fen == _fen && _moves != null) return; // 局面未变，不重复请求
-    _fen = fen;
+    final fen = _fen;
+    if (fen == null) return;
     _loading = true;
     _error = null;
     notifyListeners();
@@ -114,22 +125,18 @@ class CloudBaseController extends ChangeNotifier {
   }
 
   /// 点击一条云库着法，尝试在棋盘上走子。
-  /// 返回 true 表示走子成功。
+  /// 返回 true 表示走子成功。走子后 gameController 的 notify 会触发
+  /// 本控制器的局面变化回调（防抖刷新云库），无需在此重复触发。
   bool applyMove(CloudMoveEntry entry) {
     if (gameController.isOver) return false;
     // 复用 GameController 的走子逻辑（含棋谱树记录与 AI 后续）
-    final ok = gameController.applyMove(entry.from, entry.to);
-    if (ok) {
-      // 走子后局面已变，防抖刷新
-      _onGameChanged();
-    }
-    return ok;
+    return gameController.applyMove(entry.from, entry.to);
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
-    gameController.removeListener(_onGameChanged);
+    gameController.boardChange.removeListener(_onBoardChanged);
     super.dispose();
   }
 }

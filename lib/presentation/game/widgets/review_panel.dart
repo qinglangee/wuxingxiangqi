@@ -32,10 +32,17 @@ class _ReviewPanelState extends State<ReviewPanel>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 3, vsync: this);
 
+  /// 云库控制器与面板同生命周期：不能放在 build 里新建，
+  /// 否则每次重建都会生成新实例（构造即查询 + 旧实例监听泄漏），
+  /// 导致一次局面变化叠加出大量重复请求。
+  late final CloudBaseController _cloud =
+      CloudBaseController(gameController: widget.controller);
+
   GameController get controller => widget.controller;
 
   @override
   void dispose() {
+    _cloud.dispose();
     _tab.dispose();
     super.dispose();
   }
@@ -74,11 +81,7 @@ class _ReviewPanelState extends State<ReviewPanel>
               children: [
                 _NotationTab(controller: controller),
                 _EngineTab(controller: controller),
-                CloudBasePanel(
-                  controller: CloudBaseController(
-                    gameController: controller,
-                  ),
-                ),
+                CloudBasePanel(controller: _cloud),
               ],
             ),
           ),

@@ -129,7 +129,7 @@ class PikafishEngine {
   }
 
   void _onLine(String line) {
-    debugPrint('[pikafish] $line');
+    // debugPrint('[pikafish] $line');
 
     if (line == 'uciok') {
       _uciokCompleter?.complete();
