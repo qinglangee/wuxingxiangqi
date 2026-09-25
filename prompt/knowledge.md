@@ -176,3 +176,13 @@ sp 是数据地址偏移
       End If
    Loop
 ```
+
+# flutter 命令
+```bash
+# windows 测试运行
+flutter run -d windows
+# 编译 apk
+flutter build apk --release
+# 静态分析代码
+flutter analyze
+```
