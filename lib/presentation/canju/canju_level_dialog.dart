@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/canju/canju_progress.dart';
 import '../../core/theme/app_theme.dart';
+import '../shared/adjustable_button_bar.dart';
 
 /// 残局选关弹窗：浮动在屏幕中央，高度 80% / 宽度 90%。
 ///
@@ -45,6 +46,30 @@ class CanjuLevelDialog extends StatefulWidget {
 }
 
 class _CanjuLevelDialogState extends State<CanjuLevelDialog> {
+  late final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// 沿 [up] 指定的方向滚动 [count] 道题目：按 count/总题数 的比例
+  /// 推进滚动位置，越界时 clamp（向下超出总数到底部，向上到顶部）。
+  void _scrollBy(int count, {required bool up}) {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (widget.count <= 0 || pos.maxScrollExtent <= 0) return;
+    final delta = (count / widget.count) * pos.maxScrollExtent;
+    final target = (up ? pos.pixels - delta : pos.pixels + delta)
+        .clamp(0.0, pos.maxScrollExtent);
+    _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -65,10 +90,39 @@ class _CanjuLevelDialogState extends State<CanjuLevelDialog> {
           children: [
             _buildHeader(),
             const Divider(height: 1, color: Color(0xFFC9B68C)),
+            _buildJumpBar(),
             Expanded(child: _buildGrid()),
           ],
         ),
       ),
+    );
+  }
+
+  /// 跳转按钮条：每档数量一对按钮（↓向下 / ↑向上），数量为
+  /// 10/100/500/1000/5000；前三对（10/100/500）常驻，其余收进抽屉。
+  /// 点击后网格向对应方向滚动该数量的题目，越界时停在端点。
+  Widget _buildJumpBar() {
+    const counts = [10, 100, 500, 1000, 5000];
+    return AdjustableButtonBar(
+      defaultPinnedIds: const {
+        '10↓', '10↑', '100↓', '100↑', '500↓', '500↑',
+      },
+      buttons: [
+        for (final n in counts) ...[
+          FreeButton(
+            id: '$n↓',
+            icon: Icons.arrow_downward,
+            label: '$n',
+            onTap: () => _scrollBy(n, up: false),
+          ),
+          FreeButton(
+            id: '$n↑',
+            icon: Icons.arrow_upward,
+            label: '$n',
+            onTap: () => _scrollBy(n, up: true),
+          ),
+        ],
+      ],
     );
   }
 
@@ -119,6 +173,7 @@ class _CanjuLevelDialogState extends State<CanjuLevelDialog> {
       );
     }
     return GridView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
