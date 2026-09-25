@@ -4,6 +4,7 @@ import '../../core/config/app_config.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/engine/pikafish_engine.dart';
+import 'eval_file_dialog.dart';
 
 /// 引擎设置控件：性能（滑块）+ 棋规（下拉框）两部分。
 ///
@@ -74,6 +75,10 @@ class EngineSettingsWidget extends StatelessWidget {
               _sectionTitle('棋规'),
               const SizedBox(height: 8),
               _ruleDropdown(cfg.rule),
+              const SizedBox(height: 20),
+              _sectionTitle('权重文件'),
+              const SizedBox(height: 8),
+              const _EvalFileTile(),
             ],
           ),
         );
@@ -166,6 +171,85 @@ class EngineSettingsWidget extends StatelessWidget {
     }).then((_) {
       PikafishEngine.instance.applyOptions();
     });
+  }
+}
+
+/// 权重文件设置项：显示安装状态与路径，提供选择/重新选择入口。
+class _EvalFileTile extends StatelessWidget {
+  const _EvalFileTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final path = ConfigManager.instance.config.engine.evalFilePath;
+    final ready = EvalFileService.isReady;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDF6E3),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFC9B68C)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                ready ? Icons.check_circle : Icons.error_outline,
+                size: 16,
+                color: ready ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                ready ? '已就绪' : '未配置或文件不存在',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color:
+                      ready ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+                ),
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF8B5A2B),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  minimumSize: const Size(0, 32),
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.folder_open, size: 16),
+                label: Text(ready ? '重新选择' : '选择文件'),
+                onPressed: () => _pick(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            ready ? path! : '引擎运行需要 pikafish.nnue 权重文件',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11.5, color: Color(0xFF8B6B4A)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pick(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await EvalFileService.pickAndInstall();
+      if (path != null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('权重文件安装成功')),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('权重文件安装失败：$e')),
+      );
+    }
   }
 }
 

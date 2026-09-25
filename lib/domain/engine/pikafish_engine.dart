@@ -3,13 +3,22 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, MethodChannel;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/config/config_manager.dart';
 import '../models/piece.dart';
 import 'engine_info.dart';
+
+/// 引擎权重文件 pikafish.nnue 未配置或文件不存在。
+///
+/// 权重不再随包分发，需要用户在引导弹窗中选择文件后，
+/// 路径记录到 [EngineConfig.evalFilePath] 并持久化。
+class EvalFileMissingException implements Exception {
+  @override
+  String toString() => '引擎权重文件 pikafish.nnue 未配置或不存在';
+}
 
 /// 引擎一次思考的结果。
 ///
@@ -22,11 +31,14 @@ typedef EngineBestMove = ({String move, List<String> pv, int? mate});
 
 /// 皮卡鱼(Pikafish) UCI 象棋引擎封装。
 ///
-/// - Windows: assets/engine/windows/pikafish-bmi2.exe
-/// - Android: assets/engine/android/pikafish-armv8 (arm64)
-///
-/// Flutter 的 assets 不可直接执行，因此启动时把引擎二进制与权重文件
-/// 拷贝到应用临时目录并赋予执行权限，再启动子进程。
+/// - Windows: 引擎 exe 从 assets 拷贝到临时目录后执行。
+/// - Android: 引擎二进制以原生库形式打包在 `jniLibs/arm64-v8a/`
+///   （`libpikafish_dotprod.so` 优先，握手失败回退 `libpikafish.so`），
+///   安装后由系统释放到可执行的原生库目录。Android 10+ 禁止从应用
+///   数据/缓存目录执行代码，必须走原生库路径，无需也不能 chmod。
+/// - 权重文件 pikafish.nnue 不随包分发：由用户选择文件后复制到应用
+///   支持目录，绝对路径记录在 [EngineConfig.evalFilePath]；缺失时
+///   启动抛出 [EvalFileMissingException]。
 class PikafishEngine {
   PikafishEngine._();
 
@@ -93,44 +105,74 @@ class PikafishEngine {
 
   Future<void> _doStart() async {
     try {
-      final (:exePath, :dirPath, :evalFilePath) = await _prepareFiles();
-      // 工作目录设为引擎目录，使默认权重文件名 pikafish.nnue 也能被发现
-      _process = await Process.start(
-        exePath,
-        const [],
-        workingDirectory: dirPath,
-      );
-      _stdoutSub = _process!.stdout
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen(_onLine);
-      _stderrSub = _process!.stderr
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((line) => debugPrint('[pikafish stderr] $line'));
+      final (:exeCandidates, :dirPath, :evalFilePath) = await _prepareFiles();
+      Object? lastError;
 
-      // 每次启动使用全新的握手信号
-      final uciok = Completer<void>();
-      final readyok = Completer<void>();
-      _uciokCompleter = uciok;
-      _readyokCompleter = readyok;
+      // 逐个尝试可执行文件：Android 上先 dotprod 版本，
+      // 握手失败（如 CPU 不支持 dotprod 指令而 SIGILL）则回退通用版本。
+      for (final exePath in exeCandidates) {
+        try {
+          // 工作目录设为临时目录；权重以完整路径传入，不依赖工作目录。
+          _process = await Process.start(
+            exePath,
+            const [],
+            workingDirectory: dirPath,
+          );
+          _stdoutSub = _process!.stdout
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())
+              .listen(_onLine);
+          _stderrSub = _process!.stderr
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())
+              .listen((line) => debugPrint('[pikafish stderr] $line'));
 
-      // UCI 握手：uci → uciok 后才能 setoption，再 isready → readyok
-      _send('uci');
-      await uciok.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw TimeoutException('引擎 uci 握手超时'),
-      );
-      // 显式指定权重文件完整路径
-      _send('setoption name EvalFile value $evalFilePath');
-      // 应用用户配置的引擎选项（MultiPV/线程/哈希/棋规）
-      applyOptions();
-      _send('isready');
-      await readyok.future.timeout(
-        const Duration(seconds: 20),
-        onTimeout: () => throw TimeoutException('引擎就绪超时(权重加载?)'),
-      );
-      _ready = true;
+          // 每次启动使用全新的握手信号
+          final uciok = Completer<void>();
+          final readyok = Completer<void>();
+          _uciokCompleter = uciok;
+          _readyokCompleter = readyok;
+
+          // 进程提前退出（典型：dotprod 版在不支持的 CPU 上立即崩溃）
+          // 时立刻让握手失败，不必等满超时，快速切换到下一个候选。
+          unawaited(_process!.exitCode.then((code) {
+            if (!uciok.isCompleted) {
+              uciok.completeError(
+                  StateError('引擎进程提前退出(code=$code): $exePath'));
+            }
+            if (!readyok.isCompleted) {
+              readyok.completeError(
+                  StateError('引擎进程提前退出(code=$code): $exePath'));
+            }
+          }));
+
+          // UCI 握手：uci → uciok 后才能 setoption，再 isready → readyok
+          _send('uci');
+          await uciok.future.timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw TimeoutException('引擎 uci 握手超时'),
+          );
+          // 显式指定权重文件完整路径
+          _send('setoption name EvalFile value $evalFilePath');
+          // 应用用户配置的引擎选项（MultiPV/线程/哈希/棋规）
+          applyOptions();
+          _send('isready');
+          await readyok.future.timeout(
+            const Duration(seconds: 20),
+            onTimeout: () => throw TimeoutException('引擎就绪超时(权重加载?)'),
+          );
+          _ready = true;
+          debugPrint('[pikafish] 引擎启动成功: $exePath');
+          return;
+        } catch (e) {
+          lastError = e;
+          debugPrint('[pikafish] $exePath 启动失败: $e');
+          // 清理本次失败的进程与订阅，再尝试下一个候选
+          await _teardownProcess();
+        }
+      }
+
+      throw StateError('所有引擎版本均启动失败: $lastError');
     } catch (e) {
       // 启动失败要彻底清理，使下次 start() 能重新拉起进程
       debugPrint('[pikafish] 启动失败: $e');
@@ -141,7 +183,7 @@ class PikafishEngine {
   }
 
   void _onLine(String line) {
-    // debugPrint('[pikafish] $line');
+    debugPrint('[pikafish] $line');
 
     if (line == 'uciok') {
       _uciokCompleter?.complete();
@@ -462,49 +504,61 @@ class PikafishEngine {
     _pendingNewGame = false;
   }
 
-  /// 在应用可写目录中准备好引擎可执行文件与权重文件。
+  /// 准备引擎可执行文件候选列表与权重文件路径。
   ///
-  /// 返回 (exePath, dirPath, evalFilePath)。
-  Future<({String exePath, String dirPath, String evalFilePath})>
+  /// 返回 (exeCandidates, dirPath, evalFilePath)。
+  /// - Windows：exe 从 assets 拷贝到临时目录，只有一个候选；
+  /// - Android：二进制以原生库形式安装到 nativeLibraryDir，
+  ///   先 dotprod 版本，后通用 armv8 版本，均不复制、不 chmod；
+  /// - 权重文件由用户提供，路径取自 [EngineConfig.evalFilePath]，
+  ///   未配置或文件不存在时抛 [EvalFileMissingException]。
+  Future<({List<String> exeCandidates, String dirPath, String evalFilePath})>
       _prepareFiles() async {
     final tmp = await getTemporaryDirectory();
     final dir = Directory('${tmp.path}/pikafish');
     if (!await dir.exists()) await dir.create(recursive: true);
 
-    final String exeAsset;
-    final String exeName;
-    final String nnueAsset;
+    // 权重文件：不再随包分发，必须由用户在引导弹窗中选择并记录路径。
+    // Pikafish 在部分平台（Windows）以窄字符路径打开权重，非 ASCII
+    // （如中文目录）会加载失败，因此这类路径同样视为无效。
+    final evalPath = ConfigManager.instance.config.engine.evalFilePath;
+    final asciiOnly =
+        evalPath != null && evalPath.codeUnits.every((c) => c < 128);
+    if (evalPath == null ||
+        !asciiOnly ||
+        !File(evalPath).existsSync()) {
+      throw EvalFileMissingException();
+    }
+
+    final List<String> candidates;
     if (Platform.isWindows) {
-      exeAsset = 'engine/windows/pikafish-bmi2.exe';
-      exeName = 'pikafish-bmi2.exe';
-      nnueAsset = 'engine/windows/pikafish.nnue';
+      const exeAsset = 'engine/windows/pikafish-bmi2.exe';
+      final exeFile = File('${dir.path}/pikafish-bmi2.exe');
+      if (!await exeFile.exists()) {
+        await _writeAsset(exeAsset, exeFile);
+      }
+      candidates = [exeFile.path];
     } else if (Platform.isAndroid) {
-      exeAsset = 'engine/android/pikafish-armv8';
-      exeName = 'pikafish-armv8';
-      nnueAsset = 'engine/android/pikafish.nnue';
+      // 原生库安装目录（/data/app/.../lib/arm64），Android 10+ 唯一可执行位置
+      final libDir = await const MethodChannel(
+        'com.xmalloc.wuxingxiangqi/appdirs',
+      ).invokeMethod<String>('nativeLibDir');
+      if (libDir == null || libDir.isEmpty) {
+        throw StateError('无法获取引擎原生库目录');
+      }
+      // 先 dotprod 版，握手失败再回退通用 armv8 版
+      candidates = [
+        '$libDir/libpikafish_dotprod.so',
+        '$libDir/libpikafish.so',
+      ];
     } else {
       throw UnsupportedError('当前平台不支持皮卡鱼引擎');
     }
 
-    // 可执行文件
-    final exeFile = File('${dir.path}/$exeName');
-    if (!await exeFile.exists()) {
-      await _writeAsset(exeAsset, exeFile);
-      if (!Platform.isWindows) {
-        await Process.run('chmod', ['+x', exeFile.path]);
-      }
-    }
-
-    // 神经网络权重文件（引擎运行必需）
-    final nnueFile = File('${dir.path}/pikafish.nnue');
-    if (!await nnueFile.exists()) {
-      await _writeAsset(nnueAsset, nnueFile);
-    }
-
     return (
-      exePath: exeFile.path,
+      exeCandidates: candidates,
       dirPath: dir.path,
-      evalFilePath: nnueFile.path,
+      evalFilePath: evalPath,
     );
   }
 

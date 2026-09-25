@@ -10,6 +10,9 @@ import '../presentation/game/game_screen.dart';
 import '../presentation/home/home_screen.dart';
 import '../presentation/settings/settings_screen.dart';
 
+/// 全局导航 key：供无 BuildContext 的层（如控制器）弹出权重引导等对话框。
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 /// 应用根。
 class App extends StatelessWidget {
   const App({super.key});
@@ -17,6 +20,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: '五星象棋',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,

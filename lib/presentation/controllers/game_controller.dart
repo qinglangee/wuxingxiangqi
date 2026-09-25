@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../app/app.dart';
 import '../../domain/engine/engine_info.dart';
 import '../../domain/engine/fen.dart';
 import '../../domain/engine/pikafish_engine.dart';
@@ -18,6 +19,7 @@ import '../../domain/notation/win_line.dart';
 import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
+import '../settings/eval_file_dialog.dart';
 import 'board_change_notifier.dart';
 
 /// UI 控制器：选中态、点击处理、AI 走子、棋谱树记录与前进/后退导航。
@@ -411,6 +413,7 @@ class GameController extends ChangeNotifier {
     _aiThinking = true;
     notifyListeners();
     var moveApplied = false;
+    var evalInstalled = false;
     try {
       final fen = Fen.fromBoard(_state.board, currentSide);
       final result = await _ai.bestMove(fen, moveTimeMs: 500);
@@ -425,6 +428,8 @@ class GameController extends ChangeNotifier {
         _hintMark = (from, to);
         notifyListeners();
       }
+    } on EvalFileMissingException {
+      evalInstalled = await _promptEvalFile();
     } catch (e) {
       debugPrint('提示请求失败: $e');
     } finally {
@@ -434,10 +439,14 @@ class GameController extends ChangeNotifier {
       // 会因思考标志被拦。仅在确实走子成功后继续。
       if (moveApplied) {
         await _afterMoveApplied();
-      } else if (_analysisOn) {
+      } else if (_analysisOn && !evalInstalled) {
         // 未走子（仅标记/无结果）：恢复对当前局面的无限分析。
         await _startAnalysis();
       }
+    }
+    // 权重刚安装好且分析开启：在当前局面恢复分析（提示不自动补走）
+    if (evalInstalled && _analysisOn) {
+      await _startAnalysis();
     }
   }
 
@@ -485,7 +494,16 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// 权重文件缺失时弹出全局引导对话框；返回用户是否已成功安装。
+  Future<bool> _promptEvalFile() async {
+    final context = appNavigatorKey.currentContext;
+    if (context == null) return false;
+    return EvalFileGuideDialog.show(context);
+  }
+
   /// 用当前局面 FEN 启动（或重启）无限分析；终局不分析。
+  ///
+  /// 权重文件缺失时弹出引导对话框，用户安装成功后自动重试一次。
   Future<void> _startAnalysis() async {
     if (!_analysisOn) return;
     if (isOver) {
@@ -493,7 +511,17 @@ class GameController extends ChangeNotifier {
       return;
     }
     final fen = Fen.fromBoard(_state.board, currentSide);
-    await _ai.startAnalysis(fen, banMoves: _bannedMoves);
+    try {
+      await _ai.startAnalysis(fen, banMoves: _bannedMoves);
+    } on EvalFileMissingException {
+      if (await _promptEvalFile()) {
+        try {
+          await _ai.startAnalysis(fen, banMoves: _bannedMoves);
+        } catch (e) {
+          debugPrint('权重安装后分析仍启动失败: $e');
+        }
+      }
+    }
   }
 
   /// 局面变化后重启分析：清空禁着列表并用新 FEN 重新 `go infinite`。
@@ -513,6 +541,7 @@ class GameController extends ChangeNotifier {
     _aiThinking = true;
     notifyListeners();
     var moveApplied = false;
+    var evalInstalled = false;
     try {
       final fen = Fen.fromBoard(_state.board, currentSide);
       final uci = _analysisOn
@@ -526,6 +555,8 @@ class GameController extends ChangeNotifier {
       final (from, to) = Fen.parseUciMove(uci);
       moveApplied = _applyAndRecord(from, to);
       notifyListeners();
+    } on EvalFileMissingException {
+      evalInstalled = await _promptEvalFile();
     } catch (e) {
       debugPrint('出招失败: $e');
     } finally {
@@ -533,10 +564,14 @@ class GameController extends ChangeNotifier {
       notifyListeners();
       if (moveApplied) {
         await _afterMoveApplied();
-      } else if (_analysisOn) {
+      } else if (_analysisOn && !evalInstalled) {
         // 走子失败：在原局面恢复分析
         await _startAnalysis();
       }
+    }
+    // 权重刚安装好：在当前局面恢复分析（出招不自动补走）
+    if (evalInstalled && _analysisOn) {
+      await _startAnalysis();
     }
   }
 
@@ -548,6 +583,12 @@ class GameController extends ChangeNotifier {
       // 未开启分析时直接开启（首次无禁着）
       _analysisOn = true;
       notifyListeners();
+    }
+    // 权重尚未就绪：直接走分析启动流程（内含引导弹窗与安装后重启），
+    // 避免对根本没启动的引擎空发 stop 而等待超时。
+    if (!EvalFileService.isReady) {
+      await _startAnalysis();
+      return;
     }
     final best = await _ai.stopAnalysis();
     if (best != '(none)' &&
@@ -704,6 +745,7 @@ class GameController extends ChangeNotifier {
     _engineInfo = null; // 新一次思考：清空上一次的搜索信息
     notifyListeners();
     var moveApplied = false;
+    var evalInstalled = false;
     try {
       final fen = Fen.fromBoard(_state.board, currentSide);
       final aiSide = currentSide;
@@ -745,6 +787,9 @@ class GameController extends ChangeNotifier {
         // 引擎走法未通过本地规则：打印 FEN 与走法以便定位坐标/规则问题
         debugPrint('AI 走法被本地规则拒绝: $uci, $from, $to, fen=$fen');
       }
+    } on EvalFileMissingException {
+      // 权重缺失：弹窗引导用户安装，成功后继续本次自动走子
+      evalInstalled = await _promptEvalFile();
     } catch (e) {
       debugPrint('AI 走子失败: $e');
     } finally {
@@ -753,6 +798,8 @@ class GameController extends ChangeNotifier {
       // 仅在确实走子成功后，才继续后续自动处理（胜线传播/另一方 AI）
       if (moveApplied) await _afterMoveApplied();
     }
+    // 此时 _aiThinking 已在 finally 复位，递归不会被思考标志拦
+    if (evalInstalled) await _maybeTriggerAiMove();
   }
 
   /// 在当前局面克隆上按本地规则逐步走 [uciLine]，若整条线路合法且
