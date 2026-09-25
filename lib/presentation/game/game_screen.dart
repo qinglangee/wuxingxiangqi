@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../domain/models/position.dart';
 import '../canju/canju_controller.dart';
+import '../canju/canju_level_dialog.dart';
+import '../canju/canju_selector_dialog.dart';
+import '../../core/canju/canju_library.dart';
 import '../controllers/game_controller.dart';
 import '../shared/adjustable_button_bar.dart';
 import 'result_dialog.dart';
@@ -42,7 +45,7 @@ class GameScreen extends StatelessWidget {
     final canju = _tryWatchCanju(context);
     // 对弈暂未单独入口，非残局一律按分析状态处理
     final mode =
-        canju != null ? GameScreenMode.canju : GameScreenMode.analysis;
+        canju != null && !canju.analysisMode ? GameScreenMode.canju : GameScreenMode.analysis;
     final isCanju = mode == GameScreenMode.canju;
     return Scaffold(
       appBar: isCanju
@@ -86,6 +89,7 @@ class GameScreen extends StatelessWidget {
                   onTap: controller.onTap,
                   branchMarkers: _buildBranchMarkers(controller),
                   lastMove: _lastMoveOf(controller),
+                  hintMark: controller.hintMark,
                 ),
               ),
             ),
@@ -137,7 +141,7 @@ class GameScreen extends StatelessWidget {
   }
 }
 
-/// 残局切换条：显示当前局/总数，左右按钮切上一局/下一局。
+/// 残局功能条：上一局/下一局 + 提示自动/重开/悔棋/提示/分析/题库/选关。
 class _CanjuBar extends StatelessWidget {
   const _CanjuBar({required this.controller});
 
@@ -146,7 +150,7 @@ class _CanjuBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AdjustableButtonBar(
-      defaultPinnedIds: const {'上一局', '下一局'},
+      defaultPinnedIds: const {'上一局', '下一局', '提示', '重开'},
       buttons: [
         FreeButton(
           id: '上一局',
@@ -162,8 +166,80 @@ class _CanjuBar extends StatelessWidget {
           enabled: controller.canNext,
           onTap: controller.goNext,
         ),
+        FreeButton(
+          id: '提示自动',
+          icon: Icons.auto_awesome,
+          label: '提示自动',
+          checked: controller.autoHint,
+          onTap: () => controller.setAutoHint(!controller.autoHint),
+        ),
+        FreeButton(
+          id: '重开',
+          icon: Icons.refresh,
+          label: '重开',
+          onTap: controller.restartCurrent,
+        ),
+        FreeButton(
+          id: '悔棋',
+          icon: Icons.undo,
+          label: '悔棋',
+          onTap: controller.undoToRedTurn,
+        ),
+        FreeButton(
+          id: '提示',
+          icon: Icons.lightbulb_outline,
+          label: '提示',
+          onTap: controller.requestHint,
+        ),
+        FreeButton(
+          id: '分析',
+          icon: Icons.analytics_outlined,
+          label: '分析',
+          onTap: controller.enterAnalysisMode,
+        ),
+        FreeButton(
+          id: '题库',
+          icon: Icons.menu_book_outlined,
+          label: '题库',
+          onTap: () => _pickLibrary(context),
+        ),
+        FreeButton(
+          id: '选关',
+          icon: Icons.grid_view,
+          label: '选关',
+          onTap: () => _pickLevel(context),
+        ),
       ],
     );
+  }
+
+  /// 打开题库选择弹窗，选择后切换残局库。
+  Future<void> _pickLibrary(BuildContext context) async {
+    final libs = await CanjuLibraryLoader.loadAll();
+    if (!context.mounted) return;
+    final chosen = await CanjuSelectorDialog.show(
+      context,
+      libraries: libs,
+      store: controller.store,
+      currentLibraryName: controller.library.name,
+    );
+    if (chosen != null && chosen.name != controller.library.name) {
+      await controller.switchLibrary(chosen);
+    }
+  }
+
+  /// 打开选关弹窗，选择后跳转到对应局。
+  Future<void> _pickLevel(BuildContext context) async {
+    final rec = controller.store.recordOf(controller.library.name);
+    final chosen = await CanjuLevelDialog.show(
+      context,
+      count: controller.total,
+      progress: rec.progress,
+      currentIndex: controller.currentIndex,
+    );
+    if (chosen != null) {
+      await controller.gotoIndex(chosen);
+    }
   }
 }
 

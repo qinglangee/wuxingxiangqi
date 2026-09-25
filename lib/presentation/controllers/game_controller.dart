@@ -59,6 +59,18 @@ class GameController extends ChangeNotifier {
   bool _blackIsAi = false;
   bool _aiThinking = false;
 
+  /// 提示标记（仅当用户点击「提示」且提示自动关闭时展示）。
+  ///
+  /// 值为 bestMove 的 from/to，在棋盘上以高亮圈标注。
+  Position? _hintMark;
+  Position? get hintMark => _hintMark;
+  void _clearHintMark() {
+    if (_hintMark != null) {
+      _hintMark = null;
+      notifyListeners();
+    }
+  }
+
   /// 引擎最近一次搜索信息快照（引擎面板展示）；无搜索时为 null。
   EngineSearchInfo? _engineInfo;
   EngineSearchInfo? get engineInfo => _engineInfo;
@@ -130,16 +142,20 @@ class GameController extends ChangeNotifier {
   Iterable<Position> get selectedHints =>
       _state.selected == null ? const [] : _engine.legalMovesFrom(_state.selected!);
 
-  void setRedAi(bool v) {
+  void setRedAi(bool v, {bool notify = true}) {
     _redIsAi = v;
-    notifyListeners();
-    _maybeTriggerAiMove();
+    if (notify) {
+      notifyListeners();
+      _maybeTriggerAiMove();
+    }
   }
 
-  void setBlackAi(bool v) {
+  void setBlackAi(bool v, {bool notify = true}) {
     _blackIsAi = v;
-    notifyListeners();
-    _maybeTriggerAiMove();
+    if (notify) {
+      notifyListeners();
+      _maybeTriggerAiMove();
+    }
   }
 
   void onTap(Position pos) {
@@ -186,6 +202,7 @@ class GameController extends ChangeNotifier {
     _current = _root;
     _aiThinking = false;
     _resultTick = 0;
+    _hintMark = null;
     // 重开 = 一局新游戏
     _ai.notifyNewGame();
     boardChange.emit();
@@ -263,6 +280,7 @@ class GameController extends ChangeNotifier {
     _current = _root;
     _aiThinking = false;
     _resultTick = 0;
+    _hintMark = null;
     // 载入残局局面 = 一局新游戏
     _ai.notifyNewGame();
     boardChange.emit();
@@ -342,6 +360,7 @@ class GameController extends ChangeNotifier {
     if (target == null || _aiThinking || identical(target, _current)) return;
     _current = target;
     _restoreStateFromCurrent();
+    _hintMark = null; // 跳转后清除提示标记
     // 跳转后走棋方恢复为目标节点的行棋方（可能已改变）
     boardChange.emit();
     notifyListeners();
@@ -366,6 +385,38 @@ class GameController extends ChangeNotifier {
 
   bool _isAiSide(Side side) =>
       side == Side.red ? _redIsAi : _blackIsAi;
+
+  /// 请求引擎为当前局面给出 bestmove，并根据 [autoMove] 决定处理方式。
+  ///
+  /// - [autoMove] 为 true：直接按 bestmove 走子；
+  /// - [autoMove] 为 false：仅把 bestmove 的 from 标记到棋盘上（[hintMark]）。
+  Future<void> requestHint({required bool autoMove}) async {
+    if (isOver || _aiThinking) return;
+    if (!atTip) return;
+
+    _aiThinking = true;
+    notifyListeners();
+    try {
+      final fen = Fen.fromBoard(_state.board, currentSide);
+      final result = await _ai.bestMove(fen, moveTimeMs: 500);
+      final uci = result.move;
+      if (uci == '(none)' || uci.isEmpty) return;
+
+      final (from, to) = Fen.parseUciMove(uci);
+      if (autoMove) {
+        _clearHintMark();
+        _applyAndRecord(from, to);
+      } else {
+        _hintMark = from;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('提示请求失败: $e');
+    } finally {
+      _aiThinking = false;
+      notifyListeners();
+    }
+  }
 
   /// 从外部（如云库面板点击着法）尝试在当前局面走 from → to。
   ///
@@ -396,6 +447,7 @@ class GameController extends ChangeNotifier {
 
     if (!_engine.tryMove(from, to)) return false;
 
+    _hintMark = null; // 走子后清除提示标记
     final record = MoveRecord(
       from: from,
       to: to,

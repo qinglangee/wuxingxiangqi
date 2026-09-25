@@ -25,6 +25,7 @@ class BoardWidget extends StatelessWidget {
     required this.onTap,
     this.branchMarkers = const [],
     this.lastMove,
+    this.hintMark,
   });
 
   /// [hints] 是当前选中棋子的合法终点集合。
@@ -38,6 +39,9 @@ class BoardWidget extends StatelessWidget {
 
   /// 上一步走法的起点与终点；null 表示当前局面无前序走法（开局/根节点）。
   final (Position from, Position to)? lastMove;
+
+  /// 提示标记（引擎 bestmove 的起点）；null 表示无提示。
+  final Position? hintMark;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +108,17 @@ class BoardWidget extends StatelessWidget {
                       cellH: cellHeight,
                       from: lastMove!.$1,
                       to: lastMove!.$2,
+                    ),
+                  ),
+                // 1.6 提示标记：绿色高亮圈标注引擎 bestmove 的起点
+                if (hintMark != null)
+                  CustomPaint(
+                    size: Size(boardWidth, boardHeight),
+                    painter: _HintMarkPainter(
+                      padding: padding,
+                      cellW: cellWidth,
+                      cellH: cellHeight,
+                      position: hintMark!,
                     ),
                   ),
                 // 3. 棋子
@@ -339,8 +354,50 @@ class _LastMovePainter extends CustomPainter {
       oldDelegate.to != to;
 }
 
-/// 分支标记绘制器：在棋盘上为每条候选分支画 from→to 连线，
-/// 并在两端绘制带数字的小圆点。
+/// 提示标记绘制器：在棋盘上以绿色高亮圈标注引擎 bestmove 的起点。
+class _HintMarkPainter extends CustomPainter {
+  const _HintMarkPainter({
+    required this.padding,
+    required this.cellW,
+    required this.cellH,
+    required this.position,
+  });
+
+  final EdgeInsets padding;
+  final double cellW;
+  final double cellH;
+  final Position position;
+
+  static const _color = Color(0xFF2E7D32); // 绿，与走子标记（蓝）区分
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = CoordinateUtils.toPixel(
+      col: position.col,
+      row: position.row,
+      cellWidth: cellW,
+      cellHeight: cellH,
+      padding: padding,
+    );
+    // 半透明填充 + 描边圈，与棋子边缘错开
+    final fillPaint = Paint()..color = _color.withValues(alpha: 0.20);
+    final ringPaint = Paint()
+      ..color = _color.withValues(alpha: 0.90)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = cellW * 0.05;
+    canvas.drawCircle(center, cellW * 0.425, fillPaint);
+    canvas.drawCircle(center, cellW * 0.48, ringPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HintMarkPainter oldDelegate) =>
+      oldDelegate.padding != padding ||
+      oldDelegate.cellW != cellW ||
+      oldDelegate.cellH != cellH ||
+      oldDelegate.position != position;
+}
+
+/// 分支标记绘制器：在棋盘上为每条候选分支画 from→to 连线， 并在两端绘制带数字的小圆点。
 class _BranchMarkerPainter extends CustomPainter {
   const _BranchMarkerPainter({
     required this.padding,
