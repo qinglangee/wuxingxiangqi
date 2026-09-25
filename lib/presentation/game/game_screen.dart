@@ -318,7 +318,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
         ),
         FreeButton(
           id: '分析',
-          icon: Icons.analytics_outlined,
+          icon: Icons.search,
           label: '分析',
           checked: ctrl.isAnalysisOn,
           onTap: () => ctrl.setAnalysis(!ctrl.isAnalysisOn),
@@ -326,7 +326,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
         ),
         FreeButton(
           id: '出招',
-          icon: Icons.play_arrow,
+          icon: Icons.bolt,
           label: '出招',
           onTap: ctrl.playBestMove,
           showLabel: _showLabels,
@@ -349,7 +349,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
         FreeButton(
           id: '显示文字',
           icon: Icons.text_fields,
-          label: _showLabels ? '隐藏文字' : '显示文字',
+          label: _showLabels ? '显示文字' : '隐藏文字',
           checked: _showLabels,
           onTap: () => setState(() => _showLabels = !_showLabels),
           showLabel: _showLabels,
