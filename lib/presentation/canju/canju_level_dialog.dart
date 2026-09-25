@@ -176,7 +176,7 @@ class _CanjuLevelDialogState extends State<CanjuLevelDialog> {
       controller: _scrollController,
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
+        crossAxisCount: 5,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
         childAspectRatio: 1.2,
