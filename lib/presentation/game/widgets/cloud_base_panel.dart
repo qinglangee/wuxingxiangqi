@@ -37,25 +37,69 @@ class CloudBasePanel extends StatelessWidget {
             ),
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          itemCount: moves.length,
-          separatorBuilder: (_, _) => const Divider(
-            height: 1,
-            indent: 12,
-            endIndent: 12,
-            color: Color(0xFFE0D2B4),
-          ),
-          itemBuilder: (context, index) {
-            final m = moves[index];
-            return _CloudMoveTile(
-              entry: m,
-              rank: index + 1,
-              onTap: () => controller.applyMove(m),
-            );
-          },
+        return Column(
+          children: [
+            // 固定表头：着法 / 分数 / 胜率 三等分
+            const _CloudHeader(),
+            const Divider(
+              height: 1,
+              color: Color(0xFFD8C69A),
+            ),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                itemCount: moves.length,
+                separatorBuilder: (_, _) => const Divider(
+                  height: 1,
+                  indent: 12,
+                  endIndent: 12,
+                  color: Color(0xFFE0D2B4),
+                ),
+                itemBuilder: (context, index) {
+                  final m = moves[index];
+                  return _CloudMoveTile(
+                    entry: m,
+                    rank: index + 1,
+                    onTap: () => controller.applyMove(m),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _CloudHeader extends StatelessWidget {
+  const _CloudHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF8B6B3D),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(
+        children: [
+          // 排名列占位（与条目对齐）
+          const SizedBox(width: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('着法', style: style, textAlign: TextAlign.center),
+          ),
+          Expanded(
+            child: Text('分数', style: style, textAlign: TextAlign.center),
+          ),
+          Expanded(
+            child: Text('胜率', style: style, textAlign: TextAlign.center),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -105,6 +149,7 @@ class _CloudMoveTile extends StatelessWidget {
             Expanded(
               child: Text(
                 entry.text,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -113,11 +158,10 @@ class _CloudMoveTile extends StatelessWidget {
               ),
             ),
             // 评分
-            SizedBox(
-              width: 56,
+            Expanded(
               child: Text(
                 entry.score.toString(),
-                textAlign: TextAlign.right,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -125,13 +169,11 @@ class _CloudMoveTile extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 10),
             // 胜率
-            SizedBox(
-              width: 50,
+            Expanded(
               child: Text(
                 '${entry.winRate.toStringAsFixed(1)}%',
-                textAlign: TextAlign.right,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,

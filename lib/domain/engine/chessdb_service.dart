@@ -135,8 +135,8 @@ class ChessDbService {
         rank: rankMatch != null ? int.tryParse(rankMatch.group(1)!) ?? 0 : 0,
       ));
     }
-    // 按评分降序
-    moves.sort((a, b) => b.score.compareTo(a.score));
+    // 按云库排名升序（rank 1 最优）
+    moves.sort((a, b) => b.rank.compareTo(a.rank));
     return CloudResult(moves: moves, isTerminal: false, message: null);
   }
 }
