@@ -10,11 +10,27 @@ import 'widgets/board_widget.dart';
 import 'widgets/branch_marker.dart';
 import 'widgets/review_panel.dart';
 
+/// 打谱页主状态。
+enum GameScreenMode {
+  /// 分析状态：打谱/棋谱浏览。
+  analysis,
+
+  /// 对弈状态：目前与分析状态作同样的处理。
+  play,
+
+  /// 残局状态。
+  canju,
+}
+
 /// 主页面：拼装棋盘 + 结束弹窗。
 ///
-/// 布局：顶部 AI 配置条（含重开/返回）；中部上半为棋盘（约 1/2 高度，
-/// 标注上一步走法的起点与终点），下半为打谱面板（棋谱注释 / 引擎 / 云库
-/// 三个标签）。残局模式下在 AI 配置行下方额外显示「上一局 / 下一局」切换条。
+/// 页面组件按状态分组：
+/// - 残局专用：AppBar（含返回与残局标题）、_CanjuBar（上一局/下一局）；
+/// - 分析专用：_AiConfigRow（AI 开关/重开/返回）、ReviewPanel
+///   （棋谱注释 / 引擎 / 云库三标签）。
+///
+/// 残局状态显示 AppBar + 棋盘 + _CanjuBar；分析与对弈状态显示
+/// _AiConfigRow + 棋盘 + ReviewPanel。
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
 
@@ -22,37 +38,43 @@ class GameScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<GameController>();
     final state = controller.state;
-    // 残局模式下注入了 CanjuController；棋谱/空白模式下未注入，这里取不到。
+    // 残局模式下注入了 CanjuController；分析/对弈模式下未注入，这里取不到。
     final canju = _tryWatchCanju(context);
+    // 对弈暂未单独入口，非残局一律按分析状态处理
+    final mode =
+        canju != null ? GameScreenMode.canju : GameScreenMode.analysis;
+    final isCanju = mode == GameScreenMode.canju;
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        title: Text(canju == null
-            ? '打谱'
-            : '${canju.library.name} · 第 ${canju.currentIndex + 1}/${canju.total} 局'),
-        actions: [
-          if (controller.aiThinking)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+      appBar: isCanju
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).maybePop(),
               ),
-            ),
-        ],
-      ),
+              title: Text(
+                  '${canju!.library.name} · 第 ${canju.currentIndex + 1}/${canju.total} 局'),
+              actions: [
+                if (controller.aiThinking)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+              ],
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
-            _AiConfigRow(
-              controller: controller,
-            ),
+            if (!isCanju)
+              _AiConfigRow(
+                controller: controller,
+              ),
             // 上半部分：棋盘（按宽度自适应高度，不抢占下半部分空间）
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
@@ -68,11 +90,12 @@ class GameScreen extends StatelessWidget {
               ),
             ),
             // 残局切换条（上一局/下一局），位于棋盘下方
-            if (canju != null) _CanjuBar(controller: canju),
+            if (isCanju) _CanjuBar(controller: canju!),
             // 下半部分：三标签打谱面板（占据棋盘外剩余的全部空间）
-            Expanded(
-              child: ReviewPanel(controller: controller),
-            ),
+            if (!isCanju)
+              Expanded(
+                child: ReviewPanel(controller: controller),
+              ),
           ],
         ),
       ),
