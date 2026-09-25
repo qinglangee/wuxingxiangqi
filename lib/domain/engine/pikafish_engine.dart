@@ -47,6 +47,16 @@ class PikafishEngine {
   Completer<EngineBestMove>? _bestMoveCompleter;
   Timer? _hardTimeoutTimer;
 
+  /// 无限分析（go infinite）状态。
+  ///
+  /// 为 true 时引擎正在做无时限分析；`stop` 后引擎输出的 bestmove
+  /// 由 [_analysisCompleter] 接收（分析模式下不存在限时 bestMove 请求）。
+  bool _analyzing = false;
+  Completer<String>? _analysisCompleter;
+
+  /// 是否正在无限分析中。
+  bool get isAnalyzing => _analyzing;
+
   /// 本次思考周期内最后一条首选（multipv 1）变化与杀棋分数。
   List<String> _lastPv = const [];
   int? _lastMate;
@@ -166,6 +176,12 @@ class PikafishEngine {
           mate: _lastMate,
         ));
       }
+      // 无限分析被 stop 后：把 bestmove 交回等待方（出招/分支）。
+      final analysisCompleter = _analysisCompleter;
+      if (analysisCompleter != null && !analysisCompleter.isCompleted) {
+        _analysisCompleter = null;
+        analysisCompleter.complete(move);
+      }
     }
   }
 
@@ -276,6 +292,65 @@ class PikafishEngine {
     _pendingNewGame = true;
   }
 
+  /// 开始无限分析（`go infinite`）：引擎持续搜索并不断推送 info 流，
+  /// 直到 [stopAnalysis] 或下一次搜索请求。
+  ///
+  /// [fen] 为要分析的局面；[banMoves] 非空时通过 pikafish 的
+  /// `banmoves` 扩展禁止这些 UCI 招法（分支分析）。
+  Future<void> startAnalysis(
+    String fen, {
+    List<String> banMoves = const [],
+  }) async {
+    await start();
+    // 若有进行中的限时思考，先丢弃；再终止旧的无限分析（消费 bestmove）
+    if (_bestMoveCompleter != null) {
+      cancelSearch();
+    }
+    await _finishAnalysis();
+
+    _analyzing = true;
+    _lastPv = const [];
+    _lastMate = null;
+    _pvLines.clear();
+    _searchSide = fen.contains(' b ') ? Side.black : Side.red;
+    _searchFen = fen;
+
+    _send('position fen $fen');
+    if (banMoves.isEmpty) {
+      _send('go infinite');
+    } else {
+      _send('go infinite banmoves ${banMoves.join(' ')}');
+    }
+  }
+
+  /// 停止无限分析，发送 `stop` 并等待引擎输出 bestmove，返回该 UCI 招法
+  /// （无分析或超时时返回 `(none)`）。
+  Future<String> stopAnalysis() async {
+    if (!_analyzing) return '(none)';
+    _analyzing = false;
+    final completer = Completer<String>();
+    _analysisCompleter = completer;
+    _send('stop');
+    try {
+      return await completer.future
+          .timeout(const Duration(seconds: 2), onTimeout: () => '(none)');
+    } finally {
+      if (identical(_analysisCompleter, completer)) {
+        _analysisCompleter = null;
+      }
+    }
+  }
+
+  /// 内部：停止可能进行中的无限分析，丢弃其 bestmove（不等待）。
+  ///
+  /// 引擎收到 stop 后仍会输出一行 bestmove，由于没有等待者，该行被忽略。
+  Future<void> _finishAnalysis() async {
+    if (!_analyzing) return;
+    _analyzing = false;
+    _analysisCompleter = null;
+    _send('stop');
+  }
+
   /// 给定 FEN 与思考时间(毫秒)，返回最佳走法(UCI 字符串，如 "b2c2")。
   ///
   /// [moveTimeMs] 会被限制在 [EngineConfig.kMinMoveTimeMs]..[maxMoveTimeMs]
@@ -288,6 +363,8 @@ class PikafishEngine {
     int? depth,
   }) async {
     await start();
+    // 若正在无限分析，先停止并丢弃其 bestmove，避免与本次限时搜索冲突。
+    await _finishAnalysis();
     final e = ConfigManager.instance.config.engine;
     final effectiveTime =
         moveTimeMs.clamp(EngineConfig.kMinMoveTimeMs, maxMoveTimeMs);
@@ -350,6 +427,11 @@ class PikafishEngine {
   /// bestmove 的 completer 与超时计时器，使之后到达的旧 bestmove 被忽略，
   /// 防止它被误关联到下次进入页面后的新请求。
   void cancelSearch() {
+    if (_analyzing) {
+      _analyzing = false;
+      _analysisCompleter = null;
+      _send('stop');
+    }
     if (_bestMoveCompleter != null) {
       _send('stop');
       // 不完成旧 completer：其调用方（已销毁页面的控制器）随之放弃等待；
@@ -366,6 +448,8 @@ class PikafishEngine {
     _stdoutSub = null;
     _stderrSub = null;
     _bestMoveCompleter = null;
+    _analysisCompleter = null;
+    _analyzing = false;
     _hardTimeoutTimer?.cancel();
     _hardTimeoutTimer = null;
     _process?.kill();

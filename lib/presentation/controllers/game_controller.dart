@@ -66,6 +66,18 @@ class GameController extends ChangeNotifier {
   (Position, Position)? _hintMark;
   (Position, Position)? get hintMark => _hintMark;
 
+  /// 引擎无限分析开关（「分析」check button）。
+  bool _analysisOn = false;
+  bool get isAnalysisOn => _analysisOn;
+
+  /// 当前局面已被「分支」功能禁止的引擎 bestmove（UCI）列表。
+  /// 仅对当前局面有效，局面变化后清空。
+  final List<String> _bannedMoves = [];
+
+  /// 棋盘是否翻转（红黑上下互换）。
+  bool _boardFlipped = false;
+  bool get boardFlipped => _boardFlipped;
+
   /// 引擎最近一次搜索信息快照（引擎面板展示）；无搜索时为 null。
   EngineSearchInfo? _engineInfo;
   EngineSearchInfo? get engineInfo => _engineInfo;
@@ -202,6 +214,7 @@ class GameController extends ChangeNotifier {
     _ai.notifyNewGame();
     boardChange.emit();
     notifyListeners();
+    _restartAnalysisForNewPosition();
     _maybeTriggerAiMove();
   }
 
@@ -251,6 +264,7 @@ class GameController extends ChangeNotifier {
     _restoreStateFromCurrent();
     boardChange.emit();
     notifyListeners();
+    _restartAnalysisForNewPosition();
   }
 
   // ---- 棋谱前进 / 后退 / 跳转 ----
@@ -280,6 +294,7 @@ class GameController extends ChangeNotifier {
     _ai.notifyNewGame();
     boardChange.emit();
     if (notify) notifyListeners();
+    _restartAnalysisForNewPosition();
   }
 
   /// 后退一步：回到上一节点并恢复盘面。导航操作不触发 AI。
@@ -359,6 +374,8 @@ class GameController extends ChangeNotifier {
     // 跳转后走棋方恢复为目标节点的行棋方（可能已改变）
     boardChange.emit();
     notifyListeners();
+    // 前进/后退/选点导致局面变化：分析模式下重新分析新局面。
+    _restartAnalysisForNewPosition();
   }
 
   void _restoreStateFromCurrent() {
@@ -415,8 +432,136 @@ class GameController extends ChangeNotifier {
       notifyListeners();
       // 先复位 _aiThinking 再触发后续处理，否则 _maybeTriggerAiMove
       // 会因思考标志被拦。仅在确实走子成功后继续。
-      if (moveApplied) await _afterMoveApplied();
+      if (moveApplied) {
+        await _afterMoveApplied();
+      } else if (_analysisOn) {
+        // 未走子（仅标记/无结果）：恢复对当前局面的无限分析。
+        await _startAnalysis();
+      }
     }
+  }
+
+  // ---- 无限分析 / 出招 / 分支 / 翻转 ----
+
+  /// 分析模式下 PV1 前两步的箭头数据：(from, to, 走子方)。
+  ///
+  /// 最多两支：第 1 支为当前走子方，第 2 支为对方；UI 按红/黑着色。
+  /// 仅当引擎快照对应的 FEN 与当前局面一致时才返回，防止异步错位。
+  List<(Position, Position, Side)> get analysisArrows {
+    if (!_analysisOn) return const [];
+    final info = _engineInfo;
+    if (info == null) return const [];
+    final fen = Fen.fromBoard(_state.board, currentSide);
+    if (info.fen != fen) return const [];
+    final pv = info.bestLine?.moves;
+    if (pv == null || pv.isEmpty) return const [];
+
+    final arrows = <(Position, Position, Side)>[];
+    final n = pv.length < 2 ? pv.length : 2;
+    for (var i = 0; i < n; i++) {
+      try {
+        final (from, to) = Fen.parseUciMove(pv[i]);
+        final side = i % 2 == 0 ? info.sideToMove : _opposite(info.sideToMove);
+        arrows.add((from, to, side));
+      } catch (_) {
+        break; // 尾招非法（截断的 PV）时停止
+      }
+    }
+    return arrows;
+  }
+
+  static Side _opposite(Side s) => s == Side.red ? Side.black : Side.red;
+
+  /// 切换无限分析开关。
+  Future<void> setAnalysis(bool on) async {
+    if (_analysisOn == on) return;
+    _analysisOn = on;
+    notifyListeners();
+    if (on) {
+      await _startAnalysis();
+    } else {
+      _bannedMoves.clear();
+      await _ai.stopAnalysis();
+    }
+  }
+
+  /// 用当前局面 FEN 启动（或重启）无限分析；终局不分析。
+  Future<void> _startAnalysis() async {
+    if (!_analysisOn) return;
+    if (isOver) {
+      await _ai.stopAnalysis();
+      return;
+    }
+    final fen = Fen.fromBoard(_state.board, currentSide);
+    await _ai.startAnalysis(fen, banMoves: _bannedMoves);
+  }
+
+  /// 局面变化后重启分析：清空禁着列表并用新 FEN 重新 `go infinite`。
+  void _restartAnalysisForNewPosition() {
+    if (!_analysisOn) return;
+    _bannedMoves.clear();
+    _startAnalysis();
+  }
+
+  /// 出招：让引擎立即给出 bestmove 并在棋盘上走出。
+  ///
+  /// 分析开启时直接 `stop` 当前无限分析（bestmove 即当前分析结论）；
+  /// 未开启时发一次限时搜索。走子后分析会在新局面上自动重启。
+  Future<void> playBestMove() async {
+    if (isOver || _aiThinking || !atTip) return;
+
+    _aiThinking = true;
+    notifyListeners();
+    var moveApplied = false;
+    try {
+      final fen = Fen.fromBoard(_state.board, currentSide);
+      final uci = _analysisOn
+          ? await _ai.stopAnalysis()
+          : (await _ai.bestMove(fen, moveTimeMs: 500)).move;
+      if (uci == '(none)' || uci.isEmpty) {
+        // 分析仍需继续（停在了当前局面）
+        if (_analysisOn) await _startAnalysis();
+        return;
+      }
+      final (from, to) = Fen.parseUciMove(uci);
+      moveApplied = _applyAndRecord(from, to);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('出招失败: $e');
+    } finally {
+      _aiThinking = false;
+      notifyListeners();
+      if (moveApplied) {
+        await _afterMoveApplied();
+      } else if (_analysisOn) {
+        // 走子失败：在原局面恢复分析
+        await _startAnalysis();
+      }
+    }
+  }
+
+  /// 分支：不改变局面，停止当前搜索后把 bestmove 加入禁着列表，
+  /// 重新 `go infinite banmoves ...` 让引擎给出下一手候选。
+  Future<void> searchBranch() async {
+    if (isOver || _aiThinking) return;
+    if (!_analysisOn) {
+      // 未开启分析时直接开启（首次无禁着）
+      _analysisOn = true;
+      notifyListeners();
+    }
+    final best = await _ai.stopAnalysis();
+    if (best != '(none)' &&
+        best.isNotEmpty &&
+        !_bannedMoves.contains(best)) {
+      _bannedMoves.add(best);
+    }
+    await _startAnalysis();
+  }
+
+  /// 反转棋盘：红黑双方上下方向互换。
+  void toggleBoardFlip() {
+    _boardFlipped = !_boardFlipped;
+    notifyListeners();
   }
 
   /// 从外部（如云库面板点击着法）尝试在当前局面走 from → to。
@@ -482,6 +627,8 @@ class GameController extends ChangeNotifier {
   ///    [_maybeTriggerAiMove]——败方若为 AI 同样按线首招跟线（免引擎），
   ///    败方为人类则等待手动走子；无线可跟时 AI 才请求引擎思考。
   Future<void> _afterMoveApplied() async {
+    // 局面已变化：分析模式下立即用新 FEN 重启无限搜索（清空禁着）。
+    _restartAnalysisForNewPosition();
     if (isOver) return;
     if (!atTip) return; // 浏览历史着法时不自动走子
 
@@ -538,6 +685,8 @@ class GameController extends ChangeNotifier {
   Future<void> _maybeTriggerAiMove() async {
     if (isOver || _aiThinking) return;
     if (!atTip) return; // 浏览历史着法时不自动走子
+    // 分析模式下引擎被无限分析占用，AI 自动走子暂停（出招/手动仍可用）。
+    if (_analysisOn) return;
     if (!_isAiSide(currentSide)) return;
 
     // AI 跟线（胜方应手或败方首招）：直接按线走，免请求引擎

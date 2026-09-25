@@ -22,8 +22,10 @@ class BoardWidget extends StatelessWidget {
     required this.hints,
     required this.onTap,
     this.branchMarkers = const [],
+    this.analysisArrows = const [],
     this.lastMove,
     this.hintArrow,
+    this.flipped = false,
   });
 
   /// [hints] 是当前选中棋子的合法终点集合。
@@ -35,11 +37,17 @@ class BoardWidget extends StatelessWidget {
   /// 分支标记：到达分支点时，可视化各候选分支的走法（带序号箭头）。
   final List<MoveArrow> branchMarkers;
 
+  /// 无限分析时 PV1 前两步的指示箭头（红/黑着色，无序号）。
+  final List<MoveArrow> analysisArrows;
+
   /// 上一步走法的起点与终点；null 表示当前局面无前序走法（开局/根节点）。
   final (Position from, Position to)? lastMove;
 
   /// 提示箭头（引擎 bestmove 的起点与终点）；null 表示无提示。
   final (Position, Position)? hintArrow;
+
+  /// 棋盘是否翻转（红黑上下互换）。
+  final bool flipped;
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +85,7 @@ class BoardWidget extends StatelessWidget {
                 cellWidth: cellWidth,
                 cellHeight: cellHeight,
                 padding: padding,
+                flipped: flipped,
               );
               if (pos != null) onTap(Position(pos.$1, pos.$2));
             },
@@ -85,9 +94,16 @@ class BoardWidget extends StatelessWidget {
                 // 1. 棋盘背景与网格：图片棋盘整幅铺满，否则代码绘制
                 if (useImageBoard)
                   Positioned.fill(
-                    child: Image.asset(
-                      AssetCatalog.boardAsset(boardCfg.boardStyle),
-                      fit: BoxFit.fill,
+                    // 翻转时把整幅棋盘图旋转 180°（网格本身中心对称）
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: flipped
+                          ? (Matrix4.identity()..rotateZ(3.1415926535897932))
+                          : Matrix4.identity(),
+                      child: Image.asset(
+                        AssetCatalog.boardAsset(boardCfg.boardStyle),
+                        fit: BoxFit.fill,
+                      ),
                     ),
                   )
                 else
@@ -106,6 +122,7 @@ class BoardWidget extends StatelessWidget {
                       cellH: cellHeight,
                       from: lastMove!.$1,
                       to: lastMove!.$2,
+                      flipped: flipped,
                     ),
                   ),
                 // 1.6 提示箭头：在引擎 bestmove 的起点与终点之间画绿色箭头
@@ -116,6 +133,7 @@ class BoardWidget extends StatelessWidget {
                       padding: padding,
                       cellW: cellWidth,
                       cellH: cellHeight,
+                      flipped: flipped,
                       arrows: [
                         MoveArrow(
                           from: hintArrow!.$1,
@@ -145,7 +163,20 @@ class BoardWidget extends StatelessWidget {
                       padding: padding,
                       cellW: cellWidth,
                       cellH: cellHeight,
+                      flipped: flipped,
                       arrows: branchMarkers,
+                    ),
+                  ),
+                // 5. 分析箭头层：PV1 前两步，红方红箭头、黑方黑箭头
+                if (analysisArrows.isNotEmpty)
+                  CustomPaint(
+                    size: Size(boardWidth, boardHeight),
+                    painter: MoveArrowPainter(
+                      padding: padding,
+                      cellW: cellWidth,
+                      cellH: cellHeight,
+                      flipped: flipped,
+                      arrows: analysisArrows,
                     ),
                   ),
               ],
@@ -189,6 +220,7 @@ class BoardWidget extends StatelessWidget {
       cellWidth: cw,
       cellHeight: ch,
       padding: pad,
+      flipped: flipped,
     );
     return Positioned(
       left: center.dx - cw / 2,
@@ -305,6 +337,7 @@ class _LastMovePainter extends CustomPainter {
     required this.cellH,
     required this.from,
     required this.to,
+    this.flipped = false,
   });
 
   final EdgeInsets padding;
@@ -312,6 +345,7 @@ class _LastMovePainter extends CustomPainter {
   final double cellH;
   final Position from;
   final Position to;
+  final bool flipped;
 
   static const _color = Color(0xFF1565C0); // 蓝，与分支标记色板区分度好
 
@@ -333,6 +367,7 @@ class _LastMovePainter extends CustomPainter {
       cellWidth: cellW,
       cellHeight: cellH,
       padding: padding,
+      flipped: flipped,
     );
     canvas.drawCircle(
         fromCenter, cellW * 0.2, Paint()..color = _color.withValues(alpha: 0.55));
@@ -345,6 +380,7 @@ class _LastMovePainter extends CustomPainter {
       cellWidth: cellW,
       cellHeight: cellH,
       padding: padding,
+      flipped: flipped,
     );
     canvas.drawCircle(toCenter, fillRadius, fillPaint);
     canvas.drawCircle(toCenter, ringRadius, ringPaint);
@@ -355,6 +391,7 @@ class _LastMovePainter extends CustomPainter {
       oldDelegate.padding != padding ||
       oldDelegate.cellW != cellW ||
       oldDelegate.cellH != cellH ||
+      oldDelegate.flipped != flipped ||
       oldDelegate.from != from ||
       oldDelegate.to != to;
 }

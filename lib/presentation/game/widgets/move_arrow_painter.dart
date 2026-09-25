@@ -43,12 +43,16 @@ class MoveArrowPainter extends CustomPainter {
     required this.cellW,
     required this.cellH,
     required this.arrows,
+    this.flipped = false,
   });
 
   final EdgeInsets padding;
   final double cellW;
   final double cellH;
   final List<MoveArrow> arrows;
+
+  /// 棋盘是否翻转（红黑上下互换）。
+  final bool flipped;
 
   /// 多条并列箭头（分支标记等）使用的调色板，按序循环取色。
   static const List<Color> palette = [
@@ -80,6 +84,7 @@ class MoveArrowPainter extends CustomPainter {
         cellWidth: cellW,
         cellHeight: cellH,
         padding: padding,
+        flipped: flipped,
       );
       final toCenter = CoordinateUtils.toPixel(
         col: a.to.col,
@@ -87,6 +92,7 @@ class MoveArrowPainter extends CustomPainter {
         cellWidth: cellW,
         cellHeight: cellH,
         padding: padding,
+        flipped: flipped,
       );
 
       // 走法方向单位向量
@@ -175,5 +181,6 @@ class MoveArrowPainter extends CustomPainter {
       oldDelegate.padding != padding ||
       oldDelegate.cellW != cellW ||
       oldDelegate.cellH != cellH ||
+      oldDelegate.flipped != flipped ||
       oldDelegate.arrows != arrows;
 }

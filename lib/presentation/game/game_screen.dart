@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../domain/models/piece.dart';
 import '../../domain/models/position.dart';
 import '../canju/canju_controller.dart';
 import '../canju/canju_level_dialog.dart';
@@ -88,8 +89,10 @@ class GameScreen extends StatelessWidget {
                   hints: controller.selectedHints.toSet(),
                   onTap: controller.onTap,
                   branchMarkers: _buildBranchMarkers(controller),
+                  analysisArrows: _buildAnalysisArrows(controller),
                   lastMove: _lastMoveOf(controller),
                   hintArrow: controller.hintMark,
+                  flipped: controller.boardFlipped,
                 ),
               ),
             ),
@@ -139,6 +142,20 @@ class GameScreen extends StatelessWidget {
     final m = controller.currentNode.move;
     if (m == null) return null;
     return (m.from, m.to);
+  }
+
+  /// 无限分析 PV1 前两步的指示箭头：红方红色、黑方黑色。
+  List<MoveArrow> _buildAnalysisArrows(GameController controller) {
+    return [
+      for (final (from, to, side) in controller.analysisArrows)
+        MoveArrow(
+          from: from,
+          to: to,
+          color: side == Side.red
+              ? const Color(0xFFC62828)
+              : const Color(0xFF1A1A1A),
+        ),
+    ];
   }
 }
 
@@ -262,8 +279,10 @@ class _AiConfigRowState extends State<_AiConfigRow> {
   Widget build(BuildContext context) {
     final ctrl = widget.controller;
     return AdjustableButtonBar(
-      defaultPinnedIds: const {'红方电脑', '黑方电脑', '显示文字', '重开', '返回'},
-      maxPinnedCount: 5,
+      defaultPinnedIds: const {
+        '返回','重开', '红方电脑', '黑方电脑', '分析', '出招', '分支', '反转',
+      },
+      maxPinnedCount: 7,
       buttons: [
         FreeButton(
           id: '返回',
@@ -296,6 +315,36 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           onTap: () => ctrl.setBlackAi(!ctrl.blackIsAi),
           showLabel: _showLabels,
           iconColor: const Color(0xFF1A1A1A),
+        ),
+        FreeButton(
+          id: '分析',
+          icon: Icons.analytics_outlined,
+          label: '分析',
+          checked: ctrl.isAnalysisOn,
+          onTap: () => ctrl.setAnalysis(!ctrl.isAnalysisOn),
+          showLabel: _showLabels,
+        ),
+        FreeButton(
+          id: '出招',
+          icon: Icons.play_arrow,
+          label: '出招',
+          onTap: ctrl.playBestMove,
+          showLabel: _showLabels,
+        ),
+        FreeButton(
+          id: '分支',
+          icon: Icons.account_tree_outlined,
+          label: '分支',
+          onTap: ctrl.searchBranch,
+          showLabel: _showLabels,
+        ),
+        FreeButton(
+          id: '反转',
+          icon: Icons.swap_vert,
+          label: '反转',
+          checked: ctrl.boardFlipped,
+          onTap: ctrl.toggleBoardFlip,
+          showLabel: _showLabels,
         ),
         FreeButton(
           id: '显示文字',
