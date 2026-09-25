@@ -18,6 +18,7 @@ class IconCheckButton extends StatelessWidget {
     this.checked,
     this.enabled = true,
     this.showLabel = true,
+    this.iconColor,
   });
 
   final IconData icon;
@@ -32,10 +33,15 @@ class IconCheckButton extends StatelessWidget {
   /// 是否显示文字；false 时仅显示图标。
   final bool showLabel;
 
+  /// 图标颜色；null 时使用主题默认色。禁用时始终为灰色。
+  final Color? iconColor;
+
   @override
   Widget build(BuildContext context) {
     final isChecked = checked ?? false;
-    final iconColor = enabled ? AppTheme.boardLine : const Color(0xFFD0C4A8);
+    final effectiveIconColor = enabled
+        ? (iconColor ?? AppTheme.boardLine)
+        : const Color(0xFFD0C4A8);
     final labelColor =
         enabled ? const Color(0xFF8B6B3D) : const Color(0xFFD0C4A8);
 
@@ -57,7 +63,7 @@ class IconCheckButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 26, color: iconColor),
+            Icon(icon, size: 26, color: effectiveIconColor),
             if (showLabel) ...[
               const SizedBox(height: 2),
               Text(

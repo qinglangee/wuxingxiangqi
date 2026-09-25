@@ -16,6 +16,7 @@ class FreeButton {
     this.enabled = true,
     this.checked,
     this.showLabel = true,
+    this.iconColor,
   });
 
   /// 稳定标识，用于在重建间保持顺序与常驻状态。
@@ -31,6 +32,9 @@ class FreeButton {
 
   /// 是否显示文字；false 时仅显示图标。
   final bool showLabel;
+
+  /// 图标颜色；null 时使用主题默认色（如红黑方用各自的颜色）。
+  final Color? iconColor;
 }
 
 /// 通用的「可调整窗口控件」。
@@ -226,6 +230,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                             checked: b.checked,
                             enabled: b.enabled,
                             showLabel: b.showLabel,
+                            iconColor: b.iconColor,
                             onTap: b.onTap,
                           ),
                         ),

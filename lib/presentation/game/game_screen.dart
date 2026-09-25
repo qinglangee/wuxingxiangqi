@@ -176,6 +176,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           checked: ctrl.redIsAi,
           onTap: () => ctrl.setRedAi(!ctrl.redIsAi),
           showLabel: _showLabels,
+          iconColor: const Color(0xFFC62828),
         ),
         FreeButton(
           id: '黑方电脑',
@@ -184,6 +185,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           checked: ctrl.blackIsAi,
           onTap: () => ctrl.setBlackAi(!ctrl.blackIsAi),
           showLabel: _showLabels,
+          iconColor: const Color(0xFF1A1A1A),
         ),
         FreeButton(
           id: '显示文字',
