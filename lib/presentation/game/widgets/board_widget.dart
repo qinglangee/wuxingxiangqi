@@ -24,6 +24,7 @@ class BoardWidget extends StatelessWidget {
     required this.hints,
     required this.onTap,
     this.branchMarkers = const [],
+    this.lastMove,
   });
 
   /// [hints] 是当前选中棋子的合法终点集合。
@@ -34,6 +35,9 @@ class BoardWidget extends StatelessWidget {
 
   /// 分支标记：到达分支点时，可视化各候选分支的走法。
   final List<BranchMarker> branchMarkers;
+
+  /// 上一步走法的起点与终点；null 表示当前局面无前序走法（开局/根节点）。
+  final (Position from, Position to)? lastMove;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +92,19 @@ class BoardWidget extends StatelessWidget {
                   CustomPaint(
                     size: Size(boardWidth, boardHeight),
                     painter: _BoardPainter(padding: padding, cellW: cellWidth, cellH: cellHeight),
+                  ),
+                // 1.5 上一步走法标注：起点与终点各画一个高亮圈。
+                // 绘制在棋子之下，终点处的棋子会盖住填充，外圈描边仍可见。
+                if (lastMove != null)
+                  CustomPaint(
+                    size: Size(boardWidth, boardHeight),
+                    painter: _LastMovePainter(
+                      padding: padding,
+                      cellW: cellWidth,
+                      cellH: cellHeight,
+                      from: lastMove!.$1,
+                      to: lastMove!.$2,
+                    ),
                   ),
                 // 3. 棋子
                 ...board.pieces().map((e) => _positionedPiece(
@@ -255,6 +272,60 @@ class _BoardPainter extends CustomPainter {
       oldDelegate.padding != padding ||
       oldDelegate.cellW != cellW ||
       oldDelegate.cellH != cellH;
+}
+
+/// 上一步走法标注绘制器：在起点与终点各画一个高亮圈。
+///
+/// 绘制层位于棋子之下：起点处（已空）显示半透明填充 + 描边圆；
+/// 终点处填充被棋子盖住，外圈描边环绕棋子边缘可见。
+class _LastMovePainter extends CustomPainter {
+  const _LastMovePainter({
+    required this.padding,
+    required this.cellW,
+    required this.cellH,
+    required this.from,
+    required this.to,
+  });
+
+  final EdgeInsets padding;
+  final double cellW;
+  final double cellH;
+  final Position from;
+  final Position to;
+
+  static const _color = Color(0xFF1565C0); // 蓝，与分支标记色板区分度好
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 棋子半径 cellW * 0.425；描边圈略大一圈，保证终点处环绕棋子可见
+    final fillRadius = cellW * 0.425;
+    final ringRadius = fillRadius + cellW * 0.06;
+    final fillPaint = Paint()..color = _color.withValues(alpha: 0.22);
+    final ringPaint = Paint()
+      ..color = _color.withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = cellW * 0.045;
+
+    for (final p in [from, to]) {
+      final center = CoordinateUtils.toPixel(
+        col: p.col,
+        row: p.row,
+        cellWidth: cellW,
+        cellHeight: cellH,
+        padding: padding,
+      );
+      canvas.drawCircle(center, fillRadius, fillPaint);
+      canvas.drawCircle(center, ringRadius, ringPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LastMovePainter oldDelegate) =>
+      oldDelegate.padding != padding ||
+      oldDelegate.cellW != cellW ||
+      oldDelegate.cellH != cellH ||
+      oldDelegate.from != from ||
+      oldDelegate.to != to;
 }
 
 /// 分支标记绘制器：在棋盘上为每条候选分支画 from→to 连线，

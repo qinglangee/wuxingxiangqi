@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../domain/models/position.dart';
 import '../canju/canju_controller.dart';
 import '../controllers/game_controller.dart';
 import '../shared/adjustable_button_bar.dart';
@@ -8,13 +9,12 @@ import 'result_dialog.dart';
 import 'widgets/board_widget.dart';
 import 'widgets/branch_marker.dart';
 import 'widgets/review_panel.dart';
-import 'widgets/status_bar.dart';
 
-/// 主页面：拼装棋盘 + 状态栏 + 结束弹窗。
+/// 主页面：拼装棋盘 + 结束弹窗。
 ///
-/// 布局：顶部 AI 配置 + 状态栏；中部上半为棋盘（约 1/2 高度），
-/// 下半为打谱面板（棋谱注释 / 引擎 / 云库 三个标签）。
-/// 残局模式下在 AI 配置行下方额外显示「上一局 / 下一局」切换条。
+/// 布局：顶部 AI 配置条（含重开/返回）；中部上半为棋盘（约 1/2 高度，
+/// 标注上一步走法的起点与终点），下半为打谱面板（棋谱注释 / 引擎 / 云库
+/// 三个标签）。残局模式下在 AI 配置行下方额外显示「上一局 / 下一局」切换条。
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
 
@@ -54,7 +54,6 @@ class GameScreen extends StatelessWidget {
               controller: controller,
             ),
             if (canju != null) _CanjuBar(controller: canju),
-            StatusBar(state: state, onRestart: controller.restart),
             // 上半部分：棋盘（按宽度自适应高度，不抢占下半部分空间）
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
@@ -65,6 +64,7 @@ class GameScreen extends StatelessWidget {
                   hints: controller.selectedHints.toSet(),
                   onTap: controller.onTap,
                   branchMarkers: _buildBranchMarkers(controller),
+                  lastMove: _lastMoveOf(controller),
                 ),
               ),
             ),
@@ -103,6 +103,13 @@ class GameScreen extends StatelessWidget {
           label: i + 1,
         ),
     ];
+  }
+
+  /// 当前局面节点对应的上一步走法（根节点/开局返回 null）。
+  (Position, Position)? _lastMoveOf(GameController controller) {
+    final m = controller.currentNode.move;
+    if (m == null) return null;
+    return (m.from, m.to);
   }
 }
 
@@ -166,9 +173,23 @@ class _AiConfigRowState extends State<_AiConfigRow> {
   Widget build(BuildContext context) {
     final ctrl = widget.controller;
     return AdjustableButtonBar(
-      defaultPinnedIds: const {'红方电脑', '黑方电脑', '显示文字', '返回'},
-      maxPinnedCount: 4,
+      defaultPinnedIds: const {'红方电脑', '黑方电脑', '显示文字', '重开', '返回'},
+      maxPinnedCount: 5,
       buttons: [
+        FreeButton(
+          id: '返回',
+          icon: Icons.arrow_back,
+          label: '返回',
+          onTap: () => Navigator.of(context).maybePop(),
+          showLabel: _showLabels,
+        ),
+        FreeButton(
+          id: '重开',
+          icon: Icons.refresh,
+          label: '重开',
+          onTap: ctrl.restart,
+          showLabel: _showLabels,
+        ),
         FreeButton(
           id: '红方电脑',
           icon: Icons.computer,
@@ -193,13 +214,6 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           label: _showLabels ? '隐藏文字' : '显示文字',
           checked: _showLabels,
           onTap: () => setState(() => _showLabels = !_showLabels),
-          showLabel: _showLabels,
-        ),
-        FreeButton(
-          id: '返回',
-          icon: Icons.arrow_back,
-          label: '返回',
-          onTap: () => Navigator.of(context).maybePop(),
           showLabel: _showLabels,
         ),
       ],
