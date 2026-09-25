@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../domain/engine/chessdb_service.dart';
 import '../../../domain/engine/fen.dart';
+import '../../../domain/models/piece.dart';
 import '../../../domain/models/position.dart';
 import '../../controllers/game_controller.dart';
 
@@ -62,7 +63,22 @@ class CloudBaseController extends ChangeNotifier {
     _debounce = Timer(const Duration(milliseconds: 300), _refresh);
   }
 
+  /// 当前是否轮到 AI 走子（此时不查询云库）。
+  bool get _isAiTurn {
+    final gc = gameController;
+    return gc.currentSide == Side.red ? gc.redIsAi : gc.blackIsAi;
+  }
+
   Future<void> _refresh() async {
+    // 轮到电脑 AI 时无需查询云库，避免无意义请求
+    if (_isAiTurn) {
+      _moves = null;
+      _error = null;
+      _loading = false;
+      notifyListeners();
+      return;
+    }
+
     final fen = Fen.fromBoard(gameController.state.board, gameController.currentSide);
     if (fen == _fen && _moves != null) return; // 局面未变，不重复请求
     _fen = fen;
