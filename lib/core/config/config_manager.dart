@@ -21,7 +21,7 @@ class ConfigManager extends ChangeNotifier {
   bool _loaded = false;
 
   /// 思考时间硬上限（毫秒），由引擎层强制限制。
-  static const int kMaxMoveTimeMs = 1000;
+  static const int kMaxMoveTimeMs = 30000;
 
   /// 当前配置（只读视图）。
   AppConfig get config => _config;

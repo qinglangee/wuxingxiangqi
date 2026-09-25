@@ -62,17 +62,63 @@ class AppConfig {
       );
 }
 
+/// 棋规类型枚举。
+enum ChessRule {
+  /// 中国规则（默认）
+  chinese,
+
+  /// 亚洲规则
+  asian,
+
+  /// 天天象棋规则
+  tiantian,
+}
+
+extension ChessRuleExt on ChessRule {
+  String get label => switch (this) {
+        ChessRule.chinese => '中国规则',
+        ChessRule.asian => '亚洲规则',
+        ChessRule.tiantian => '天天象棋规则',
+      };
+
+  String get code => switch (this) {
+        ChessRule.chinese => 'chinese',
+        ChessRule.asian => 'asian',
+        ChessRule.tiantian => 'tiantian',
+      };
+
+  static ChessRule fromCode(String? code) => switch (code) {
+        'asian' => ChessRule.asian,
+        'tiantian' => ChessRule.tiantian,
+        _ => ChessRule.chinese,
+      };
+}
+
 /// 引擎相关配置。
 class EngineConfig {
   EngineConfig({
     this.executablePath,
     this.evalFilePath,
-    this.moveTimeMs = 500,
-    this.depth,
+    this.moveTimeMs = 1500,
+    this.depth = 20,
     this.maxDepth,
-    this.threads,
-    this.hashSizeMb,
+    this.threads = 1,
+    this.hashSizeMb = 128,
+    this.multiPv = 2,
+    this.rule = ChessRule.chinese,
   });
+
+  // ---- 配置项取值范围（供 UI 滑块与引擎层共用） ----
+  static const int kMinThreads = 1;
+  static const int kMaxThreads = 32;
+  static const int kMinHashMb = 16;
+  static const int kMaxHashMb = 1024;
+  static const int kMinMoveTimeMs = 300;
+  static const int kMaxMoveTimeMs = 30000;
+  static const int kMinMultiPv = 1;
+  static const int kMaxMultiPv = 5;
+  static const int kMinDepth = 1;
+  static const int kMaxDepth = 60;
 
   /// 引擎可执行文件路径（绝对路径）。为空表示使用内置默认引擎。
   String? executablePath;
@@ -89,11 +135,17 @@ class EngineConfig {
   /// 最大深度上限（null 表示不限制）。
   int? maxDepth;
 
-  /// 引擎线程数（null 表示引擎默认）。
-  int? threads;
+  /// 引擎线程数（1-32）。
+  int threads;
 
-  /// 哈希表大小（MB，null 表示引擎默认）。
-  int? hashSizeMb;
+  /// 哈希表大小（MB，16-1024）。
+  int hashSizeMb;
+
+  /// 同时输出的候选变化路数 MultiPV（1-5）。
+  int multiPv;
+
+  /// 棋规。
+  ChessRule rule;
 
   factory EngineConfig.fromJson(Map<String, dynamic> json) => EngineConfig(
         executablePath: json['executablePath'] as String?,
@@ -101,8 +153,10 @@ class EngineConfig {
         moveTimeMs: (json['moveTimeMs'] as num?)?.toInt() ?? 500,
         depth: json['depth'] as int?,
         maxDepth: json['maxDepth'] as int?,
-        threads: json['threads'] as int?,
-        hashSizeMb: json['hashSizeMb'] as int?,
+        threads: (json['threads'] as num?)?.toInt() ?? 4,
+        hashSizeMb: (json['hashSizeMb'] as num?)?.toInt() ?? 256,
+        multiPv: (json['multiPv'] as num?)?.toInt() ?? 3,
+        rule: ChessRuleExt.fromCode(json['rule'] as String?),
       );
 
   Map<String, dynamic> toJson() => {
@@ -113,6 +167,8 @@ class EngineConfig {
         'maxDepth': maxDepth,
         'threads': threads,
         'hashSizeMb': hashSizeMb,
+        'multiPv': multiPv,
+        'rule': rule.code,
       };
 
   EngineConfig copyWith({
@@ -123,6 +179,8 @@ class EngineConfig {
     int? maxDepth,
     int? threads,
     int? hashSizeMb,
+    int? multiPv,
+    ChessRule? rule,
   }) =>
       EngineConfig(
         executablePath: executablePath ?? this.executablePath,
@@ -132,6 +190,8 @@ class EngineConfig {
         maxDepth: maxDepth ?? this.maxDepth,
         threads: threads ?? this.threads,
         hashSizeMb: hashSizeMb ?? this.hashSizeMb,
+        multiPv: multiPv ?? this.multiPv,
+        rule: rule ?? this.rule,
       );
 }
 

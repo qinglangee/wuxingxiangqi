@@ -1,0 +1,236 @@
+import 'package:flutter/material.dart';
+
+import '../../core/config/app_config.dart';
+import '../../core/config/config_manager.dart';
+import '../../core/theme/app_theme.dart';
+import '../../domain/engine/pikafish_engine.dart';
+
+/// 引擎设置控件：性能（滑块）+ 棋规（下拉框）两部分。
+///
+/// 可在设置页的「引擎设置」标签中直接使用，也可通过 [EngineSettingsDialog]
+/// 以浮动弹窗形式在任意页面调出。修改值后立即保存并实时下发到引擎。
+class EngineSettingsWidget extends StatelessWidget {
+  const EngineSettingsWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ConfigManager.instance,
+      builder: (_, _) {
+        final cfg = ConfigManager.instance.config.engine;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionTitle('性能'),
+              const SizedBox(height: 8),
+              _sliderRow(
+                label: '线程数',
+                value: cfg.threads.toDouble(),
+                min: EngineConfig.kMinThreads.toDouble(),
+                max: EngineConfig.kMaxThreads.toDouble(),
+                divisions: EngineConfig.kMaxThreads - EngineConfig.kMinThreads,
+                format: (v) => '${v.toInt()}',
+                onChanged: (v) => _update((c) => c.threads = v.toInt()),
+              ),
+              _sliderRow(
+                label: '哈希表',
+                value: cfg.hashSizeMb.toDouble(),
+                min: EngineConfig.kMinHashMb.toDouble(),
+                max: EngineConfig.kMaxHashMb.toDouble(),
+                divisions: 32,
+                format: (v) => '${v.toInt()} MB',
+                onChanged: (v) => _update((c) => c.hashSizeMb = v.toInt()),
+              ),
+              _sliderRow(
+                label: '思考时间',
+                value: cfg.moveTimeMs.toDouble(),
+                min: EngineConfig.kMinMoveTimeMs.toDouble(),
+                max: EngineConfig.kMaxMoveTimeMs.toDouble(),
+                divisions: 60,
+                format: (v) => '${(v / 1000).toStringAsFixed(1)} 秒',
+                onChanged: (v) => _update((c) => c.moveTimeMs = v.toInt()),
+              ),
+              _sliderRow(
+                label: 'PV 数',
+                value: cfg.multiPv.toDouble(),
+                min: EngineConfig.kMinMultiPv.toDouble(),
+                max: EngineConfig.kMaxMultiPv.toDouble(),
+                divisions: EngineConfig.kMaxMultiPv - EngineConfig.kMinMultiPv,
+                format: (v) => '${v.toInt()}',
+                onChanged: (v) => _update((c) => c.multiPv = v.toInt()),
+              ),
+              _sliderRow(
+                label: '分析深度',
+                value: (cfg.depth ?? 20).toDouble(),
+                min: EngineConfig.kMinDepth.toDouble(),
+                max: EngineConfig.kMaxDepth.toDouble(),
+                divisions: EngineConfig.kMaxDepth - EngineConfig.kMinDepth,
+                format: (v) => '${v.toInt()}',
+                onChanged: (v) => _update((c) => c.depth = v.toInt()),
+              ),
+              const SizedBox(height: 20),
+              _sectionTitle('棋规'),
+              const SizedBox(height: 8),
+              _ruleDropdown(cfg.rule),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: AppTheme.boardLine,
+      ),
+    );
+  }
+
+  Widget _sliderRow({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required String Function(double) format,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF5A3A1A)),
+            ),
+          ),
+          Expanded(
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: divisions,
+              activeColor: AppTheme.boardLine,
+              onChanged: onChanged,
+            ),
+          ),
+          SizedBox(
+            width: 70,
+            child: Text(
+              format(value),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF5A3A1A)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ruleDropdown(ChessRule current) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDF6E3),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFC9B68C)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<ChessRule>(
+          value: current,
+          isExpanded: true,
+          style: const TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
+          items: ChessRule.values
+              .map((r) => DropdownMenuItem(value: r, child: Text(r.label)))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) _update((c) => c.rule = v);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _update(void Function(EngineConfig c) mutate) {
+    ConfigManager.instance.updateEngine((c) {
+      mutate(c);
+      return c;
+    }).then((_) {
+      PikafishEngine.instance.applyOptions();
+    });
+  }
+}
+
+/// 引擎设置浮动弹窗：在任意页面通过按钮点击调出。
+class EngineSettingsDialog extends StatelessWidget {
+  const EngineSettingsDialog({super.key});
+
+  static Future<void> show(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const EngineSettingsDialog(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return Dialog(
+      backgroundColor: const Color(0xFFFDF6E3),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFC9B68C), width: 1.2),
+      ),
+      child: SizedBox(
+        width: media.size.width * 0.9,
+        height: media.size.height * 0.75,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                color: Color(0xFF8B5A2B),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.settings, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '引擎设置',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFC9B68C)),
+            const Expanded(child: EngineSettingsWidget()),
+          ],
+        ),
+      ),
+    );
+  }
+}

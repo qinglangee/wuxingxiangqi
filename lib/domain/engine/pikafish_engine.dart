@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/config/app_config.dart';
+import '../../core/config/config_manager.dart';
 import '../models/piece.dart';
 import 'engine_info.dart';
 
@@ -111,8 +113,8 @@ class PikafishEngine {
       );
       // 显式指定权重文件完整路径
       _send('setoption name EvalFile value $evalFilePath');
-      // 输出多路候选变化，引擎面板可同时展示多条 PV
-      _send('setoption name MultiPV value $multiPv');
+      // 应用用户配置的引擎选项（MultiPV/线程/哈希/棋规）
+      applyOptions();
       _send('isready');
       await readyok.future.timeout(
         const Duration(seconds: 20),
@@ -245,10 +247,24 @@ class PikafishEngine {
   }
 
   /// 引擎思考时间硬上限(毫秒)。
-  static const int maxMoveTimeMs = 5000;
+  static const int maxMoveTimeMs = EngineConfig.kMaxMoveTimeMs;
 
   /// 同时输出的候选变化路数（MultiPV）。
-  static const int multiPv = 3;
+  static int get multiPv =>
+      ConfigManager.instance.config.engine.multiPv;
+
+  /// 把当前配置中的引擎选项实时发送给运行中的引擎。
+  ///
+  /// 未启动或握手未完成的引擎不响应；启动握手时会再次应用一次。
+  void applyOptions() {
+    if (!_ready) return;
+    final e = ConfigManager.instance.config.engine;
+    _send('setoption name MultiPV value ${e.multiPv}');
+    _send('setoption name Threads value ${e.threads}');
+    _send('setoption name Hash value ${e.hashSizeMb}');
+    // 棋规：Pikafish 通过 UCI_Variant 或 Rule 选项下发（按引擎实际支持发送）
+    _send('setoption name UCI_Variant value ${e.rule.code}');
+  }
 
   /// 通知引擎开始一局新游戏。
   ///
@@ -262,13 +278,21 @@ class PikafishEngine {
 
   /// 给定 FEN 与思考时间(毫秒)，返回最佳走法(UCI 字符串，如 "b2c2")。
   ///
-  /// [moveTimeMs] 会被限制在 1..[maxMoveTimeMs] 范围内，保证不超过 1 秒。
+  /// [moveTimeMs] 会被限制在 [EngineConfig.kMinMoveTimeMs]..[maxMoveTimeMs]
+  /// 范围内；[depth] 非 null 时以 `go depth N` 搜索（忽略 movetime）。
   /// 若本调用是 [notifyNewGame] 之后引擎本局第一次被调用，会先发送一次
   /// `ucinewgame`，随后发送当前请求的 [fen]。
-  Future<EngineBestMove> bestMove(String fen,
-      {int moveTimeMs = 800}) async {
+  Future<EngineBestMove> bestMove(
+    String fen, {
+    int moveTimeMs = 800,
+    int? depth,
+  }) async {
     await start();
-    final effectiveTime = moveTimeMs.clamp(1, maxMoveTimeMs);
+    final e = ConfigManager.instance.config.engine;
+    final effectiveTime =
+        moveTimeMs.clamp(EngineConfig.kMinMoveTimeMs, maxMoveTimeMs);
+    final effectiveDepth =
+        (depth ?? e.depth)?.clamp(EngineConfig.kMinDepth, EngineConfig.kMaxDepth);
 
     // 新一次思考：清空上一周期残留的 pv/mate 与各路候选
     _lastPv = const [];
@@ -286,13 +310,17 @@ class PikafishEngine {
       _pendingNewGame = false;
     }
     _send('position fen $fen');
-    _send('go movetime $effectiveTime');
+    if (effectiveDepth != null) {
+      _send('go depth $effectiveDepth');
+    } else {
+      _send('go movetime $effectiveTime');
+    }
 
-    // 硬超时保护：思考上限 + 余量后仍无 bestmove，则发 stop；
-    // 引擎收到 stop 后会尽快输出 bestmove（由 _onLine 完成）。
+    // 硬超时保护：深度搜索按 30s 封顶，时间搜索按思考上限 + 余量。
+    final timeoutMs = effectiveDepth != null ? 30000 : effectiveTime + 2000;
     _hardTimeoutTimer?.cancel();
     _hardTimeoutTimer = Timer(
-      Duration(milliseconds: effectiveTime + 2000),
+      Duration(milliseconds: timeoutMs),
       () {
         if (completer.isCompleted) return;
         debugPrint('[pikafish] 未在规定时间返回 bestmove，发送 stop');

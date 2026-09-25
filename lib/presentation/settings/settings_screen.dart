@@ -5,6 +5,7 @@ import '../../core/config/app_config.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/models/piece.dart';
+import 'engine_settings_widget.dart';
 
 /// 设置页面：用标签页分成四个部分。
 ///
@@ -57,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       body: TabBarView(
         controller: _tab,
         children: const [
-          _SettingsPlaceholder(title: '引擎设置', hint: '引擎文件、权重、思考参数（待实现）'),
+          EngineSettingsWidget(),
           _SettingsPlaceholder(title: '界面设置', hint: '字号、颜色、背景等风格设置（待实现）'),
           _PieceBoardSettings(),
           _SettingsPlaceholder(title: '其他设置', hint: '棋谱仓库等杂项设置（待实现）'),
