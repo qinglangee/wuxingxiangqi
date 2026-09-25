@@ -388,7 +388,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
           Row(
             children: [
               const Text(
-                '拖动右端调整顺序 · 点星设为常驻',
+                '按住右端拖柄调整顺序 · 点星设为常驻',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -410,7 +410,10 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
           const SizedBox(height: 2),
           Expanded(
             child: ReorderableListView.builder(
-              buildDefaultDragHandles: true,
+              // 关闭默认拖柄（桌面显示图标/移动端长按的不一致行为），
+              // 统一由 _EditRow 右侧的 ReorderableDragStartListener 拖柄负责，
+              // 各平台均为按下拖柄即拖、图标可见。
+              buildDefaultDragHandles: false,
               itemCount: all.length,
               onReorderItem: _reorder,
               proxyDecorator: (child, index, anim) => Material(
@@ -423,6 +426,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                 final isPinned = _pinned.contains(b.id);
                 return _EditRow(
                   key: ValueKey(b.id),
+                  index: i,
                   button: b,
                   pinned: isPinned,
                   canPin: isPinned || _pinned.length < widget.maxPinnedCount,
@@ -489,16 +493,19 @@ class _DrawerChip extends StatelessWidget {
   }
 }
 
-/// 编辑抽屉中的一行：图标 + 标签 + 常驻星标，长按拖动。
+/// 编辑抽屉中的一行：图标 + 标签 + 常驻星标 + 右侧拖柄，按住拖柄拖动排序。
 class _EditRow extends StatelessWidget {
   const _EditRow({
     required super.key,
+    required this.index,
     required this.button,
     required this.pinned,
     required this.canPin,
     required this.onTogglePin,
   });
 
+  /// 该项在 ReorderableListView 中的下标，供拖柄监听使用。
+  final int index;
   final FreeButton button;
   final bool pinned;
   final bool canPin;
@@ -513,17 +520,35 @@ class _EditRow extends StatelessWidget {
         button.label,
         style: const TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
       ),
-      trailing: IconButton(
-        onPressed: canPin ? onTogglePin : null,
-        icon: Icon(
-          pinned ? Icons.star : Icons.star_border,
-          size: 22,
-          color: pinned ? const Color(0xFFD4A017) : const Color(0xFFB0A48A),
-        ),
-        tooltip: pinned ? '取消常驻' : '设为常驻',
-        visualDensity: VisualDensity.compact,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: canPin ? onTogglePin : null,
+            icon: Icon(
+              pinned ? Icons.star : Icons.star_border,
+              size: 22,
+              color:
+                  pinned ? const Color(0xFFD4A017) : const Color(0xFFB0A48A),
+            ),
+            tooltip: pinned ? '取消常驻' : '设为常驻',
+            visualDensity: VisualDensity.compact,
+          ),
+          // 显式拖柄：桌面与移动端一致可见，按住即拖（移动端无需长按）
+          ReorderableDragStartListener(
+            index: index,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Icon(
+                Icons.drag_indicator,
+                size: 20,
+                color: Color(0xFFB0A48A),
+              ),
+            ),
+          ),
+        ],
       ),
-      contentPadding: const EdgeInsets.fromLTRB(8, 0, 44, 0),
+      contentPadding: const EdgeInsets.fromLTRB(8, 0, 4, 0),
       dense: true,
     );
   }
