@@ -240,7 +240,7 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
               child: Image.asset(
                 AssetCatalog.boardAsset(name),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
+                errorBuilder: (_, _, _) => const Icon(
                   Icons.broken_image,
                   size: 36,
                   color: Color(0xFFB0A48A),
@@ -308,7 +308,7 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
       AssetCatalog.pieceAsset(setName, side, PieceType.general),
       width: 32,
       height: 32,
-      errorBuilder: (_, __, ___) => const Icon(
+      errorBuilder: (_, _, _) => const Icon(
         Icons.broken_image,
         size: 28,
         color: Color(0xFFB0A48A),

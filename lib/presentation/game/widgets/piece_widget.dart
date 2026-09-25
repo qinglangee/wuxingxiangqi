@@ -58,7 +58,7 @@ class PieceWidget extends StatelessWidget {
             path,
             fit: BoxFit.cover,
             // 图片缺失（套系不完整等）时回退为经典绘制，避免红屏
-            errorBuilder: (_, __, ___) => _buildClassicPiece(),
+            errorBuilder: (_, _, _) => _buildClassicPiece(),
           ),
         ),
       ),
