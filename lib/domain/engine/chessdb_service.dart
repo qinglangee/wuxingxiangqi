@@ -136,7 +136,7 @@ class ChessDbService {
       ));
     }
     // 按云库排名升序（rank 1 最优）
-    moves.sort((a, b) => b.rank.compareTo(a.rank));
+    moves.sort((a, b) => b.score.compareTo(a.score));
     return CloudResult(moves: moves, isTerminal: false, message: null);
   }
 }

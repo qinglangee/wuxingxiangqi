@@ -306,17 +306,28 @@ class _LastMovePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = cellW * 0.045;
 
-    for (final p in [from, to]) {
-      final center = CoordinateUtils.toPixel(
-        col: p.col,
-        row: p.row,
-        cellWidth: cellW,
-        cellHeight: cellH,
-        padding: padding,
-      );
-      canvas.drawCircle(center, fillRadius, fillPaint);
-      canvas.drawCircle(center, ringRadius, ringPaint);
-    }
+    // 起点：小圆点标记（格子已空，小标记足够指示来源）
+    final fromCenter = CoordinateUtils.toPixel(
+      col: from.col,
+      row: from.row,
+      cellWidth: cellW,
+      cellHeight: cellH,
+      padding: padding,
+    );
+    canvas.drawCircle(
+        fromCenter, cellW * 0.2, Paint()..color = _color.withValues(alpha: 0.55));
+    canvas.drawCircle(fromCenter, cellW * 0.3, ringPaint);
+
+    // 终点：整圈高亮（棋子盖住填充，外圈描边环绕棋子边缘）
+    final toCenter = CoordinateUtils.toPixel(
+      col: to.col,
+      row: to.row,
+      cellWidth: cellW,
+      cellHeight: cellH,
+      padding: padding,
+    );
+    canvas.drawCircle(toCenter, fillRadius, fillPaint);
+    canvas.drawCircle(toCenter, ringRadius, ringPaint);
   }
 
   @override
