@@ -125,7 +125,18 @@ class BoardWidget extends StatelessWidget {
                       flipped: flipped,
                     ),
                   ),
-                // 1.6 提示箭头：在引擎 bestmove 的起点与终点之间画绿色箭头
+                // 3. 棋子
+                ...board.pieces().map((e) => _positionedPiece(
+                      e.position,
+                      e.piece,
+                      padding,
+                      cellWidth,
+                      cellHeight,
+                      pieceSize,
+                    )),
+                // 2. 选中高亮 + 走法提示
+                ..._buildHints(padding, cellWidth, cellHeight, pieceSize),
+                // 2.5 提示箭头：在棋子之上绘制，避免被终点棋子盖住
                 if (hintArrow != null)
                   CustomPaint(
                     size: Size(boardWidth, boardHeight),
@@ -144,17 +155,6 @@ class BoardWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                // 3. 棋子
-                ...board.pieces().map((e) => _positionedPiece(
-                      e.position,
-                      e.piece,
-                      padding,
-                      cellWidth,
-                      cellHeight,
-                      pieceSize,
-                    )),
-                // 2. 选中高亮 + 走法提示
-                ..._buildHints(padding, cellWidth, cellHeight, pieceSize),
                 // 4. 分支标记层：在棋子之上绘制候选分支走法
                 if (branchMarkers.isNotEmpty)
                   CustomPaint(
