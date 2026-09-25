@@ -10,7 +10,7 @@ import '../controllers/game_controller.dart';
 import '../shared/adjustable_button_bar.dart';
 import 'result_dialog.dart';
 import 'widgets/board_widget.dart';
-import 'widgets/branch_marker.dart';
+import 'widgets/move_arrow_painter.dart';
 import 'widgets/review_panel.dart';
 
 /// 打谱页主状态。
@@ -89,7 +89,7 @@ class GameScreen extends StatelessWidget {
                   onTap: controller.onTap,
                   branchMarkers: _buildBranchMarkers(controller),
                   lastMove: _lastMoveOf(controller),
-                  hintMark: controller.hintMark,
+                  hintArrow: controller.hintMark,
                 ),
               ),
             ),
@@ -118,16 +118,17 @@ class GameScreen extends StatelessWidget {
     }
   }
 
-  /// 在分支点（多于一条候选续着）为每条候选分支生成一个标记（带 1-based 序号）。
+  /// 在分支点（多于一条候选续着）为每条候选分支生成一支带序号的箭头。
   /// 单一续着或无续着时不显示任何标记。
-  List<BranchMarker> _buildBranchMarkers(GameController controller) {
+  List<MoveArrow> _buildBranchMarkers(GameController controller) {
     final options = controller.branchOptions;
     if (options.length <= 1) return const [];
     return [
       for (var i = 0; i < options.length; i++)
-        BranchMarker(
+        MoveArrow(
           from: options[i].move!.from,
           to: options[i].move!.to,
+          color: MoveArrowPainter.palette[i % MoveArrowPainter.palette.length],
           label: i + 1,
         ),
     ];

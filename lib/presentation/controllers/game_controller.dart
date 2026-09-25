@@ -59,12 +59,12 @@ class GameController extends ChangeNotifier {
   bool _blackIsAi = false;
   bool _aiThinking = false;
 
-  /// 提示标记（仅当用户点击「提示」且提示自动关闭时展示）。
+  /// 提示箭头（仅当用户点击「提示」且提示自动关闭时展示）。
   ///
-  /// 值为 bestMove 的 from/to，在棋盘上以高亮圈标注；
+  /// 值为 bestMove 的 (from, to)，在棋盘上以绿色箭头标注；
   /// 走子（[_applyAndRecord]）或跳转（[_jumpTo]）时清除。
-  Position? _hintMark;
-  Position? get hintMark => _hintMark;
+  (Position, Position)? _hintMark;
+  (Position, Position)? get hintMark => _hintMark;
 
   /// 引擎最近一次搜索信息快照（引擎面板展示）；无搜索时为 null。
   EngineSearchInfo? _engineInfo;
@@ -405,7 +405,7 @@ class GameController extends ChangeNotifier {
         // _applyAndRecord 内部已清除提示标记
         moveApplied = _applyAndRecord(from, to);
       } else {
-        _hintMark = from;
+        _hintMark = (from, to);
         notifyListeners();
       }
     } catch (e) {
