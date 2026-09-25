@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import 'check_button.dart';
 
 /// 一个可添加到 [AdjustableButtonBar] 的「自由按钮」定义。
 ///
@@ -13,6 +14,8 @@ class FreeButton {
     required this.label,
     required this.onTap,
     this.enabled = true,
+    this.checked,
+    this.showLabel = true,
   });
 
   /// 稳定标识，用于在重建间保持顺序与常驻状态。
@@ -21,20 +24,28 @@ class FreeButton {
   final String label;
   final bool enabled;
   final VoidCallback onTap;
+
+  /// 选中态：null 为普通按钮；非 null 时作为 check button 渲染，
+  /// 选中时带高亮底框（如「红方电脑」开关）。
+  final bool? checked;
+
+  /// 是否显示文字；false 时仅显示图标。
+  final bool showLabel;
 }
 
 /// 通用的「可调整窗口控件」。
 ///
 /// 由两部分组成：
-/// - **常驻容器**（底部一行）：左侧 Row 展示被设为常驻的自由按钮，
+/// - **常驻容器**（一行）：左侧 Row 展示被设为常驻的自由按钮，
 ///   右侧一个操作按钮，点击展开/收起抽屉。
-/// - **抽屉容器**（常驻容器上方，展开时显示）：默认显示未设为常驻的
-///   自由按钮（多行 Wrap）；点击抽屉自带的编辑按钮后，显示全部自由
-///   按钮，可拖动调整顺序，并可逐个切换是否常驻。常驻容器也按此
-///   顺序显示常驻按钮。
+/// - **抽屉容器**（展开时显示）：默认显示未设为常驻的自由按钮
+///   （多行 Wrap）；点击抽屉自带的编辑按钮后，显示全部自由按钮，
+///   可拖动调整顺序，并可逐个切换是否常驻。常驻容器也按此顺序
+///   显示常驻按钮。
 ///
-/// 抽屉展开时控件整体变高，把上方内容（通常是 Expanded 区域）顶高，
-/// 因此无需 Overlay 即可浮在内容之上。
+/// 抽屉通过 OverlayPortal 浮在界面之上，不占据布局空间；展开方向
+/// 随常驻栏位置自动调整：常驻栏位于屏幕上半部（如页面顶部的配置
+/// 条）时向下展开，位于下半部（如底部导航条）时向上展开。
 class AdjustableButtonBar extends StatefulWidget {
   const AdjustableButtonBar({
     super.key,
@@ -155,8 +166,8 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   }
 
   void _reorder(int oldIndex, int newIndex) {
+    // onReorderItem 已对移除元素做过 newIndex 修正，直接使用
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
       final id = _order.removeAt(oldIndex);
       _order.insert(newIndex, id);
     });
@@ -208,7 +219,16 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                 : Row(
                     children: [
                       for (final b in pinned)
-                        Expanded(child: _BarButton(button: b)),
+                        Expanded(
+                          child: IconCheckButton(
+                            icon: b.icon,
+                            label: b.label,
+                            checked: b.checked,
+                            enabled: b.enabled,
+                            showLabel: b.showLabel,
+                            onTap: b.onTap,
+                          ),
+                        ),
                     ],
                   ),
           ),
@@ -224,23 +244,35 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
 
   // ---- 抽屉浮层 -----------------------------------------------------------
 
-  /// 浮层内容：透明遮罩 + 常驻栏正上方的面板。
+  /// 浮层内容：透明遮罩 + 贴住常驻栏的面板。
   ///
   /// 在布局阶段通过 [info] 直接拿到常驻栏尺寸与其在 Overlay 坐标系中的
   /// paint transform（不经过 FollowerLayer），用 [Positioned] 定位：
-  /// 宽度与常驻栏一致，底边贴常驻栏顶部，向上展开。
+  /// 宽度与常驻栏一致；常驻栏在屏幕上半部时面板从其底部向下展开，
+  /// 在下半部时面板从其顶部向上展开。
   Widget _buildOverlay(BuildContext context, OverlayChildLayoutInfo info) {
     // 常驻栏左上角在 Overlay 坐标系中的位置
     final origin =
         MatrixUtils.transformPoint(info.childPaintTransform, Offset.zero);
     final barWidth = info.childSize.width;
-    // 常驻栏顶部以上的可用高度（距 Overlay 顶留 8px）
-    final available = (origin.dy - 8).clamp(120.0, 100000.0).toDouble();
+    final barHeight = info.childSize.height;
+
+    // 按常驻栏纵向中心与 Overlay 中线比较，自动选择抽屉展开方向
+    final downward =
+        origin.dy + barHeight / 2 < info.overlaySize.height / 2;
+
     // 编辑态：不超过应用高度的一半；普通态：最高 220
     final maxHeight = _editMode ? info.overlaySize.height / 2 : 220.0;
+    // 展开方向上的可用高度（边界留 8px）
+    final available = (downward
+            ? info.overlaySize.height - origin.dy - barHeight - 8
+            : origin.dy - 8)
+        .clamp(120.0, 100000.0)
+        .toDouble();
     final panelHeight = available < maxHeight ? available : maxHeight;
-    // 底边始终贴常驻栏顶部：高度变小时面板整体下移，不与常驻栏脱离
-    final panelTop = origin.dy - panelHeight;
+    // 面板始终与常驻栏贴合：向下展开顶边贴栏底，向上展开底边贴栏顶
+    final panelTop =
+        downward ? origin.dy + barHeight : origin.dy - panelHeight;
 
     return Stack(
       children: [
@@ -260,8 +292,9 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
           child: Material(
             color: const Color(0xFFF5E6C8),
             elevation: 10,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(8)),
+            borderRadius: downward
+                ? const BorderRadius.vertical(bottom: Radius.circular(8))
+                : const BorderRadius.vertical(top: Radius.circular(8)),
             clipBehavior: Clip.antiAlias,
             child: _editMode ? _buildEditDrawer() : _buildNormalDrawer(),
           ),
@@ -374,7 +407,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
             child: ReorderableListView.builder(
               buildDefaultDragHandles: true,
               itemCount: all.length,
-              onReorder: _reorder,
+              onReorderItem: _reorder,
               proxyDecorator: (child, index, anim) => Material(
                 color: Colors.transparent,
                 elevation: 4,
@@ -401,40 +434,6 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
 
 // ---- 子控件 ----------------------------------------------------------------
 
-/// 常驻行中的按钮（图标在上、文字在下，填满分配宽度）。
-class _BarButton extends StatelessWidget {
-  const _BarButton({required this.button});
-  final FreeButton button;
-
-  @override
-  Widget build(BuildContext context) {
-    final color =
-        button.enabled ? AppTheme.boardLine : const Color(0xFFD0C4A8);
-    return InkWell(
-      onTap: button.enabled ? button.onTap : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(button.icon, size: 26, color: color),
-            const SizedBox(height: 2),
-            Text(
-              button.label,
-              style: TextStyle(
-                fontSize: 11,
-                color: button.enabled
-                    ? const Color(0xFF8B6B3D)
-                    : const Color(0xFFD0C4A8),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// 普通抽屉中的按钮 chip（图标 + 文字，横向）。
 class _DrawerChip extends StatelessWidget {
   const _DrawerChip({required this.button});
@@ -442,6 +441,7 @@ class _DrawerChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isChecked = button.checked ?? false;
     final color =
         button.enabled ? AppTheme.boardLine : const Color(0xFFD0C4A8);
     return InkWell(
@@ -450,24 +450,33 @@ class _DrawerChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.6),
+          color: isChecked
+              ? AppTheme.boardLine.withValues(alpha: 0.15)
+              : Colors.white.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFD8C69A), width: 0.6),
+          border: Border.all(
+            color: isChecked
+                ? AppTheme.boardLine.withValues(alpha: 0.55)
+                : const Color(0xFFD8C69A),
+            width: isChecked ? 0.9 : 0.6,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(button.icon, size: 18, color: color),
-            const SizedBox(width: 6),
-            Text(
-              button.label,
-              style: TextStyle(
-                fontSize: 13,
-                color: button.enabled
-                    ? const Color(0xFF8B6B3D)
-                    : const Color(0xFFD0C4A8),
+            if (button.showLabel) ...[
+              const SizedBox(width: 6),
+              Text(
+                button.label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: button.enabled
+                      ? const Color(0xFF8B6B3D)
+                      : const Color(0xFFD0C4A8),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

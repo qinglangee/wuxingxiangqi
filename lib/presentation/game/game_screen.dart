@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../canju/canju_controller.dart';
 import '../controllers/game_controller.dart';
+import '../shared/adjustable_button_bar.dart';
 import 'result_dialog.dart';
 import 'widgets/board_widget.dart';
 import 'widgets/branch_marker.dart';
@@ -32,6 +33,19 @@ class GameScreen extends StatelessWidget {
         title: Text(canju == null
             ? '打谱'
             : '${canju.library.name} · 第 ${canju.currentIndex + 1}/${canju.total} 局'),
+        actions: [
+          if (controller.aiThinking)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -134,51 +148,59 @@ class _CanjuBar extends StatelessWidget {
   }
 }
 
-/// AI 配置行：红方电脑 / 黑方电脑 两个 checkbox。
-class _AiConfigRow extends StatelessWidget {
+/// AI 配置行：红方电脑 / 黑方电脑 两个 check button + 文字显隐 + 返回。
+/// 用 [AdjustableButtonBar] 布局，位于页面顶部。
+class _AiConfigRow extends StatefulWidget {
   const _AiConfigRow({required this.controller});
 
   final GameController controller;
 
   @override
+  State<_AiConfigRow> createState() => _AiConfigRowState();
+}
+
+class _AiConfigRowState extends State<_AiConfigRow> {
+  bool _showLabels = true;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      color: Colors.white.withValues(alpha: 0.6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            children: [
-              Checkbox(
-                value: controller.redIsAi,
-                onChanged: (v) => controller.setRedAi(v ?? false),
-              ),
-              const Text('红方电脑'),
-            ],
-          ),
-          const SizedBox(width: 16),
-          Row(
-            children: [
-              Checkbox(
-                value: controller.blackIsAi,
-                onChanged: (v) => controller.setBlackAi(v ?? false),
-              ),
-              const Text('黑方电脑'),
-            ],
-          ),
-          if (controller.aiThinking) ...[
-            const SizedBox(width: 16),
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 6),
-            const Text('电脑思考中...'),
-          ],
-        ],
-      ),
+    final ctrl = widget.controller;
+    return AdjustableButtonBar(
+      defaultPinnedIds: const {'红方电脑', '黑方电脑', '显示文字', '返回'},
+      maxPinnedCount: 4,
+      buttons: [
+        FreeButton(
+          id: '红方电脑',
+          icon: Icons.computer,
+          label: '红方电脑',
+          checked: ctrl.redIsAi,
+          onTap: () => ctrl.setRedAi(!ctrl.redIsAi),
+          showLabel: _showLabels,
+        ),
+        FreeButton(
+          id: '黑方电脑',
+          icon: Icons.computer,
+          label: '黑方电脑',
+          checked: ctrl.blackIsAi,
+          onTap: () => ctrl.setBlackAi(!ctrl.blackIsAi),
+          showLabel: _showLabels,
+        ),
+        FreeButton(
+          id: '显示文字',
+          icon: Icons.text_fields,
+          label: _showLabels ? '隐藏文字' : '显示文字',
+          checked: _showLabels,
+          onTap: () => setState(() => _showLabels = !_showLabels),
+          showLabel: _showLabels,
+        ),
+        FreeButton(
+          id: '返回',
+          icon: Icons.arrow_back,
+          label: '返回',
+          onTap: () => Navigator.of(context).maybePop(),
+          showLabel: _showLabels,
+        ),
+      ],
     );
   }
 }
