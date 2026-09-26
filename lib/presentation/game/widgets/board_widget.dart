@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/assets/asset_catalog.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/config/board_calibration_store.dart';
 import '../../../core/config/config_manager.dart';
 import '../../../core/constants/board_constants.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../domain/models/board.dart' as m;
 import '../../../domain/models/piece.dart';
 import '../../../domain/models/position.dart';
+import '../../../presentation/shared/board_grid_painter.dart';
 import '../../../utils/coordinate_utils.dart';
 import 'move_arrow_painter.dart';
 import 'move_highlight.dart';
@@ -51,28 +52,43 @@ class BoardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 监听配置变化：设置页切换棋盘/棋子样式后，整个棋盘子树立即刷新。
+    // 监听配置变化：设置页切换棋盘/棋子样式、修改棋盘适配后，
+    // 整个棋盘子树立即刷新。
     return ListenableBuilder(
-      listenable: ConfigManager.instance,
+      listenable: Listenable.merge([
+        ConfigManager.instance,
+        BoardCalibrationStore.instance,
+      ]),
       builder: (context, _) => LayoutBuilder(
       builder: (context, constraints) {
         final boardWidth = constraints.maxWidth;
-        // 棋盘 9×10。边缘棋子以最外侧交叉点为圆心，向外伸出 pieceSize/2，
-        // 因此边距按棋子半径动态计算，保证棋子完整显示。
-        const pieceRatio = 0.85;
-        const outerMargin = 4.0;
-        final cellWidth = (boardWidth - outerMargin * 2) /
-            (BoardConstants.columnCount - 1 + pieceRatio);
-        final cellHeight = cellWidth; // 方格接近正方形
-        final pad = cellWidth * pieceRatio / 2 + outerMargin;
-        final boardHeight = cellHeight * (BoardConstants.rowCount - 1) + pad * 2;
-        final pieceSize = cellWidth * pieceRatio;
-        final padding = EdgeInsets.all(pad);
+        final boardSize = BoardLayout.sizeForWidth(boardWidth);
+        final boardHeight = boardSize.height;
 
         final boardCfg = ConfigManager.instance.config.board;
         final useImageBoard =
             boardCfg.boardType == BoardConfig.kTypeImage &&
                 boardCfg.boardStyle.isNotEmpty;
+
+        // 默认（经典棋盘/未适配的图片棋盘）使用统一的标准布局；
+        // 已适配的图片棋盘按用户对齐的左上/右下交叉点反推格距。
+        var metrics = BoardLayout.defaultMetrics(boardSize);
+        if (useImageBoard) {
+          final cal =
+              BoardCalibrationStore.instance.get(boardCfg.boardStyle);
+          if (cal != null) {
+            metrics = BoardLayout.metricsFromRect(Rect.fromLTRB(
+              cal.left * boardSize.width,
+              cal.top * boardSize.height,
+              cal.right * boardSize.width,
+              cal.bottom * boardSize.height,
+            ));
+          }
+        }
+        final cellWidth = metrics.cellW;
+        final cellHeight = metrics.cellH;
+        final padding = metrics.padding;
+        final pieceSize = cellWidth * BoardLayout.pieceRatio;
 
         return SizedBox(
           width: boardWidth,
@@ -109,7 +125,15 @@ class BoardWidget extends StatelessWidget {
                 else
                   CustomPaint(
                     size: Size(boardWidth, boardHeight),
-                    painter: _BoardPainter(padding: padding, cellW: cellWidth, cellH: cellHeight),
+                    painter: BoardGridPainter(
+                      gridRect: Rect.fromLTWH(
+                        padding.left,
+                        padding.top,
+                        cellWidth * (BoardConstants.columnCount - 1),
+                        cellHeight * (BoardConstants.rowCount - 1),
+                      ),
+                      drawBackground: true,
+                    ),
                   ),
                 // 1.5 上一步走法标注：起点与终点各画一个高亮圈。
                 // 绘制在棋子之下，终点处的棋子会盖住填充，外圈描边仍可见。
@@ -230,100 +254,6 @@ class BoardWidget extends StatelessWidget {
       child: Center(child: child),
     );
   }
-}
-
-class _BoardPainter extends CustomPainter {
-  const _BoardPainter({
-    required this.padding,
-    required this.cellW,
-    required this.cellH,
-  });
-
-  final EdgeInsets padding;
-  final double cellW;
-  final double cellH;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = AppTheme.boardLine
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-
-    final bg = Paint()..color = AppTheme.boardBackground;
-    canvas.drawRect(Offset.zero & size, bg);
-
-    final left = padding.left;
-    final top = padding.top;
-    final cols = BoardConstants.columnCount;
-    final rows = BoardConstants.rowCount;
-
-    // 横线 10 条
-    for (var r = 0; r < rows; r++) {
-      final y = top + r * cellH;
-      canvas.drawLine(Offset(left, y), Offset(left + (cols - 1) * cellW, y), line);
-    }
-    // 竖线 9 条(中间 7 条在楚河处断开)
-    for (var c = 0; c < cols; c++) {
-      final x = left + c * cellW;
-      // 边缘两条贯穿
-      if (c == 0 || c == cols - 1) {
-        canvas.drawLine(Offset(x, top), Offset(x, top + (rows - 1) * cellH), line);
-      } else {
-        // 上半
-        canvas.drawLine(Offset(x, top),
-            Offset(x, top + 4 * cellH), line);
-        // 下半
-        canvas.drawLine(Offset(x, top + 5 * cellH),
-            Offset(x, top + 9 * cellH), line);
-      }
-    }
-
-    // 九宫斜线
-    final palaceLine = Paint()
-      ..color = AppTheme.boardLine
-      ..strokeWidth = 1.2;
-    // 黑方九宫
-    canvas.drawLine(
-      Offset(left + 3 * cellW, top),
-      Offset(left + 5 * cellW, top + 2 * cellH),
-      palaceLine,
-    );
-    canvas.drawLine(
-      Offset(left + 5 * cellW, top),
-      Offset(left + 3 * cellW, top + 2 * cellH),
-      palaceLine,
-    );
-    // 红方九宫
-    canvas.drawLine(
-      Offset(left + 3 * cellW, top + 7 * cellH),
-      Offset(left + 5 * cellW, top + 9 * cellH),
-      palaceLine,
-    );
-    canvas.drawLine(
-      Offset(left + 5 * cellW, top + 7 * cellH),
-      Offset(left + 3 * cellW, top + 9 * cellH),
-      palaceLine,
-    );
-
-    // 楚河汉界文字
-    final ts = TextSpan(
-      text: '楚 河                        汉 界',
-      style: TextStyle(color: AppTheme.boardLine, fontSize: cellW * 0.55),
-    );
-    final tp = TextPainter(text: ts, textDirection: TextDirection.ltr)
-      ..layout();
-    tp.paint(
-      canvas,
-      Offset(left + cellW, top + 4 * cellH + (cellH - tp.height) / 2),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _BoardPainter oldDelegate) =>
-      oldDelegate.padding != padding ||
-      oldDelegate.cellW != cellW ||
-      oldDelegate.cellH != cellH;
 }
 
 /// 上一步走法标注绘制器：在起点与终点各画一个高亮圈。

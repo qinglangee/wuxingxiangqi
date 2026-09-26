@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/assets/asset_catalog.dart';
 import '../../core/config/app_config.dart';
+import '../../core/config/board_calibration_store.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/models/piece.dart';
+import 'board_calibration_screen.dart';
 import 'engine_settings_widget.dart';
 
 /// 设置页面：用标签页分成四个部分。
@@ -339,52 +341,83 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
   }
 
   /// 棋盘选择网格：第一项经典绘制（默认），之后为所有棋盘图片。
+  /// 每个图片棋盘左上角带「适配」按钮，可对图片格子位置做手动对齐。
   Widget _buildBoardGrid() {
     final useImage = _cfg.boardType == BoardConfig.kTypeImage;
-    return FutureBuilder<List<String>>(
-      future: _boards,
-      builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-        }
-        final files = snap.data ?? const <String>[];
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 0.72,
-          ),
-          itemCount: files.length + 1,
-          itemBuilder: (context, i) {
-            if (i == 0) {
+    return ListenableBuilder(
+      listenable: BoardCalibrationStore.instance,
+      builder: (context, _) => FutureBuilder<List<String>>(
+        future: _boards,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+          }
+          final files = snap.data ?? const <String>[];
+          return GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.72,
+            ),
+            itemCount: files.length + 1,
+            itemBuilder: (context, i) {
+              if (i == 0) {
+                return _OptionTile(
+                  selected: !useImage,
+                  label: '经典绘制（默认）',
+                  onTap: () => _pickBoard(null),
+                  child: const Icon(Icons.draw,
+                      size: 40, color: Color(0xFF8B6B3D)),
+                );
+              }
+              final name = files[i - 1];
+              final calibrated = BoardCalibrationStore.instance.has(name);
               return _OptionTile(
-                selected: !useImage,
-                label: '经典绘制（默认）',
-                onTap: () => _pickBoard(null),
-                child: const Icon(Icons.draw,
-                    size: 40, color: Color(0xFF8B6B3D)),
-              );
-            }
-            final name = files[i - 1];
-            return _OptionTile(
-              selected: useImage && _cfg.boardStyle == name,
-              label: _prettyName(name),
-              onTap: () => _pickBoard(name),
-              child: Image.asset(
-                AssetCatalog.boardAsset(name),
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const Icon(
-                  Icons.broken_image,
-                  size: 36,
-                  color: Color(0xFFB0A48A),
+                selected: useImage && _cfg.boardStyle == name,
+                label: _prettyName(name),
+                onTap: () => _pickBoard(name),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.asset(
+                        AssetCatalog.boardAsset(name),
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Icon(
+                          Icons.broken_image,
+                          size: 36,
+                          color: Color(0xFFB0A48A),
+                        ),
+                      ),
+                    ),
+                    // 适配按钮：打开棋盘对齐页面；已适配时高亮并带勾
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      child: _CalibrateButton(
+                        calibrated: calibrated,
+                        onPressed: () => _openCalibration(name),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            );
-          },
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _openCalibration(String boardFileName) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BoardCalibrationScreen(
+          boardFileName: boardFileName,
+          boardDisplayName: _prettyName(boardFileName),
+        ),
+      ),
     );
   }
 
@@ -455,6 +488,42 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
   static String _prettyName(String fileName) {
     final dot = fileName.lastIndexOf('.');
     return dot > 0 ? fileName.substring(0, dot) : fileName;
+  }
+}
+
+/// 棋盘缩略图上的「适配」小按钮：已适配时用主题色高亮并显示勾，
+/// 未适配时为中性描边图标。点击进入棋盘格子对齐页面。
+class _CalibrateButton extends StatelessWidget {
+  const _CalibrateButton({
+    required this.calibrated,
+    required this.onPressed,
+  });
+
+  final bool calibrated;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: calibrated
+          ? const Color(0xCC8B5A2B)
+          : Colors.white.withValues(alpha: 0.75),
+      shape: const CircleBorder(
+        side: BorderSide(color: Color(0xFF8B5A2B), width: 0.8),
+      ),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            calibrated ? Icons.check : Icons.tune,
+            size: 15,
+            color: calibrated ? Colors.white : const Color(0xFF8B5A2B),
+          ),
+        ),
+      ),
+    );
   }
 }
 
