@@ -169,7 +169,6 @@ class _CanjuBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return AdjustableButtonBar(
       defaultPinnedIds: const {'上一局', '下一局', '提示', '重开', '悔棋'},
-      maxPinnedCount: 5,
       buttons: [
         FreeButton(
           id: '上一局',
@@ -280,9 +279,8 @@ class _AiConfigRowState extends State<_AiConfigRow> {
     // 「显示文字」切换由 AdjustableButtonBar 内置按钮负责（默认不常驻）
     return AdjustableButtonBar(
       defaultPinnedIds: const {
-        '返回','重开', '红方电脑', '黑方电脑', '分析', '出招', '分支', '反转',
+        '返回','重开', '红AI', '黑AI', '分析', '出招', '分支', '反转',
       },
-      maxPinnedCount: 7,
       buttons: [
         FreeButton(
           id: '返回',
@@ -297,17 +295,17 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           onTap: ctrl.restart,
         ),
         FreeButton(
-          id: '红方电脑',
+          id: '红AI',
           icon: Icons.computer,
-          label: '红方电脑',
+          label: '红AI',
           checked: ctrl.redIsAi,
           onTap: () => ctrl.setRedAi(!ctrl.redIsAi),
           iconColor: const Color(0xFFC62828),
         ),
         FreeButton(
-          id: '黑方电脑',
+          id: '黑AI',
           icon: Icons.computer,
-          label: '黑方电脑',
+          label: '黑AI',
           checked: ctrl.blackIsAi,
           onTap: () => ctrl.setBlackAi(!ctrl.blackIsAi),
           iconColor: const Color(0xFF1A1A1A),

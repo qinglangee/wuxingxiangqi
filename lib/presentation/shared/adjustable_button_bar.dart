@@ -59,7 +59,6 @@ class AdjustableButtonBar extends StatefulWidget {
     super.key,
     required this.buttons,
     this.defaultPinnedIds = const <String>{},
-    this.maxPinnedCount = 4,
   });
 
   /// 全部自由按钮（顺序为初始顺序）。
@@ -67,9 +66,6 @@ class AdjustableButtonBar extends StatefulWidget {
 
   /// 默认设为常驻的按钮 id 集合。
   final Set<String> defaultPinnedIds;
-
-  /// 常驻按钮数量上限（防止常驻行溢出）。
-  final int maxPinnedCount;
 
   @override
   State<AdjustableButtonBar> createState() => _AdjustableButtonBarState();
@@ -113,11 +109,8 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   void initState() {
     super.initState();
     _order = _allButtons.map((b) => b.id).toList();
+    // 常驻数量不设上限：用户愿意放多少就放多少
     _pinned = widget.defaultPinnedIds.where(_order.contains).toSet();
-    // 超裁到上限
-    while (_pinned.length > widget.maxPinnedCount) {
-      _pinned.remove(_pinned.last);
-    }
   }
 
   @override
@@ -190,7 +183,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
     setState(() {
       if (_pinned.contains(id)) {
         _pinned.remove(id);
-      } else if (_pinned.length < widget.maxPinnedCount) {
+      } else {
         _pinned.add(id);
       }
     });
@@ -460,7 +453,6 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                   index: i,
                   button: b,
                   pinned: isPinned,
-                  canPin: isPinned || _pinned.length < widget.maxPinnedCount,
                   onTogglePin: () => _togglePin(b.id),
                 );
               },
@@ -534,7 +526,6 @@ class _EditRow extends StatelessWidget {
     required this.index,
     required this.button,
     required this.pinned,
-    required this.canPin,
     required this.onTogglePin,
   });
 
@@ -542,7 +533,6 @@ class _EditRow extends StatelessWidget {
   final int index;
   final FreeButton button;
   final bool pinned;
-  final bool canPin;
   final VoidCallback onTogglePin;
 
   @override
@@ -558,7 +548,7 @@ class _EditRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            onPressed: canPin ? onTogglePin : null,
+            onPressed: onTogglePin,
             icon: Icon(
               pinned ? Icons.star : Icons.star_border,
               size: 22,
