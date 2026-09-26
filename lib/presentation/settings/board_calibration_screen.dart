@@ -34,11 +34,15 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
   /// 正在拖动的手柄：0=左上角，1=右下角，null=未拖动。
   int? _dragging;
 
-  /// 手柄命中半径。
-  static const double _hitRadius = 36;
+  /// 本次拖动起始时的手指位置与角点位置（用于按 1/3 速度跟随）。
+  Offset _dragStartPointer = Offset.zero;
+  Offset _dragStartCorner = Offset.zero;
 
-  /// 扇形手柄半径。
-  static const double _fanRadius = 30;
+  /// 手柄命中半径（等于扇形半径）。
+  double get _hitRadius => _fanRadius;
+
+  /// 扇形手柄半径：棋盘宽度的一半。
+  double get _fanRadius => _canvas.width / 2;
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +168,8 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
     final dBR = (p - grid.bottomRight).distance;
     if (dTL <= _hitRadius || dBR <= _hitRadius) {
       _dragging = dTL <= dBR ? 0 : 1;
+      _dragStartPointer = p;
+      _dragStartCorner = _dragging == 0 ? grid.topLeft : grid.bottomRight;
     }
   }
 
@@ -172,12 +178,15 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
     final size = _canvas;
     // 保证网格至少容得下 8×9 个最小格子
     final minCell = 8.0;
+    // 角点按手指移动量的 1/3 速度跟随，便于精细对齐
+    final moved = (p - _dragStartPointer) / 3;
+    final target = _dragStartCorner + moved;
     setState(() {
       final g = _grid!;
       if (_dragging == 0) {
         _grid = Rect.fromLTRB(
-          p.dx.clamp(0.0, g.right - minCell * 8),
-          p.dy.clamp(0.0, g.bottom - minCell * 9),
+          target.dx.clamp(0.0, g.right - minCell * 8),
+          target.dy.clamp(0.0, g.bottom - minCell * 9),
           g.right,
           g.bottom,
         );
@@ -185,8 +194,8 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
         _grid = Rect.fromLTRB(
           g.left,
           g.top,
-          p.dx.clamp(g.left + minCell * 8, size.width),
-          p.dy.clamp(g.top + minCell * 9, size.height),
+          target.dx.clamp(g.left + minCell * 8, size.width),
+          target.dy.clamp(g.top + minCell * 9, size.height),
         );
       }
     });
@@ -243,7 +252,8 @@ class _HandlePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final fill = Paint()..color = _color.withValues(alpha: 0.22);
+    // 扇形半径较大（棋盘宽度一半），填充用很低的透明度，避免遮挡棋盘
+    final fill = Paint()..color = _color.withValues(alpha: 0.08);
     final stroke = Paint()
       ..color = _color
       ..style = PaintingStyle.stroke

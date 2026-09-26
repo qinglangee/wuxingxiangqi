@@ -491,7 +491,7 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
   }
 }
 
-/// 棋盘缩略图上的「适配」小按钮：已适配时用主题色高亮并显示勾，
+/// 棋盘缩略图上的「适配」小按钮：已适配时变为绿色（图标不变），
 /// 未适配时为中性描边图标。点击进入棋盘格子对齐页面。
 class _CalibrateButton extends StatelessWidget {
   const _CalibrateButton({
@@ -502,23 +502,30 @@ class _CalibrateButton extends StatelessWidget {
   final bool calibrated;
   final VoidCallback onPressed;
 
+  /// 已适配的绿色。
+  static const _green = Color(0xFF2E7D32);
+
   @override
   Widget build(BuildContext context) {
     return Material(
       color: calibrated
-          ? const Color(0xCC8B5A2B)
+          ? _green.withValues(alpha: 0.85)
           : Colors.white.withValues(alpha: 0.75),
-      shape: const CircleBorder(
-        side: BorderSide(color: Color(0xFF8B5A2B), width: 0.8),
+      shape: CircleBorder(
+        side: BorderSide(
+          color: calibrated ? _green : const Color(0xFF8B5A2B),
+          width: 0.8,
+        ),
       ),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onPressed,
         child: Padding(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(8),
           child: Icon(
-            calibrated ? Icons.check : Icons.tune,
-            size: 15,
+            // 适配前后使用同一图标，仅改变颜色
+            Icons.tune,
+            size: 30,
             color: calibrated ? Colors.white : const Color(0xFF8B5A2B),
           ),
         ),
@@ -579,7 +586,7 @@ class _OptionTile extends StatelessWidget {
                 right: 4,
                 top: 4,
                 child: Icon(Icons.check_circle,
-                    size: 18, color: Color(0xFF8B5A2B)),
+                    size: 36, color: Color(0xFF2E7D32)),
               ),
           ],
         ),
