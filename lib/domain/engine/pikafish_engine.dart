@@ -20,6 +20,18 @@ class EvalFileMissingException implements Exception {
   String toString() => '引擎权重文件 pikafish.nnue 未配置或不存在';
 }
 
+/// 引擎完成握手但报告权重文件加载失败（典型：Windows 下路径含中文，
+/// Pikafish 窄字符接口无法打开）。由启动流程捕获后复制到 ASCII 数据
+/// 目录并重试。
+class _EvalFileLoadException implements Exception {
+  _EvalFileLoadException(this.path);
+
+  final String path;
+
+  @override
+  String toString() => '引擎权重文件加载失败: $path';
+}
+
 /// 引擎一次思考的结果。
 ///
 /// - [move]：最佳走法 UCI（如 "b2c2"），异常时为 "(none)"；
@@ -36,9 +48,11 @@ typedef EngineBestMove = ({String move, List<String> pv, int? mate});
 ///   （`libpikafish_dotprod.so` 优先，握手失败回退 `libpikafish.so`），
 ///   安装后由系统释放到可执行的原生库目录。Android 10+ 禁止从应用
 ///   数据/缓存目录执行代码，必须走原生库路径，无需也不能 chmod。
-/// - 权重文件 pikafish.nnue 不随包分发：由用户选择文件后复制到应用
-///   支持目录，绝对路径记录在 [EngineConfig.evalFilePath]；缺失时
-///   启动抛出 [EvalFileMissingException]。
+/// - 权重文件 pikafish.nnue 不随包分发：由用户选择文件，Windows 下
+///   ASCII 路径直接使用原文件；路径无法加载时自动复制到应用数据目录
+///   （文档目录/wuxingxingqi）后重试，路径记录在
+///   [EngineConfig.evalFilePath]；未配置或文件不存在时启动抛出
+///   [EvalFileMissingException]。
 class PikafishEngine {
   PikafishEngine._();
 
@@ -47,6 +61,9 @@ class PikafishEngine {
 
   Process? _process;
   bool _ready = false;
+
+  /// 本次握手中引擎是否报告权重文件加载失败（网络文件未成功加载）。
+  bool _evalLoadFailed = false;
 
   /// 启动握手锁：多个调用方共享同一次启动；失败后允许重试。
   Future<void>? _starting;
@@ -104,82 +121,135 @@ class PikafishEngine {
   }
 
   Future<void> _doStart() async {
-    try {
-      final (:exeCandidates, :dirPath, :evalFilePath) = await _prepareFiles();
-      Object? lastError;
-
-      // 逐个尝试可执行文件：Android 上先 dotprod 版本，
-      // 握手失败（如 CPU 不支持 dotprod 指令而 SIGILL）则回退通用版本。
-      for (final exePath in exeCandidates) {
-        try {
-          // 工作目录设为临时目录；权重以完整路径传入，不依赖工作目录。
-          _process = await Process.start(
-            exePath,
-            const [],
-            workingDirectory: dirPath,
-          );
-          _stdoutSub = _process!.stdout
-              .transform(utf8.decoder)
-              .transform(const LineSplitter())
-              .listen(_onLine);
-          _stderrSub = _process!.stderr
-              .transform(utf8.decoder)
-              .transform(const LineSplitter())
-              .listen((line) => debugPrint('[pikafish stderr] $line'));
-
-          // 每次启动使用全新的握手信号
-          final uciok = Completer<void>();
-          final readyok = Completer<void>();
-          _uciokCompleter = uciok;
-          _readyokCompleter = readyok;
-
-          // 进程提前退出（典型：dotprod 版在不支持的 CPU 上立即崩溃）
-          // 时立刻让握手失败，不必等满超时，快速切换到下一个候选。
-          unawaited(_process!.exitCode.then((code) {
-            if (!uciok.isCompleted) {
-              uciok.completeError(
-                  StateError('引擎进程提前退出(code=$code): $exePath'));
-            }
-            if (!readyok.isCompleted) {
-              readyok.completeError(
-                  StateError('引擎进程提前退出(code=$code): $exePath'));
-            }
-          }));
-
-          // UCI 握手：uci → uciok 后才能 setoption，再 isready → readyok
-          _send('uci');
-          await uciok.future.timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => throw TimeoutException('引擎 uci 握手超时'),
-          );
-          // 显式指定权重文件完整路径
-          _send('setoption name EvalFile value $evalFilePath');
-          // 应用用户配置的引擎选项（MultiPV/线程/哈希/棋规）
-          applyOptions();
-          _send('isready');
-          await readyok.future.timeout(
-            const Duration(seconds: 20),
-            onTimeout: () => throw TimeoutException('引擎就绪超时(权重加载?)'),
-          );
-          _ready = true;
-          debugPrint('[pikafish] 引擎启动成功: $exePath');
-          return;
-        } catch (e) {
-          lastError = e;
-          debugPrint('[pikafish] $exePath 启动失败: $e');
-          // 清理本次失败的进程与订阅，再尝试下一个候选
+    // 权重路径不可用时（典型：Windows 非 ASCII 路径导致窄字符打开失败），
+    // 把原文件复制到 ASCII 的应用数据目录后整体重试一次。
+    var evalFallbackDone = false;
+    while (true) {
+      try {
+        await _startWithCandidates();
+        return;
+      } on _EvalFileLoadException catch (e) {
+        if (evalFallbackDone || !Platform.isWindows) {
+          debugPrint('[pikafish] 权重文件加载失败且无法回退: ${e.path}');
           await _teardownProcess();
+          _starting = null;
+          rethrow;
         }
+        evalFallbackDone = true;
+        debugPrint('[pikafish] 权重路径引擎无法加载，复制到数据目录后重试: ${e.path}');
+        await _fallbackCopyEvalFile(e.path);
+      } catch (e) {
+        // 启动失败要彻底清理，使下次 start() 能重新拉起进程
+        debugPrint('[pikafish] 启动失败: $e');
+        await _teardownProcess();
+        _starting = null; // 允许下次调用重新启动
+        rethrow;
       }
-
-      throw StateError('所有引擎版本均启动失败: $lastError');
-    } catch (e) {
-      // 启动失败要彻底清理，使下次 start() 能重新拉起进程
-      debugPrint('[pikafish] 启动失败: $e');
-      await _teardownProcess();
-      _starting = null; // 允许下次调用重新启动
-      rethrow;
     }
+  }
+
+  /// 用当前配置准备文件并逐个尝试可执行候选，握手全部成功后返回。
+  Future<void> _startWithCandidates() async {
+    final (:exeCandidates, :dirPath, :evalFilePath) = await _prepareFiles();
+    Object? lastError;
+
+    // 逐个尝试可执行文件：Android 上先 dotprod 版本，
+    // 握手失败（如 CPU 不支持 dotprod 指令而 SIGILL）则回退通用版本。
+    for (final exePath in exeCandidates) {
+      try {
+        // 工作目录设为临时目录；权重以完整路径传入，不依赖工作目录。
+        _process = await Process.start(
+          exePath,
+          const [],
+          workingDirectory: dirPath,
+        );
+        _evalLoadFailed = false;
+        _stdoutSub = _process!.stdout
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .listen(_onLine);
+        _stderrSub = _process!.stderr
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .listen((line) => debugPrint('[pikafish stderr] $line'));
+
+        // 每次启动使用全新的握手信号
+        final uciok = Completer<void>();
+        final readyok = Completer<void>();
+        _uciokCompleter = uciok;
+        _readyokCompleter = readyok;
+
+        // 进程提前退出（典型：dotprod 版在不支持的 CPU 上立即崩溃）
+        // 时立刻让握手失败，不必等满超时，快速切换到下一个候选。
+        unawaited(_process!.exitCode.then((code) {
+          if (!uciok.isCompleted) {
+            uciok.completeError(
+                StateError('引擎进程提前退出(code=$code): $exePath'));
+          }
+          if (!readyok.isCompleted) {
+            readyok.completeError(
+                StateError('引擎进程提前退出(code=$code): $exePath'));
+          }
+        }));
+
+        // UCI 握手：uci → uciok 后才能 setoption，再 isready → readyok
+        _send('uci');
+        await uciok.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw TimeoutException('引擎 uci 握手超时'),
+        );
+        // 显式指定权重文件完整路径
+        _send('setoption name EvalFile value $evalFilePath');
+        // 应用用户配置的引擎选项（MultiPV/线程/哈希/棋规）
+        applyOptions();
+        _send('isready');
+        await readyok.future.timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TimeoutException('引擎就绪超时(权重加载?)'),
+        );
+        // readyok 不代表权重加载成功：路径打不开时引擎仅打印 ERROR
+        // 仍会就绪，这里必须显式检查。
+        if (_evalLoadFailed) {
+          throw _EvalFileLoadException(evalFilePath);
+        }
+        _ready = true;
+        debugPrint('[pikafish] 引擎启动成功: $exePath');
+        return;
+      } catch (e) {
+        lastError = e;
+        debugPrint('[pikafish] $exePath 启动失败: $e');
+        // 权重加载失败对所有可执行候选结论一致，直接交给外层回退
+        if (e is _EvalFileLoadException) {
+          await _teardownProcess();
+          rethrow;
+        }
+        // 清理本次失败的进程与订阅，再尝试下一个候选
+        await _teardownProcess();
+      }
+    }
+
+    throw StateError('所有引擎版本均启动失败: $lastError');
+  }
+
+  /// 把引擎无法加载的权重原文件复制到纯 ASCII 的应用数据目录，
+  /// 并更新引擎配置；随后调用方会以新路径重新启动引擎。
+  Future<void> _fallbackCopyEvalFile(String badPath) async {
+    final src = File(badPath);
+    if (!await src.exists()) {
+      throw EvalFileMissingException();
+    }
+    final dataDir = await ConfigManager.instance.dataDirPath;
+    final target = File(
+      '$dataDir${Platform.pathSeparator}pikafish.nnue',
+    );
+    if (!await target.parent.exists()) {
+      await target.parent.create(recursive: true);
+    }
+    await src.copy(target.path);
+    await ConfigManager.instance.updateEngine((c) {
+      c.evalFilePath = target.path;
+      return c;
+    });
   }
 
   void _onLine(String line) {
@@ -196,6 +266,13 @@ class PikafishEngine {
     // info ... depth .. multipv N score cp/mate .. time .. nps .. pv ...
     // 只处理含 pv 的行：更新该路候选并广播一份完整快照。
     if (line.startsWith('info ')) {
+      // 权重文件无法加载时引擎会输出：
+      // "info string ERROR: The network file <path> was not loaded successfully."
+      if (line.contains('ERROR') &&
+          line.contains('network file') &&
+          line.contains('not loaded')) {
+        _evalLoadFailed = true;
+      }
       _parseInfo(line);
       return;
     }
@@ -519,14 +596,11 @@ class PikafishEngine {
     if (!await dir.exists()) await dir.create(recursive: true);
 
     // 权重文件：不再随包分发，必须由用户在引导弹窗中选择并记录路径。
-    // Pikafish 在部分平台（Windows）以窄字符路径打开权重，非 ASCII
-    // （如中文目录）会加载失败，因此这类路径同样视为无效。
+    // 路径的字符集是否被引擎接受（Windows 窄字符接口）不在预检阶段
+    // 判定——先让引擎尝试，若报告加载失败则由启动流程复制到 ASCII
+    // 数据目录后重试。这里只拦截"未配置/文件已不存在"。
     final evalPath = ConfigManager.instance.config.engine.evalFilePath;
-    final asciiOnly =
-        evalPath != null && evalPath.codeUnits.every((c) => c < 128);
-    if (evalPath == null ||
-        !asciiOnly ||
-        !File(evalPath).existsSync()) {
+    if (evalPath == null || !File(evalPath).existsSync()) {
       throw EvalFileMissingException();
     }
 

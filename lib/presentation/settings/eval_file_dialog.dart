@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/config/config_manager.dart';
 import '../../domain/engine/pikafish_engine.dart';
@@ -11,36 +10,44 @@ import '../../domain/engine/pikafish_engine.dart';
 /// 引擎权重文件（pikafish.nnue）安装服务与引导对话框。
 ///
 /// 权重文件不随安装包分发：用户通过系统文件选择器选中自己保存的
-/// pikafish.nnue 后，应用把它复制到临时目录下的 pikafish 子目录
-/// （同时是引擎进程的工作目录），并将绝对路径写入引擎配置持久保存。
+/// pikafish.nnue 后：
+/// - Windows 上若所选路径为纯 ASCII（Pikafish 窄字符路径可以直接打开），
+///   则直接记录原路径使用，不做复制；
+/// - 路径含中文等非 ASCII 字符、或引擎报告无法加载时，再复制到应用
+///   默认数据目录（文档目录/wuxingxingqi），并记录副本路径。
 ///
-/// 必须使用该位置：Pikafish 在 Windows 上以窄字符路径打开权重，
-/// 应用支持目录含中文（如 `五星象棋`）时 UTF-8 路径无法被正确解析，
-/// 会报 "network file ... was not loaded successfully"。
+/// 最终使用的绝对路径写入引擎配置持久保存。
 class EvalFileService {
   EvalFileService._();
 
-  /// 权重文件的标准安装路径（临时目录/pikafish/pikafish.nnue，ASCII 路径）。
+  /// 权重文件回退副本的标准路径（应用数据目录/pikafish.nnue）。
   static Future<String> canonicalPath() async {
-    final tmp = await getTemporaryDirectory();
-    return p.join(tmp.path, 'pikafish', 'pikafish.nnue');
+    final dataDir = await ConfigManager.instance.dataDirPath;
+    return p.join(dataDir, 'pikafish.nnue');
   }
 
   /// 配置中记录的权重路径（可能已失效）。
   static String? get savedPath =>
       ConfigManager.instance.config.engine.evalFilePath;
 
-  /// 权重文件是否已就绪：已配置、路径为纯 ASCII（Pikafish 无法打开
-  /// 含中文等非 ASCII 字符的权重路径）且文件存在。
+  /// 权重文件是否已就绪：已配置且文件实际存在。
+  ///
+  /// 不再要求路径为纯 ASCII：非 ASCII 路径先交由引擎尝试，加载失败时
+  /// 引擎层会自动复制到数据目录后重试（仅 Windows）。
   static bool get isReady {
     final pth = savedPath;
-    return pth != null &&
-        pth.codeUnits.every((c) => c < 128) &&
-        File(pth).existsSync();
+    return pth != null && File(pth).existsSync();
   }
 
-  /// 弹出系统文件选择器让用户选择 pikafish.nnue，复制到标准路径，
-  /// 并保存路径到引擎配置。成功返回安装后的绝对路径，取消/失败返回 null。
+  /// 路径是否为纯 ASCII（Pikafish 在 Windows 上以窄字符打开权重，
+  /// 纯 ASCII 路径可直接使用，无需复制）。
+  static bool _isAscii(String path) => path.codeUnits.every((c) => c < 128);
+
+  /// 弹出系统文件选择器让用户选择 pikafish.nnue，确定最终使用的路径
+  /// 并保存到引擎配置。成功返回路径，取消返回 null。
+  ///
+  /// Windows + 纯 ASCII 路径：直接使用原文件，不复制；
+  /// 其余情况：复制到应用数据目录后使用副本。
   static Future<String?> pickAndInstall() async {
     // file_picker 13：单文件选择静态方法，返回 PlatformFile?
     final picked = await FilePicker.pickFile(
@@ -50,21 +57,33 @@ class EvalFileService {
     final srcPath = picked?.path;
     if (srcPath == null) return null;
 
-    final targetPath = await canonicalPath();
-    final target = File(targetPath);
-    if (!await target.parent.exists()) {
-      await target.parent.create(recursive: true);
+    final src = File(srcPath);
+    if (!await src.exists()) {
+      throw FileSystemException('所选权重文件不存在', srcPath);
     }
-    // 覆盖旧文件（重新选择时更新内容）
-    await File(srcPath).copy(targetPath);
+
+    String finalPath;
+    if (Platform.isWindows && _isAscii(srcPath)) {
+      // Windows 下纯 ASCII 路径可被引擎直接打开，无需复制
+      finalPath = srcPath;
+    } else {
+      // 非 ASCII 路径或非 Windows 平台：复制到应用数据目录的标准位置
+      finalPath = await canonicalPath();
+      final target = File(finalPath);
+      if (!await target.parent.exists()) {
+        await target.parent.create(recursive: true);
+      }
+      // 覆盖旧文件（重新选择时更新内容）
+      await src.copy(finalPath);
+    }
 
     await ConfigManager.instance.updateEngine((c) {
-      c.evalFilePath = targetPath;
+      c.evalFilePath = finalPath;
       return c;
     });
     // 权重更换后关闭旧引擎进程；下次分析/AI 走子时会以新权重自动重启
     await PikafishEngine.instance.dispose();
-    return targetPath;
+    return finalPath;
   }
 }
 
@@ -122,7 +141,8 @@ class EvalFileGuideDialog extends StatelessWidget {
             const SizedBox(height: 8),
             _step(1, '先把 pikafish.nnue 文件保存到手机或电脑的任意文件夹；'),
             _step(2, '点击下方「选择权重文件」按钮，在系统文件选择器中选中它；'),
-            _step(3, '应用会自动把文件复制到专用位置并保存，下次使用无需重复操作。'),
+            _step(3, 'Windows 上若路径不含中文等特殊字符会直接使用原文件，'
+                '否则应用会自动复制到专用数据目录并保存，下次无需重复操作。'),
             const SizedBox(height: 8),
             const Text(
               '若之后文件被清理导致不存在，会再次提示重新选择。',
