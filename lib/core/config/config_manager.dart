@@ -172,4 +172,14 @@ class ConfigManager extends ChangeNotifier {
     final dir = await getApplicationDocumentsDirectory();
     return File('${dir.path}${Platform.pathSeparator}$kFileName');
   }
+
+  String? _configFilePathCache;
+
+  /// 配置文件的完整绝对路径（异步获取并缓存）。
+  Future<String> get configFilePath async =>
+      _configFilePathCache ??= (await _file()).path;
+
+  /// 配置文件所在目录的绝对路径。
+  Future<String> get configDirPath async =>
+      File(await configFilePath).parent.path;
 }

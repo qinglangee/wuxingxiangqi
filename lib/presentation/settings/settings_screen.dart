@@ -61,53 +61,8 @@ class _SettingsScreenState extends State<SettingsScreen>
           const EngineSettingsWidget(),
           const _UiSettingsWidget(),
           const _PieceBoardSettings(),
-          const _SettingsPlaceholder(title: '其他设置', hint: '棋谱仓库等杂项设置（待实现）'),
+          const _OtherSettingsWidget(),
         ],
-      ),
-    );
-  }
-}
-
-/// 设置标签页统一占位：居中显示标题与提示文字。
-class _SettingsPlaceholder extends StatelessWidget {
-  const _SettingsPlaceholder({required this.title, required this.hint});
-
-  final String title;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.settings_suggest,
-              size: 48,
-              color: AppTheme.boardLine.withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF8B6B3D),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              hint,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFFB0A48A),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -209,6 +164,79 @@ class _UiSettingsWidget extends StatelessWidget {
                       style:
                           TextStyle(fontSize: 12.5, color: Color(0xFF6B4A28), height: 1.5),
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 其他设置：应用配置文件保存位置等信息
+// ---------------------------------------------------------------------------
+
+class _OtherSettingsWidget extends StatelessWidget {
+  const _OtherSettingsWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: ConfigManager.instance.configDirPath,
+      builder: (context, snapshot) {
+        final dir = snapshot.data;
+        return ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          children: [
+            const Text(
+              '存储位置',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF5A3A1A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDF6E3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFC9B68C)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '应用配置文件保存目录',
+                    style:
+                        TextStyle(fontSize: 13, color: Color(0xFF8B6B4A)),
+                  ),
+                  const SizedBox(height: 6),
+                  if (dir != null)
+                    SelectableText(
+                      dir,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: Color(0xFF3A2410),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    )
+                  else
+                    const Text(
+                      '读取中…',
+                      style:
+                          TextStyle(fontSize: 13, color: Color(0xFFB0A48A)),
+                    ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '配置文件名：${ConfigManager.kFileName}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF8B6B4A)),
                   ),
                 ],
               ),
