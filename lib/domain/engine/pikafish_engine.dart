@@ -595,13 +595,28 @@ class PikafishEngine {
     final dir = Directory('${tmp.path}/pikafish');
     if (!await dir.exists()) await dir.create(recursive: true);
 
-    // 权重文件：不再随包分发，必须由用户在引导弹窗中选择并记录路径。
+    // 权重文件：不再随包分发，必须由用户在引导弹窗中选择并记录路径，
+    // 或自行把 pikafish.nnue 放到应用默认数据目录。
     // 路径的字符集是否被引擎接受（Windows 窄字符接口）不在预检阶段
     // 判定——先让引擎尝试，若报告加载失败则由启动流程复制到 ASCII
-    // 数据目录后重试。这里只拦截"未配置/文件已不存在"。
-    final evalPath = ConfigManager.instance.config.engine.evalFilePath;
+    // 数据目录后重试。
+    var evalPath = ConfigManager.instance.config.engine.evalFilePath;
     if (evalPath == null || !File(evalPath).existsSync()) {
-      throw EvalFileMissingException();
+      // 配置缺失或原文件已不存在时，检查默认数据目录中是否有用户
+      // 手动放入的权重文件（引擎设置页已向用户展示该路径）。
+      final dataDir = await ConfigManager.instance.dataDirPath;
+      final autoPath =
+          '$dataDir${Platform.pathSeparator}pikafish.nnue';
+      if (File(autoPath).existsSync()) {
+        evalPath = autoPath;
+        // 识别后写回配置，后续直接使用
+        await ConfigManager.instance.updateEngine((c) {
+          c.evalFilePath = autoPath;
+          return c;
+        });
+      } else {
+        throw EvalFileMissingException();
+      }
     }
 
     final List<String> candidates;
