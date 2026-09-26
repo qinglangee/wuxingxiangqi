@@ -273,11 +273,10 @@ class _AiConfigRow extends StatefulWidget {
 }
 
 class _AiConfigRowState extends State<_AiConfigRow> {
-  bool _showLabels = true;
-
   @override
   Widget build(BuildContext context) {
     final ctrl = widget.controller;
+    // 「显示文字」切换由 AdjustableButtonBar 内置按钮负责（默认不常驻）
     return AdjustableButtonBar(
       defaultPinnedIds: const {
         '返回','重开', '红方电脑', '黑方电脑', '分析', '出招', '分支', '反转',
@@ -289,14 +288,12 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           icon: Icons.arrow_back,
           label: '返回',
           onTap: () => Navigator.of(context).maybePop(),
-          showLabel: _showLabels,
         ),
         FreeButton(
           id: '重开',
           icon: Icons.refresh,
           label: '重开',
           onTap: ctrl.restart,
-          showLabel: _showLabels,
         ),
         FreeButton(
           id: '红方电脑',
@@ -304,7 +301,6 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           label: '红方电脑',
           checked: ctrl.redIsAi,
           onTap: () => ctrl.setRedAi(!ctrl.redIsAi),
-          showLabel: _showLabels,
           iconColor: const Color(0xFFC62828),
         ),
         FreeButton(
@@ -313,7 +309,6 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           label: '黑方电脑',
           checked: ctrl.blackIsAi,
           onTap: () => ctrl.setBlackAi(!ctrl.blackIsAi),
-          showLabel: _showLabels,
           iconColor: const Color(0xFF1A1A1A),
         ),
         FreeButton(
@@ -322,21 +317,18 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           label: '分析',
           checked: ctrl.isAnalysisOn,
           onTap: () => ctrl.setAnalysis(!ctrl.isAnalysisOn),
-          showLabel: _showLabels,
         ),
         FreeButton(
           id: '出招',
           icon: Icons.bolt,
           label: '出招',
           onTap: ctrl.playBestMove,
-          showLabel: _showLabels,
         ),
         FreeButton(
           id: '分支',
           icon: Icons.account_tree_outlined,
           label: '分支',
           onTap: ctrl.searchBranch,
-          showLabel: _showLabels,
         ),
         FreeButton(
           id: '反转',
@@ -344,15 +336,6 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           label: '反转',
           checked: ctrl.boardFlipped,
           onTap: ctrl.toggleBoardFlip,
-          showLabel: _showLabels,
-        ),
-        FreeButton(
-          id: '显示文字',
-          icon: Icons.text_fields,
-          label: _showLabels ? '显示文字' : '隐藏文字',
-          checked: _showLabels,
-          onTap: () => setState(() => _showLabels = !_showLabels),
-          showLabel: _showLabels,
         ),
       ],
     );

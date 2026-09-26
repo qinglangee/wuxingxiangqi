@@ -50,6 +50,10 @@ class FreeButton {
 /// 抽屉通过 OverlayPortal 浮在界面之上，不占据布局空间；展开方向
 /// 随常驻栏位置自动调整：常驻栏位于屏幕上半部（如页面顶部的配置
 /// 条）时向下展开，位于下半部（如底部导航条）时向上展开。
+///
+/// 组件自带一个默认不常驻的「显示文字」按钮（追加在按钮列表末尾）：
+/// 点击可切换其它按钮的文字显示/隐藏，自身文字始终显示以便找回；
+/// 需要该功能时可将其设为常驻。
 class AdjustableButtonBar extends StatefulWidget {
   const AdjustableButtonBar({
     super.key,
@@ -77,6 +81,25 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   bool _drawerOpen = false;
   bool _editMode = false;
 
+  /// 其它按钮是否显示文字；由内置的「显示文字」按钮切换。
+  bool _showLabels = true;
+
+  /// 内置「显示文字」切换按钮的稳定 id（默认不常驻，可像普通按钮一样
+  /// 排序与设为常驻）。
+  static const String _toggleLabelsId = '__toggle_labels__';
+
+  /// 内置「显示文字」切换按钮：始终显示自身文字，方便在文字隐藏后找回。
+  FreeButton get _toggleLabelsButton => FreeButton(
+        id: _toggleLabelsId,
+        icon: Icons.text_fields,
+        label: _showLabels ? '显示文字' : '隐藏文字',
+        checked: _showLabels,
+        onTap: () => setState(() => _showLabels = !_showLabels),
+      );
+
+  /// 全部按钮：外部传入按钮 + 末尾内置的「显示文字」按钮。
+  List<FreeButton> get _allButtons => [...widget.buttons, _toggleLabelsButton];
+
   /// 抽屉的 OverlayPortal 控制器。用 overlayChildLayoutBuilder 命名构造，
   /// 在布局阶段即可拿到常驻栏可靠的 paint transform 进行定位
   ///（不经过 FollowerLayer，可避开 ReorderableListView 的 transform 报错）。
@@ -89,7 +112,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   @override
   void initState() {
     super.initState();
-    _order = widget.buttons.map((b) => b.id).toList();
+    _order = _allButtons.map((b) => b.id).toList();
     _pinned = widget.defaultPinnedIds.where(_order.contains).toSet();
     // 超裁到上限
     while (_pinned.length > widget.maxPinnedCount) {
@@ -102,17 +125,21 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
     super.didUpdateWidget(old);
     // 父组件每次 build 都会提供新的按钮列表（enabled/onTap 可能变化），
     // 这里按 id 对齐：保留既有顺序，追加新 id，丢弃已删除的 id。
-    final incoming = {for (final b in widget.buttons) b.id};
+    final incoming = {for (final b in _allButtons) b.id};
     _order = _order.where(incoming.contains).toList();
-    for (final b in widget.buttons) {
+    for (final b in _allButtons) {
       if (!_order.contains(b.id)) _order.add(b.id);
     }
     _pinned = _pinned.where(_order.contains).toSet();
   }
 
   Map<String, FreeButton> get _btnMap => {
-        for (final b in widget.buttons) b.id: b,
+        for (final b in _allButtons) b.id: b,
       };
+
+  /// 按钮实际是否显示文字：内置切换按钮始终显示，其余受 [_showLabels] 控制。
+  bool _effectiveShowLabel(FreeButton b) =>
+      b.id == _toggleLabelsId || (b.showLabel && _showLabels);
 
   List<FreeButton> get _pinnedButtons => _order
       .where((id) => _pinned.contains(id))
@@ -229,7 +256,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                             label: b.label,
                             checked: b.checked,
                             enabled: b.enabled,
-                            showLabel: b.showLabel,
+                            showLabel: _effectiveShowLabel(b),
                             iconColor: b.iconColor,
                             onTap: b.onTap,
                           ),
@@ -362,7 +389,11 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          for (final b in unpinned) _DrawerChip(button: b),
+                          for (final b in unpinned)
+                            _DrawerChip(
+                              button: b,
+                              showLabel: _effectiveShowLabel(b),
+                            ),
                         ],
                       ),
                     ),
@@ -445,8 +476,11 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
 
 /// 普通抽屉中的按钮 chip（图标 + 文字，横向）。
 class _DrawerChip extends StatelessWidget {
-  const _DrawerChip({required this.button});
+  const _DrawerChip({required this.button, required this.showLabel});
   final FreeButton button;
+
+  /// 是否显示文字（由 AdjustableButtonBar 统一计算后传入）。
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -459,14 +493,15 @@ class _DrawerChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
+          // 未选中时使用不透明浅底色，与面板米色背景区分开
           color: isChecked
               ? AppTheme.boardLine.withValues(alpha: 0.15)
-              : Colors.white.withValues(alpha: 0.6),
+              : const Color(0xFFFFFBEF),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isChecked
                 ? AppTheme.boardLine.withValues(alpha: 0.55)
-                : const Color(0xFFD8C69A),
+                : const Color(0xFFE0D0AE),
             width: isChecked ? 0.9 : 0.6,
           ),
         ),
@@ -474,7 +509,7 @@ class _DrawerChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(button.icon, size: 18, color: color),
-            if (button.showLabel) ...[
+            if (showLabel) ...[
               const SizedBox(width: 6),
               Text(
                 button.label,
