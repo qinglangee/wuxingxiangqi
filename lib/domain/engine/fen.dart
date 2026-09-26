@@ -63,10 +63,17 @@ class Fen {
   }
 
   /// 将 Position 转换为 UCI 坐标(如 a0)。
+  ///
+  /// UCI 行号从红方底线起算（红方底线 = 0，黑方底线 = 9），与
+  /// [parseUciMove] 互逆：Board 的 row 0 在黑方顶部，因此需换算。
   static String positionToUci(Position p) {
     final col = String.fromCharCode('a'.codeUnitAt(0) + p.col);
-    return '$col${p.row}';
+    return '$col${BoardConstants.rowCount - 1 - p.row}';
   }
+
+  /// 将一步走法（起点/终点）转换为 UCI 着法串(如 b2c3)。
+  static String moveToUci(Position from, Position to) =>
+      '${positionToUci(from)}${positionToUci(to)}';
 
   /// 将 FEN 串转换为棋盘与走子方。
   ///

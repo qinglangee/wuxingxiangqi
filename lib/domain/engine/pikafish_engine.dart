@@ -41,6 +41,34 @@ class _EvalFileLoadException implements Exception {
 ///   N 步内将杀对手，负数表示被将杀；普通分数（cp）时为 null。
 typedef EngineBestMove = ({String move, List<String> pv, int? mate});
 
+/// 发给引擎的局面描述。
+///
+/// 有历史着法时必须使用「初始局面 + 着法序列」的形式，引擎才能正确
+/// 处理重复局面判定与棋规（长打等），而不能只给当前局面的 FEN。
+/// - [startFen]：本局初始局面的 FEN（棋谱树根）；
+/// - [moves]：从初始局面到当前局面的全部历史 UCI 着法，按顺序排列；
+/// - [currentFen]：当前局面的 FEN，仅用于应用层与引擎 info 快照做
+///   一致性校验，不参与 `position` 命令。
+///
+/// [moves] 为空时退化为只发当前局面 FEN（浏览到根节点等场景）。
+class EnginePosition {
+  const EnginePosition({
+    required this.startFen,
+    required this.currentFen,
+    this.moves = const [],
+  });
+
+  final String startFen;
+  final String currentFen;
+  final List<String> moves;
+
+  /// 实际下发的 `position` 命令参数。
+  String toPositionCommand() {
+    if (moves.isEmpty) return 'fen $currentFen';
+    return 'fen $startFen moves ${moves.join(' ')}';
+  }
+}
+
 /// 皮卡鱼(Pikafish) UCI 象棋引擎封装。
 ///
 /// - Windows: 引擎 exe 从 assets 拷贝到临时目录后执行。
@@ -414,10 +442,12 @@ class PikafishEngine {
   /// 开始无限分析（`go infinite`）：引擎持续搜索并不断推送 info 流，
   /// 直到 [stopAnalysis] 或下一次搜索请求。
   ///
-  /// [fen] 为要分析的局面；[banMoves] 非空时通过 pikafish 的
-  /// `banmoves` 扩展禁止这些 UCI 招法（分支分析）。
+  /// [position] 描述要分析的局面；含历史着法时以
+  /// `position fen <初始FEN> moves ...` 下发，保证引擎正确处理棋规与
+  /// 重复判定。[banMoves] 非空时通过 pikafish 的 `banmoves` 扩展禁止
+  /// 这些 UCI 招法（分支分析）。
   Future<void> startAnalysis(
-    String fen, {
+    EnginePosition position, {
     List<String> banMoves = const [],
   }) async {
     await start();
@@ -431,10 +461,11 @@ class PikafishEngine {
     _lastPv = const [];
     _lastMate = null;
     _pvLines.clear();
-    _searchSide = fen.contains(' b ') ? Side.black : Side.red;
-    _searchFen = fen;
+    _searchSide =
+        position.currentFen.contains(' b ') ? Side.black : Side.red;
+    _searchFen = position.currentFen;
 
-    _send('position fen $fen');
+    _send('position ${position.toPositionCommand()}');
     if (banMoves.isEmpty) {
       _send('go infinite');
     } else {
@@ -470,14 +501,14 @@ class PikafishEngine {
     _send('stop');
   }
 
-  /// 给定 FEN 与思考时间(毫秒)，返回最佳走法(UCI 字符串，如 "b2c2")。
+  /// 给定局面与思考时间(毫秒)，返回最佳走法(UCI 字符串，如 "b2c2")。
   ///
   /// [moveTimeMs] 会被限制在 [EngineConfig.kMinMoveTimeMs]..[maxMoveTimeMs]
   /// 范围内；[depth] 非 null 时以 `go depth N` 搜索（忽略 movetime）。
   /// 若本调用是 [notifyNewGame] 之后引擎本局第一次被调用，会先发送一次
-  /// `ucinewgame`，随后发送当前请求的 [fen]。
+  /// `ucinewgame`，随后按 [position] 下发局面（含历史着法）。
   Future<EngineBestMove> bestMove(
-    String fen, {
+    EnginePosition position, {
     int moveTimeMs = 800,
     int? depth,
   }) async {
@@ -494,8 +525,9 @@ class PikafishEngine {
     _lastPv = const [];
     _lastMate = null;
     _pvLines.clear();
-    _searchSide = fen.contains(' b ') ? Side.black : Side.red;
-    _searchFen = fen;
+    _searchSide =
+        position.currentFen.contains(' b ') ? Side.black : Side.red;
+    _searchFen = position.currentFen;
 
     final completer = Completer<EngineBestMove>();
     _bestMoveCompleter = completer;
@@ -505,7 +537,7 @@ class PikafishEngine {
       _send('ucinewgame');
       _pendingNewGame = false;
     }
-    _send('position fen $fen');
+    _send('position ${position.toPositionCommand()}');
     if (effectiveDepth != null) {
       _send('go depth $effectiveDepth');
     } else {

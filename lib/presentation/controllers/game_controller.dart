@@ -415,8 +415,7 @@ class GameController extends ChangeNotifier {
     var moveApplied = false;
     var evalInstalled = false;
     try {
-      final fen = Fen.fromBoard(_state.board, currentSide);
-      final result = await _ai.bestMove(fen, moveTimeMs: 500);
+      final result = await _ai.bestMove(_enginePosition(), moveTimeMs: 500);
       final uci = result.move;
       if (uci == '(none)' || uci.isEmpty) return;
 
@@ -481,6 +480,27 @@ class GameController extends ChangeNotifier {
 
   static Side _opposite(Side s) => s == Side.red ? Side.black : Side.red;
 
+  /// 构造发给引擎的局面描述：初始局面（棋谱树根）FEN + 从根到当前
+  /// 节点的全部历史着法（UCI）。
+  ///
+  /// 有历史着法时引擎据此正确处理重复局面与棋规；浏览到根节点时
+  /// 着法列表为空，退化为只发当前局面 FEN。
+  EnginePosition _enginePosition() {
+    final path = _current.pathFromRoot(); // 含根节点
+    final moves = <String>[];
+    for (var i = 1; i < path.length; i++) {
+      final rec = path[i].move;
+      if (rec != null) {
+        moves.add(Fen.moveToUci(rec.from, rec.to));
+      }
+    }
+    return EnginePosition(
+      startFen: Fen.fromBoard(_root.board, _root.sideToMove),
+      currentFen: Fen.fromBoard(_state.board, currentSide),
+      moves: moves,
+    );
+  }
+
   /// 切换无限分析开关。
   Future<void> setAnalysis(bool on) async {
     if (_analysisOn == on) return;
@@ -510,13 +530,13 @@ class GameController extends ChangeNotifier {
       await _ai.stopAnalysis();
       return;
     }
-    final fen = Fen.fromBoard(_state.board, currentSide);
+    final position = _enginePosition();
     try {
-      await _ai.startAnalysis(fen, banMoves: _bannedMoves);
+      await _ai.startAnalysis(position, banMoves: _bannedMoves);
     } on EvalFileMissingException {
       if (await _promptEvalFile()) {
         try {
-          await _ai.startAnalysis(fen, banMoves: _bannedMoves);
+          await _ai.startAnalysis(position, banMoves: _bannedMoves);
         } catch (e) {
           debugPrint('权重安装后分析仍启动失败: $e');
         }
@@ -543,10 +563,9 @@ class GameController extends ChangeNotifier {
     var moveApplied = false;
     var evalInstalled = false;
     try {
-      final fen = Fen.fromBoard(_state.board, currentSide);
       final uci = _analysisOn
           ? await _ai.stopAnalysis()
-          : (await _ai.bestMove(fen, moveTimeMs: 500)).move;
+          : (await _ai.bestMove(_enginePosition(), moveTimeMs: 500)).move;
       if (uci == '(none)' || uci.isEmpty) {
         // 分析仍需继续（停在了当前局面）
         if (_analysisOn) await _startAnalysis();
@@ -747,9 +766,10 @@ class GameController extends ChangeNotifier {
     var moveApplied = false;
     var evalInstalled = false;
     try {
-      final fen = Fen.fromBoard(_state.board, currentSide);
       final aiSide = currentSide;
-      final result = await _ai.bestMove(fen, moveTimeMs: 500);
+      final position = _enginePosition();
+      final result =
+          await _ai.bestMove(position, moveTimeMs: 500);
       final uci = result.move;
       if (uci == '(none)' || uci.isEmpty) {
         // 引擎未给出走法，停止本次自动走子，避免空转循环
@@ -785,7 +805,8 @@ class GameController extends ChangeNotifier {
         notifyListeners();
       } else {
         // 引擎走法未通过本地规则：打印 FEN 与走法以便定位坐标/规则问题
-        debugPrint('AI 走法被本地规则拒绝: $uci, $from, $to, fen=$fen');
+        debugPrint(
+            'AI 走法被本地规则拒绝: $uci, $from, $to, fen=${position.currentFen}');
       }
     } on EvalFileMissingException {
       // 权重缺失：弹窗引导用户安装，成功后继续本次自动走子
