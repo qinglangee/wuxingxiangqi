@@ -374,6 +374,8 @@ class GameController extends ChangeNotifier {
     _current = target;
     _restoreStateFromCurrent();
     _hintMark = null; // 跳转后清除提示标记
+    // 前进/后退/分支跳转时播放走子音效
+    SoundService.playMove();
     // 跳转后走棋方恢复为目标节点的行棋方（可能已改变）
     boardChange.emit();
     notifyListeners();
