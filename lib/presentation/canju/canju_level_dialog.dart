@@ -104,6 +104,7 @@ class _CanjuLevelDialogState extends State<CanjuLevelDialog> {
   Widget _buildJumpBar() {
     const counts = [10, 100, 500, 1000, 5000];
     return AdjustableButtonBar(
+      id: 'canju_level_jump_bar',
       defaultPinnedIds: const {
         '10↓', '10↑', '100↓', '100↑', '500↓', '500↑',
       },

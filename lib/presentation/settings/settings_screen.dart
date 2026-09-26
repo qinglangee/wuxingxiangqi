@@ -57,11 +57,11 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
       body: TabBarView(
         controller: _tab,
-        children: const [
-          EngineSettingsWidget(),
-          _SettingsPlaceholder(title: '界面设置', hint: '字号、颜色、背景等风格设置（待实现）'),
-          _PieceBoardSettings(),
-          _SettingsPlaceholder(title: '其他设置', hint: '棋谱仓库等杂项设置（待实现）'),
+        children: [
+          const EngineSettingsWidget(),
+          const _UiSettingsWidget(),
+          const _PieceBoardSettings(),
+          const _SettingsPlaceholder(title: '其他设置', hint: '棋谱仓库等杂项设置（待实现）'),
         ],
       ),
     );
@@ -109,6 +109,113 @@ class _SettingsPlaceholder extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 界面设置：按钮工具条文字的统一管理开关
+// ---------------------------------------------------------------------------
+
+class _UiSettingsWidget extends StatelessWidget {
+  const _UiSettingsWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ConfigManager.instance,
+      builder: (context, _) {
+        final ui = ConfigManager.instance.config.ui;
+        final cm = ConfigManager.instance;
+        return ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          children: [
+            const Text(
+              '按钮工具条',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF5A3A1A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDF6E3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFC9B68C)),
+              ),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text(
+                      '统一管理文字显示',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
+                    ),
+                    subtitle: const Text(
+                      '开启后，页面中所有按钮工具条统一按下方开关显示或隐藏文字',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF8B6B4A)),
+                    ),
+                    value: ui.unifiedButtonLabels,
+                    activeThumbColor: AppTheme.boardLine,
+                    onChanged: cm.setUnifiedButtonLabels,
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  SwitchListTile(
+                    title: Text(
+                      '显示按钮文字',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: ui.unifiedButtonLabels
+                            ? const Color(0xFF5A3A1A)
+                            : const Color(0xFFB0A48A),
+                      ),
+                    ),
+                    subtitle: Text(
+                      ui.unifiedButtonLabels
+                          ? '统一管理开启时，所有工具条都使用该设置'
+                          : '统一管理已关闭：各工具条按自身设置显示',
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF8B6B4A)),
+                    ),
+                    value: ui.globalShowButtonLabels,
+                    activeThumbColor: AppTheme.boardLine,
+                    // 仅在统一管理开启时该全局开关生效
+                    onChanged: ui.unifiedButtonLabels
+                        ? cm.setGlobalShowButtonLabels
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF4DC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE0C486)),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: Color(0xFF8B6B3D)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '说明：在任意一个按钮工具条中点击「显示文字」按钮单独设置'
+                      '文字是否显示时，会自动关闭统一管理，之后各工具条按各自的'
+                      '设置显示。',
+                      style:
+                          TextStyle(fontSize: 12.5, color: Color(0xFF6B4A28), height: 1.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

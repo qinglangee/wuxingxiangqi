@@ -205,7 +205,10 @@ class UiConfig {
     this.backgroundColor = 0xFFF5EDD8,
     this.boardLineColor = 0xFF5C3A20,
     this.boardBackground = 0xFFE8C988,
-  });
+    this.unifiedButtonLabels = true,
+    this.globalShowButtonLabels = true,
+    Map<String, ButtonBarConfig>? buttonBars,
+  }) : buttonBars = buttonBars ?? <String, ButtonBarConfig>{};
 
   /// 全局正文字号。
   double fontSize;
@@ -222,6 +225,19 @@ class UiConfig {
   /// 棋盘背景色。
   int boardBackground;
 
+  /// 是否统一管理所有按钮工具条的文字显示。
+  ///
+  /// 为 true 时，所有工具条使用 [globalShowButtonLabels]；
+  /// 用户在任一工具条上单独切换文字时会自动置为 false。
+  bool unifiedButtonLabels;
+
+  /// 统一管理开启时，所有按钮工具条是否显示文字。
+  bool globalShowButtonLabels;
+
+  /// 各按钮工具条（按其 id 索引）的个性化配置：按钮顺序、常驻列表、
+  /// 非统一管理时该工具条自身的文字显示开关。
+  Map<String, ButtonBarConfig> buttonBars;
+
   factory UiConfig.fromJson(Map<String, dynamic> json) => UiConfig(
         fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14.0,
         fontColor: (json['fontColor'] as num?)?.toInt() ?? 0xFF2A1810,
@@ -231,6 +247,17 @@ class UiConfig {
             (json['boardLineColor'] as num?)?.toInt() ?? 0xFF5C3A20,
         boardBackground:
             (json['boardBackground'] as num?)?.toInt() ?? 0xFFE8C988,
+        unifiedButtonLabels: json['unifiedButtonLabels'] as bool? ?? true,
+        globalShowButtonLabels:
+            json['globalShowButtonLabels'] as bool? ?? true,
+        buttonBars: (json['buttonBars'] is Map)
+            ? Map<String, dynamic>.from(json['buttonBars'] as Map).map(
+                (k, v) => MapEntry(
+                  k,
+                  ButtonBarConfig.fromJson(Map<String, dynamic>.from(v as Map)),
+                ),
+              )
+            : <String, ButtonBarConfig>{},
       );
 
   Map<String, dynamic> toJson() => {
@@ -239,6 +266,10 @@ class UiConfig {
         'backgroundColor': backgroundColor,
         'boardLineColor': boardLineColor,
         'boardBackground': boardBackground,
+        'unifiedButtonLabels': unifiedButtonLabels,
+        'globalShowButtonLabels': globalShowButtonLabels,
+        'buttonBars':
+            buttonBars.map((k, v) => MapEntry(k, v.toJson())),
       };
 
   UiConfig copyWith({
@@ -247,6 +278,9 @@ class UiConfig {
     int? backgroundColor,
     int? boardLineColor,
     int? boardBackground,
+    bool? unifiedButtonLabels,
+    bool? globalShowButtonLabels,
+    Map<String, ButtonBarConfig>? buttonBars,
   }) =>
       UiConfig(
         fontSize: fontSize ?? this.fontSize,
@@ -254,7 +288,46 @@ class UiConfig {
         backgroundColor: backgroundColor ?? this.backgroundColor,
         boardLineColor: boardLineColor ?? this.boardLineColor,
         boardBackground: boardBackground ?? this.boardBackground,
+        unifiedButtonLabels:
+            unifiedButtonLabels ?? this.unifiedButtonLabels,
+        globalShowButtonLabels:
+            globalShowButtonLabels ?? this.globalShowButtonLabels,
+        buttonBars: buttonBars ?? this.buttonBars,
       );
+}
+
+/// 单个按钮工具条（AdjustableButtonBar 实例）的持久化配置。
+class ButtonBarConfig {
+  ButtonBarConfig({
+    this.order = const [],
+    this.pinned = const [],
+    this.showLabels = true,
+  });
+
+  /// 按钮 id 的完整排列顺序（含内置按钮）。
+  List<String> order;
+
+  /// 常驻按钮 id 列表。
+  List<String> pinned;
+
+  /// 非统一管理时，该工具条自身是否显示文字。
+  bool showLabels;
+
+  factory ButtonBarConfig.fromJson(Map<String, dynamic> json) =>
+      ButtonBarConfig(
+        order: (json['order'] as List?)?.map((e) => e.toString()).toList() ??
+            const [],
+        pinned:
+            (json['pinned'] as List?)?.map((e) => e.toString()).toList() ??
+                const [],
+        showLabels: json['showLabels'] as bool? ?? true,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'order': order,
+        'pinned': pinned,
+        'showLabels': showLabels,
+      };
 }
 
 /// 棋子 / 棋盘相关配置（后续支持自定义资源）。

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_theme.dart';
+import '../../core/config/app_config.dart';
+import '../../core/config/config_manager.dart';
+import '../../core/theme/app_theme.dart';
 import 'check_button.dart';
 
 /// 一个可添加到 [AdjustableButtonBar] 的「自由按钮」定义。
@@ -54,12 +56,19 @@ class FreeButton {
 /// 组件自带一个默认不常驻的「显示文字」按钮（追加在按钮列表末尾）：
 /// 点击可切换其它按钮的文字显示/隐藏，自身文字始终显示以便找回；
 /// 需要该功能时可将其设为常驻。
+///
+/// 每个工具条实例通过 [id] 区分，其按钮顺序、常驻列表与（非统一
+/// 管理时的）文字开关保存在应用配置中。
 class AdjustableButtonBar extends StatefulWidget {
   const AdjustableButtonBar({
     super.key,
+    required this.id,
     required this.buttons,
     this.defaultPinnedIds = const <String>{},
   });
+
+  /// 工具条实例的稳定标识，用于持久化顺序、常驻列表与文字设置。
+  final String id;
 
   /// 全部自由按钮（顺序为初始顺序）。
   final List<FreeButton> buttons;
@@ -77,20 +86,29 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   bool _drawerOpen = false;
   bool _editMode = false;
 
-  /// 其它按钮是否显示文字；由内置的「显示文字」按钮切换。
-  bool _showLabels = true;
+  /// 本工具条自身的文字显示开关（统一管理关闭时生效）。
+  late bool _showLabels;
 
   /// 内置「显示文字」切换按钮的稳定 id（默认不常驻，可像普通按钮一样
   /// 排序与设为常驻）。
   static const String _toggleLabelsId = '__toggle_labels__';
 
+  /// 当前实际生效的文字显示状态：统一管理开启时取全局开关，否则取本
+  /// 工具条自身开关。
+  bool get _effectiveLabels {
+    final ui = ConfigManager.instance.config.ui;
+    return ui.unifiedButtonLabels
+        ? ui.globalShowButtonLabels
+        : _showLabels;
+  }
+
   /// 内置「显示文字」切换按钮：始终显示自身文字，方便在文字隐藏后找回。
   FreeButton get _toggleLabelsButton => FreeButton(
         id: _toggleLabelsId,
         icon: Icons.text_fields,
-        label: _showLabels ? '显示文字' : '隐藏文字',
-        checked: _showLabels,
-        onTap: () => setState(() => _showLabels = !_showLabels),
+        label: _effectiveLabels ? '显示文字' : '隐藏文字',
+        checked: _effectiveLabels,
+        onTap: _toggleLabels,
       );
 
   /// 全部按钮：外部传入按钮 + 末尾内置的「显示文字」按钮。
@@ -108,9 +126,45 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   @override
   void initState() {
     super.initState();
-    _order = _allButtons.map((b) => b.id).toList();
-    // 常驻数量不设上限：用户愿意放多少就放多少
-    _pinned = widget.defaultPinnedIds.where(_order.contains).toSet();
+    final currentIds = _allButtons.map((b) => b.id).toList();
+    final saved = ConfigManager.instance.buttonBarConfig(widget.id);
+    if (saved != null && saved.order.isNotEmpty) {
+      // 使用已保存的顺序，追加本版本新增的按钮 id
+      _order = saved.order.where(currentIds.contains).toList();
+      for (final id in currentIds) {
+        if (!_order.contains(id)) _order.add(id);
+      }
+      _pinned = saved.pinned.where(_order.contains).toSet();
+    } else {
+      _order = currentIds;
+      // 常驻数量不设上限：用户愿意放多少就放多少
+      _pinned = widget.defaultPinnedIds.where(_order.contains).toSet();
+    }
+    _showLabels = saved?.showLabels ?? true;
+    // 设置页修改统一管理/全局文字开关后，本工具条立即刷新
+    ConfigManager.instance.addListener(_onConfigChanged);
+  }
+
+  @override
+  void dispose() {
+    ConfigManager.instance.removeListener(_onConfigChanged);
+    super.dispose();
+  }
+
+  void _onConfigChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 把当前顺序、常驻列表、本工具条文字开关写入配置并落盘。
+  void _persistBarConfig() {
+    ConfigManager.instance.saveButtonBar(
+      widget.id,
+      ButtonBarConfig(
+        order: List<String>.of(_order),
+        pinned: _pinned.toList(),
+        showLabels: _showLabels,
+      ),
+    );
   }
 
   @override
@@ -130,9 +184,23 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
         for (final b in _allButtons) b.id: b,
       };
 
-  /// 按钮实际是否显示文字：内置切换按钮始终显示，其余受 [_showLabels] 控制。
+  /// 按钮实际是否显示文字：内置切换按钮始终显示，其余受生效开关控制。
   bool _effectiveShowLabel(FreeButton b) =>
-      b.id == _toggleLabelsId || (b.showLabel && _showLabels);
+      b.id == _toggleLabelsId || (b.showLabel && _effectiveLabels);
+
+  /// 切换本工具条文字显示。
+  ///
+  /// 若当前处于统一管理，单独切换会先关闭统一管理（见设置页说明），
+  /// 并把本工具条自身开关记为新值；其余工具条之后按各自设置显示。
+  void _toggleLabels() {
+    final ui = ConfigManager.instance.config.ui;
+    final newVal = !_effectiveLabels;
+    setState(() => _showLabels = newVal);
+    if (ui.unifiedButtonLabels) {
+      ConfigManager.instance.setUnifiedButtonLabels(false);
+    }
+    _persistBarConfig();
+  }
 
   List<FreeButton> get _pinnedButtons => _order
       .where((id) => _pinned.contains(id))
@@ -187,6 +255,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
         _pinned.add(id);
       }
     });
+    _persistBarConfig();
   }
 
   void _reorder(int oldIndex, int newIndex) {
@@ -195,6 +264,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
       final id = _order.removeAt(oldIndex);
       _order.insert(newIndex, id);
     });
+    _persistBarConfig();
   }
 
   @override

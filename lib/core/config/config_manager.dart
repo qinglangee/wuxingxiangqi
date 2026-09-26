@@ -97,6 +97,33 @@ class ConfigManager extends ChangeNotifier {
     await save();
   }
 
+  /// 读取某个按钮工具条（按 id）的持久化配置；无记录返回 null。
+  ButtonBarConfig? buttonBarConfig(String id) => _config.ui.buttonBars[id];
+
+  /// 保存某个按钮工具条的配置（顺序 / 常驻 / 文字开关）并落盘。
+  Future<void> saveButtonBar(String id, ButtonBarConfig barConfig) async {
+    await updateUi((ui) {
+      ui.buttonBars[id] = barConfig;
+      return ui;
+    });
+  }
+
+  /// 设置是否统一管理按钮工具条文字。
+  Future<void> setUnifiedButtonLabels(bool unified) async {
+    await updateUi((ui) {
+      ui.unifiedButtonLabels = unified;
+      return ui;
+    });
+  }
+
+  /// 设置统一管理下所有工具条是否显示文字。
+  Future<void> setGlobalShowButtonLabels(bool show) async {
+    await updateUi((ui) {
+      ui.globalShowButtonLabels = show;
+      return ui;
+    });
+  }
+
   /// 更新棋子 / 棋盘配置。
   Future<void> updateBoard(
       BoardConfig Function(BoardConfig current) updater) async {

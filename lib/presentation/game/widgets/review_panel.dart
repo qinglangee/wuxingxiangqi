@@ -89,6 +89,7 @@ class _ReviewPanelState extends State<ReviewPanel>
           // 仅当当前节点为分支点时，在导航条上方显示分支选择条
           if (controller.atBranch) _BranchSelectorBar(controller: controller),
           AdjustableButtonBar(
+            id: 'review_nav_bar',
             defaultPinnedIds: const {'前进', '后退'},
             buttons: [
               FreeButton(

@@ -168,6 +168,7 @@ class _CanjuBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AdjustableButtonBar(
+      id: 'canju_bar',
       defaultPinnedIds: const {'上一局', '下一局', '提示', '重开', '悔棋'},
       buttons: [
         FreeButton(
@@ -278,6 +279,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
     final ctrl = widget.controller;
     // 「显示文字」切换由 AdjustableButtonBar 内置按钮负责（默认不常驻）
     return AdjustableButtonBar(
+      id: 'ai_config_bar',
       defaultPinnedIds: const {
         '返回','重开', '红AI', '黑AI', '分析', '出招', '分支', '反转',
       },
