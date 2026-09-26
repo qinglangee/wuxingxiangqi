@@ -493,15 +493,14 @@ class _DrawerChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          // 未选中时使用不透明浅底色，与面板米色背景区分开
           color: isChecked
               ? AppTheme.boardLine.withValues(alpha: 0.15)
-              : const Color(0xFFFFFBEF),
+              : Colors.white.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isChecked
                 ? AppTheme.boardLine.withValues(alpha: 0.55)
-                : const Color(0xFFE0D0AE),
+                : const Color(0xFFD8C69A),
             width: isChecked ? 0.9 : 0.6,
           ),
         ),

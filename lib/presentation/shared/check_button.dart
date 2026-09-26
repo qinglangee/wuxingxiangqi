@@ -50,20 +50,16 @@ class IconCheckButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-        // 未选中时也给一个比面板更浅的底色 + 细边框，
-        // 让按钮与米色面板背景区分开
-        decoration: BoxDecoration(
-          color: isChecked
-              ? AppTheme.boardLine.withValues(alpha: 0.15)
-              : const Color(0xFFFFFBEF),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isChecked
-                ? AppTheme.boardLine.withValues(alpha: 0.55)
-                : const Color(0xFFE0D0AE),
-            width: isChecked ? 0.9 : 0.6,
-          ),
-        ),
+        decoration: isChecked
+            ? BoxDecoration(
+                color: AppTheme.boardLine.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.boardLine.withValues(alpha: 0.55),
+                  width: 0.9,
+                ),
+              )
+            : null,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
