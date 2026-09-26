@@ -20,6 +20,7 @@ import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
 import '../settings/eval_file_dialog.dart';
+import '../../core/services/sound_service.dart';
 import 'board_change_notifier.dart';
 
 /// UI 控制器：选中态、点击处理、AI 走子、棋谱树记录与前进/后退导航。
@@ -669,6 +670,14 @@ class GameController extends ChangeNotifier {
       result: _state.result,
     );
     if (_state.isOver) _resultTick++;
+    // 音效：终局 > 吃子 > 普通走子
+    if (_state.isOver) {
+      SoundService.playWin();
+    } else if (captured != null) {
+      SoundService.playEat();
+    } else {
+      SoundService.playMove();
+    }
     // 走子完成 = 走棋方改变（loadParsedGame 批量回放时的连续通知
     // 由订阅方的 FEN 门控与防抖自然合并）
     boardChange.emit();
