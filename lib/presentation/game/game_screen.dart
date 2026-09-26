@@ -168,7 +168,8 @@ class _CanjuBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AdjustableButtonBar(
-      defaultPinnedIds: const {'上一局', '下一局', '提示', '重开'},
+      defaultPinnedIds: const {'上一局', '下一局', '提示', '重开', '悔棋'},
+      maxPinnedCount: 5,
       buttons: [
         FreeButton(
           id: '上一局',
