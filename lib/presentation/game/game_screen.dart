@@ -94,6 +94,7 @@ class GameScreen extends StatelessWidget {
                   lastMove: _lastMoveOf(controller),
                   hintArrow: controller.hintMark,
                   flipped: controller.boardFlipped,
+                  moveAnim: controller.moveAnim,
                 ),
               ),
             ),

@@ -10,12 +10,17 @@ import '../../../domain/models/piece.dart';
 import '../../../domain/models/position.dart';
 import '../../../presentation/shared/board_grid_painter.dart';
 import '../../../utils/coordinate_utils.dart';
+import 'move_anim.dart';
 import 'move_arrow_painter.dart';
 import 'move_highlight.dart';
 import 'piece_widget.dart';
 
 /// 棋盘 widget：绘制网格、九宫、楚河汉界、棋子、选中高亮与合法走法提示，并接收点击。
-class BoardWidget extends StatelessWidget {
+///
+/// 收到新的 [BoardWidget.moveAnim] 事件时（单步前进/后退/用户走子），
+/// 在落点上方播放 300ms 的棋子直线移动动画：动画期间隐藏落点格的
+/// 真实棋子，由一个随进度插值移动的浮层棋子代替，结束后恢复。
+class BoardWidget extends StatefulWidget {
   const BoardWidget({
     super.key,
     required this.board,
@@ -27,6 +32,7 @@ class BoardWidget extends StatelessWidget {
     this.lastMove,
     this.hintArrow,
     this.flipped = false,
+    this.moveAnim,
   });
 
   /// [hints] 是当前选中棋子的合法终点集合。
@@ -50,8 +56,68 @@ class BoardWidget extends StatelessWidget {
   /// 棋盘是否翻转（红黑上下互换）。
   final bool flipped;
 
+  /// 单步走子动画事件；控制器每次产生新事件（对象引用变化）时播放。
+  final MoveAnimEvent? moveAnim;
+
+  @override
+  State<BoardWidget> createState() => _BoardWidgetState();
+}
+
+class _BoardWidgetState extends State<BoardWidget>
+    with SingleTickerProviderStateMixin {
+  /// 单步走子移动动画（300ms 直线插值）。
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+  );
+
+  /// 当前正在播放的动画事件；null 表示无动画。
+  MoveAnimEvent? _active;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim.addStatusListener((status) {
+      if (status == AnimationStatus.completed && _active != null) {
+        // 动画结束：恢复常规绘制（落点棋子重新显示）
+        setState(() => _active = null);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant BoardWidget old) {
+    super.didUpdateWidget(old);
+    final ev = widget.moveAnim;
+    if (!identical(ev, old.moveAnim)) {
+      if (ev != null) {
+        // 新的动画事件：从头播放（快速连续操作时直接覆盖上一次）
+        _active = ev;
+        _anim.forward(from: 0);
+      } else if (_active != null) {
+        // 控制器清除了动画（跳跃跳转/重开/载入）：立即结束
+        _anim.stop();
+        _active = null;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  /// 动画期间需要隐藏的落点格：前进时为 to，后退时为 from。
+  Position? get _hidePos {
+    final a = _active;
+    if (a == null) return null;
+    return a.forward ? a.to : a.from;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final board = widget.board;
     // 监听配置变化：设置页切换棋盘/棋子样式、修改棋盘适配后，
     // 整个棋盘子树立即刷新。
     return ListenableBuilder(
@@ -92,6 +158,8 @@ class BoardWidget extends StatelessWidget {
         final pieceSize = cellWidth *
             BoardLayout.pieceRatio *
             boardCfg.pieceSizeScale;
+        // 动画期间隐藏的落点格
+        final hidePos = _hidePos;
 
         return SizedBox(
           width: boardWidth,
@@ -106,7 +174,7 @@ class BoardWidget extends StatelessWidget {
                 padding: padding,
                 flipped: flipped,
               );
-              if (pos != null) onTap(Position(pos.$1, pos.$2));
+              if (pos != null) widget.onTap(Position(pos.$1, pos.$2));
             },
             child: Stack(
               children: [
@@ -140,31 +208,33 @@ class BoardWidget extends StatelessWidget {
                   ),
                 // 1.5 上一步走法标注：起点与终点各画一个高亮圈。
                 // 绘制在棋子之下，终点处的棋子会盖住填充，外圈描边仍可见。
-                if (lastMove != null)
+                if (widget.lastMove != null)
                   CustomPaint(
                     size: Size(boardWidth, boardHeight),
                     painter: _LastMovePainter(
                       padding: padding,
                       cellW: cellWidth,
                       cellH: cellHeight,
-                      from: lastMove!.$1,
-                      to: lastMove!.$2,
+                      from: widget.lastMove!.$1,
+                      to: widget.lastMove!.$2,
                       flipped: flipped,
                     ),
                   ),
-                // 3. 棋子
-                ...board.pieces().map((e) => _positionedPiece(
-                      e.position,
-                      e.piece,
-                      padding,
-                      cellWidth,
-                      cellHeight,
-                      pieceSize,
-                    )),
+                // 3. 棋子（动画期间隐藏落点格的真实棋子，由浮层代替）
+                ...board.pieces().where((e) => e.position != hidePos).map(
+                      (e) => _positionedPiece(
+                        e.position,
+                        e.piece,
+                        padding,
+                        cellWidth,
+                        cellHeight,
+                        pieceSize,
+                      ),
+                    ),
                 // 2. 选中高亮 + 走法提示
                 ..._buildHints(padding, cellWidth, cellHeight, pieceSize),
                 // 2.5 提示箭头：在棋子之上绘制，避免被终点棋子盖住
-                if (hintArrow != null)
+                if (widget.hintArrow != null)
                   CustomPaint(
                     size: Size(boardWidth, boardHeight),
                     painter: MoveArrowPainter(
@@ -174,8 +244,8 @@ class BoardWidget extends StatelessWidget {
                       flipped: flipped,
                       arrows: [
                         MoveArrow(
-                          from: hintArrow!.$1,
-                          to: hintArrow!.$2,
+                          from: widget.hintArrow!.$1,
+                          to: widget.hintArrow!.$2,
                           // 绿色，与分支标记的多色调色板区分
                           color: const Color(0xFF2E7D32),
                         ),
@@ -183,7 +253,7 @@ class BoardWidget extends StatelessWidget {
                     ),
                   ),
                 // 4. 分支标记层：在棋子之上绘制候选分支走法
-                if (branchMarkers.isNotEmpty)
+                if (widget.branchMarkers.isNotEmpty)
                   CustomPaint(
                     size: Size(boardWidth, boardHeight),
                     painter: MoveArrowPainter(
@@ -191,11 +261,11 @@ class BoardWidget extends StatelessWidget {
                       cellW: cellWidth,
                       cellH: cellHeight,
                       flipped: flipped,
-                      arrows: branchMarkers,
+                      arrows: widget.branchMarkers,
                     ),
                   ),
                 // 5. 分析箭头层：PV1 前两步，红方红箭头、黑方黑箭头
-                if (analysisArrows.isNotEmpty)
+                if (widget.analysisArrows.isNotEmpty)
                   CustomPaint(
                     size: Size(boardWidth, boardHeight),
                     painter: MoveArrowPainter(
@@ -203,8 +273,48 @@ class BoardWidget extends StatelessWidget {
                       cellW: cellWidth,
                       cellH: cellHeight,
                       flipped: flipped,
-                      arrows: analysisArrows,
+                      arrows: widget.analysisArrows,
                     ),
+                  ),
+                // 6. 走子动画浮层：棋子从视觉起点到视觉终点直线移动，
+                //    绘制在最上层保证全程可见
+                if (_active != null)
+                  AnimatedBuilder(
+                    animation: _anim,
+                    builder: (context, _) {
+                      final a = _active!;
+                      // 后退时视觉方向与棋步相反：从 to 滑回 from
+                      final visualFrom = a.forward ? a.from : a.to;
+                      final visualTo = a.forward ? a.to : a.from;
+                      final start = CoordinateUtils.toPixel(
+                        col: visualFrom.col,
+                        row: visualFrom.row,
+                        cellWidth: cellWidth,
+                        cellHeight: cellHeight,
+                        padding: padding,
+                        flipped: flipped,
+                      );
+                      final end = CoordinateUtils.toPixel(
+                        col: visualTo.col,
+                        row: visualTo.row,
+                        cellWidth: cellWidth,
+                        cellHeight: cellHeight,
+                        padding: padding,
+                        flipped: flipped,
+                      );
+                      final t =
+                          Curves.easeInOut.transform(_anim.value);
+                      final c = Offset.lerp(start, end, t)!;
+                      return Positioned(
+                        left: c.dx - cellWidth / 2,
+                        top: c.dy - cellWidth / 2,
+                        width: cellWidth,
+                        height: cellWidth,
+                        child: Center(
+                          child: PieceWidget(piece: a.piece, size: pieceSize),
+                        ),
+                      );
+                    },
                   ),
               ],
             ),
@@ -218,8 +328,8 @@ class BoardWidget extends StatelessWidget {
   List<Widget> _buildHints(
       EdgeInsets padding, double cw, double ch, double pieceSize) {
     final widgets = <Widget>[];
-    for (final p in hints) {
-      final isCapture = board.pieceAt(p) != null;
+    for (final p in widget.hints) {
+      final isCapture = widget.board.pieceAt(p) != null;
       widgets.add(_positioned(
         p,
         padding,
@@ -236,7 +346,7 @@ class BoardWidget extends StatelessWidget {
     return _positioned(p, pad, cw, ch, PieceWidget(
       piece: piece,
       size: size,
-      selected: p == selected,
+      selected: p == widget.selected,
     ));
   }
 
@@ -257,6 +367,8 @@ class BoardWidget extends StatelessWidget {
       child: Center(child: child),
     );
   }
+
+  bool get flipped => widget.flipped;
 }
 
 /// 上一步走法标注绘制器：在起点与终点各画一个高亮圈。
@@ -328,4 +440,3 @@ class _LastMovePainter extends CustomPainter {
       oldDelegate.from != from ||
       oldDelegate.to != to;
 }
-

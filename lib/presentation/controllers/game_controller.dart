@@ -22,6 +22,7 @@ import '../../domain/notation/parsers/parsed_game.dart';
 import '../settings/eval_file_dialog.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/services/sound_service.dart';
+import '../game/widgets/move_anim.dart';
 import 'board_change_notifier.dart';
 
 /// UI 控制器：选中态、点击处理、AI 走子、棋谱树记录与前进/后退导航。
@@ -89,6 +90,11 @@ class GameController extends ChangeNotifier {
   /// 走子（[_applyAndRecord]）或跳转（[_jumpTo]）时清除。
   (Position, Position)? _hintMark;
   (Position, Position)? get hintMark => _hintMark;
+
+  /// 单步走子动画事件：单步前进/后退看棋谱与用户走子时设置，棋盘
+  /// 组件播放 300ms 直线移动动画。跳跃跳转/重开/载入时置 null。
+  MoveAnimEvent? _moveAnim;
+  MoveAnimEvent? get moveAnim => _moveAnim;
 
   /// 引擎无限分析开关（「分析」check button）。
   bool _analysisOn = false;
@@ -217,7 +223,7 @@ class GameController extends ChangeNotifier {
       return;
     }
 
-    if (_applyAndRecord(selected, pos)) {
+    if (_applyAndRecord(selected, pos, animate: true)) {
       debugPrint('人类走子: $selected → $pos');
       notifyListeners();
       _afterMoveApplied();
@@ -236,6 +242,7 @@ class GameController extends ChangeNotifier {
     _aiThinking = false;
     _resultTick = 0;
     _hintMark = null;
+    _moveAnim = null;
     _sourceFilePath = null;
     _gameInfo = const GameInfo();
     // 重开 = 一局新游戏
@@ -277,6 +284,7 @@ class GameController extends ChangeNotifier {
     _current = _root;
     _aiThinking = false;
     _resultTick = 0;
+    _moveAnim = null;
     // 导入棋谱 = 一局新游戏
     _ai.notifyNewGame();
 
@@ -325,6 +333,7 @@ class GameController extends ChangeNotifier {
     _aiThinking = false;
     _resultTick = 0;
     _hintMark = null;
+    _moveAnim = null;
     _sourceFilePath = null;
     _gameInfo = const GameInfo();
     // 载入残局局面 = 一局新游戏
@@ -411,10 +420,11 @@ class GameController extends ChangeNotifier {
   }
 
   /// 后退一步：回到上一节点并恢复盘面。导航操作不触发 AI。
-  void goBack() => _jumpTo(_current.parent);
+  /// 单步后退播放与前进方向相反的移动动画。
+  void goBack() => _jumpTo(_current.parent, animate: true, animForward: false);
 
-  /// 前进一步：沿当前续着指针前进。
-  void goForward() => _jumpTo(_current.mainChild);
+  /// 前进一步：沿当前续着指针前进。单步前进播放移动动画。
+  void goForward() => _jumpTo(_current.mainChild, animate: true);
 
   /// 跳转到棋谱树中的任意节点（点击棋谱步时使用）。
   void jumpTo(NotationNode node) => _jumpTo(node);
@@ -479,11 +489,37 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _jumpTo(NotationNode? target) {
+  void _jumpTo(
+    NotationNode? target, {
+    bool animate = false,
+    bool animForward = true,
+  }) {
     if (target == null || _aiThinking || identical(target, _current)) return;
+    final prev = _current;
     _current = target;
     _restoreStateFromCurrent();
     _hintMark = null; // 跳转后清除提示标记
+    if (animate) {
+      // 单步移动动画：前进播目标步（from→to），后退播被撤销步
+      // （to→from，方向与前进相反）。棋子取动画结束局面中落在
+      // 终点格的棋子。
+      final rec = animForward ? target.move : prev.move;
+      if (rec != null) {
+        final landPos = animForward ? rec.to : rec.from;
+        final piece = _state.board.pieceAt(landPos);
+        if (piece != null) {
+          _moveAnim = MoveAnimEvent(
+            piece: piece,
+            from: rec.from,
+            to: rec.to,
+            forward: animForward,
+          );
+        }
+      }
+    } else {
+      // 跳跃跳转不播动画，并打断进行中的动画
+      _moveAnim = null;
+    }
     // 前进/后退/分支跳转时播放走子音效
     SoundService.playMove();
     // 跳转后走棋方恢复为目标节点的行棋方（可能已改变）
@@ -761,7 +797,7 @@ class GameController extends ChangeNotifier {
   ///
   /// 若当前节点已有续着（后退后另走），新走法作为分支加入，
   /// 且前进指针自动指向新分支。
-  bool _applyAndRecord(Position from, Position to) {
+  bool _applyAndRecord(Position from, Position to, {bool animate = false}) {
     final before = _state.board.clone();
     final moving = before.pieceAt(from);
     if (moving == null) return false;
@@ -773,6 +809,11 @@ class GameController extends ChangeNotifier {
     if (!_engine.tryMove(from, to)) return false;
 
     _hintMark = null; // 走子后清除提示标记
+    if (animate) {
+      // 单步走子动画：棋子从起点滑向终点（仅用户走子时播放，
+      // AI 走子与批量回放不播）
+      _moveAnim = MoveAnimEvent(piece: moving, from: from, to: to, forward: true);
+    }
     final record = MoveRecord(
       from: from,
       to: to,
