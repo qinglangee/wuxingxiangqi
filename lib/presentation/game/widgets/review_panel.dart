@@ -391,7 +391,7 @@ class _MoveRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 3),
         decoration: BoxDecoration(color: bg),
         child: Row(
           children: [
@@ -414,14 +414,14 @@ class _MoveRow extends StatelessWidget {
               child: Text(
                 record.notation,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: fg,
                 ),
               ),
             ),
             if (node.children.length > 1)
-              // 分支标记：圆角背景上显示「当前分支序号字母 / 分支总数」
+              // 分支标记：圆角背景上显示「分支总数 + 当前分支序号字母」
               Container(
                 margin: const EdgeInsets.only(left: 4),
                 padding:
@@ -431,8 +431,8 @@ class _MoveRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${branchLetter(node.parent!.children.indexOf(node))}'
-                  '/${node.children.length}',
+                  '${node.children.length}'
+                  '${branchLetter(node.parent!.children.indexOf(node))}',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
