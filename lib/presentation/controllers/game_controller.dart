@@ -201,7 +201,9 @@ class GameController extends ChangeNotifier {
       notifyListeners();
       _afterMoveApplied();
     } else {
+      // 点击处无法走子：取消选中并播放提示音效
       _state.selected = null;
+      SoundService.playAlarm();
       notifyListeners();
     }
   }

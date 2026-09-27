@@ -16,6 +16,7 @@ class SoundService {
   static const _movePath = '$_dir/move.mp3';
   static const _eatPath = '$_dir/eat.mp3';
   static const _winPath = '$_dir/win.mp3';
+  static const _alarmPath = '$_dir/alarm.mp3';
 
   static final AudioPlayer _player = AudioPlayer();
   static final AudioCache _cache = AudioCache(prefix: 'assets/');
@@ -31,6 +32,7 @@ class SoundService {
       _cache.load(_movePath),
       _cache.load(_eatPath),
       _cache.load(_winPath),
+      _cache.load(_alarmPath),
     ]);
   }
 
@@ -42,6 +44,9 @@ class SoundService {
 
   /// 游戏结束音效。
   static void playWin() => _play(_winPath);
+
+  /// 取消选中提示音效。
+  static void playAlarm() => _play(_alarmPath);
 
   static void _play(String path) {
     // 无论当前状态（idle/playing/completed/paused）都先停掉，
