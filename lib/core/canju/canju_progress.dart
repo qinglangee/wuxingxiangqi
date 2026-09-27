@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+
+import '../config/config_manager.dart';
 
 /// 单库的过关位图（16 进制字符串，末尾 '0' 字符省略）。
 ///
@@ -99,7 +100,8 @@ class LibraryRecord {
 
 /// 残局记录仓库：持久化所有库的当前局与过关状态。
 ///
-/// 文件：应用文档目录下 `canju_progress.json`，与 `app_config.json` 并列。
+/// 文件：应用数据目录（文档目录/wuxingxiangqi）下的 `canju_progress.json`，
+/// 与 `app_config.json`、`board_calibration.json` 并列。
 class CanjuStore extends ChangeNotifier {
   CanjuStore._();
 
@@ -206,7 +208,11 @@ class CanjuStore extends ChangeNotifier {
   }
 
   Future<File> _file() async {
-    final dir = await getApplicationDocumentsDirectory();
+    // 与 app_config.json / board_calibration.json 同一数据目录
+    final dir = Directory(await ConfigManager.instance.dataDirPath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
     return File('${dir.path}${Platform.pathSeparator}$kFileName');
   }
 }
