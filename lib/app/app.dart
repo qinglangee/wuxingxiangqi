@@ -8,6 +8,8 @@ import '../presentation/canju/canju_controller.dart';
 import '../presentation/controllers/game_controller.dart';
 import '../presentation/game/game_screen.dart';
 import '../presentation/home/home_screen.dart';
+import '../presentation/library/notation_manager_widget.dart'
+    show NotationManagerScreen;
 import '../presentation/settings/settings_screen.dart';
 
 /// 全局导航 key：供无 BuildContext 的层（如控制器）弹出权重引导等对话框。
@@ -83,6 +85,13 @@ class App extends StatelessWidget {
           );
         },
         '/settings': (_) => const SettingsScreen(),
+        // 棋谱管理页面：参数为起始目录（可省略，默认 books 目录）
+        '/notation-manager': (ctx) {
+          final args = ModalRoute.of(ctx)?.settings.arguments;
+          return NotationManagerScreen(
+            initialDirectory: args is String ? args : null,
+          );
+        },
       },
     );
   }
