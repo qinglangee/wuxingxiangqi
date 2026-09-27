@@ -4,6 +4,7 @@ import '../../../../domain/engine/engine_info.dart';
 import '../../../../domain/models/piece.dart';
 import '../../../../domain/notation/move_record.dart';
 import '../../../../domain/notation/notation_node.dart';
+import '../../../core/config/config_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../controllers/game_controller.dart';
 import '../../library/game_saver.dart';
@@ -38,6 +39,15 @@ class _ReviewPanelState extends State<ReviewPanel>
   /// 导致一次局面变化叠加出大量重复请求。
   late final CloudBaseController _cloud =
       CloudBaseController(gameController: widget.controller);
+
+  /// 「走到带注释的着法时注释框浅绿高亮」开关（默认开启）。
+  ///
+  /// 初值从复盘导航条按钮配置恢复；check button 状态由
+  /// AdjustableButtonBar 自动持久化到 app_config.json。
+  late bool _commentHighlight =
+      ConfigManager.instance.buttonBarConfig('review_nav_bar')
+              ?.checked['注释高亮'] ??
+          true;
 
   GameController get controller => widget.controller;
 
@@ -80,7 +90,10 @@ class _ReviewPanelState extends State<ReviewPanel>
             child: TabBarView(
               controller: _tab,
               children: [
-                _NotationTab(controller: controller),
+                _NotationTab(
+                  controller: controller,
+                  highlightEnabled: _commentHighlight,
+                ),
                 _EngineTab(controller: controller),
                 CloudBasePanel(controller: _cloud),
               ],
@@ -151,6 +164,14 @@ class _ReviewPanelState extends State<ReviewPanel>
                 label: '保存',
                 onTap: () => GameSaver.saveGame(context, controller),
               ),
+              FreeButton(
+                id: '注释高亮',
+                icon: Icons.highlight,
+                label: '注释高亮',
+                checked: _commentHighlight,
+                onCheckedChanged: (v) =>
+                    setState(() => _commentHighlight = v),
+              ),
             ],
           ),
         ],
@@ -164,9 +185,15 @@ class _ReviewPanelState extends State<ReviewPanel>
 // ---------------------------------------------------------------------------
 
 class _NotationTab extends StatefulWidget {
-  const _NotationTab({required this.controller});
+  const _NotationTab({
+    required this.controller,
+    required this.highlightEnabled,
+  });
 
   final GameController controller;
+
+  /// 走到带注释的着法时注释框是否浅绿高亮。
+  final bool highlightEnabled;
 
   @override
   State<_NotationTab> createState() => _NotationTabState();
@@ -233,7 +260,10 @@ class _NotationTabState extends State<_NotationTab> {
         // 右 2/3：注释区
         Expanded(
           flex: 2,
-          child: _CommentArea(controller: controller),
+          child: _CommentArea(
+            controller: controller,
+            highlightEnabled: widget.highlightEnabled,
+          ),
         ),
       ],
     );
@@ -412,9 +442,15 @@ class _MoveRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _CommentArea extends StatefulWidget {
-  const _CommentArea({required this.controller});
+  const _CommentArea({
+    required this.controller,
+    required this.highlightEnabled,
+  });
 
   final GameController controller;
+
+  /// 走到带注释的着法时注释框是否浅绿高亮（由导航条 check 按钮控制）。
+  final bool highlightEnabled;
 
   @override
   State<_CommentArea> createState() => _CommentAreaState();
@@ -443,17 +479,31 @@ class _CommentAreaState extends State<_CommentArea>
     super.dispose();
   }
 
-  /// 节点切换时：若新节点（到达它的那步）带有注释，重新播放高亮，
-  /// 让注释框由浅绿在 3 秒内逐渐恢复；无注释则直接保持透明。
+  /// 节点切换时：若高亮开关开启且新节点（到达它的那步）带有注释，
+  /// 重新播放高亮，让注释框由浅绿在 3 秒内逐渐恢复；开关关闭或无注释
+  /// 时直接保持透明。
   void _maybeHighlight(NotationNode node) {
     if (identical(_lastNode, node)) return;
     final firstBuild = _lastNode == null;
     _lastNode = node;
     if (firstBuild) return; // 首次进入页面不高亮，仅导航切换时触发
+    if (!widget.highlightEnabled) {
+      _highlightCtrl.value = 1;
+      return;
+    }
     final hasComment = controller.currentComment.trim().isNotEmpty;
     if (hasComment) {
       _highlightCtrl.forward(from: 0);
     } else {
+      _highlightCtrl.value = 1;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _CommentArea oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 开关在高亮途中被关闭：立即恢复背景
+    if (!widget.highlightEnabled && oldWidget.highlightEnabled) {
       _highlightCtrl.value = 1;
     }
   }
