@@ -133,7 +133,7 @@ class GameScreen extends StatelessWidget {
           from: options[i].move!.from,
           to: options[i].move!.to,
           color: MoveArrowPainter.palette[i % MoveArrowPainter.palette.length],
-          label: i + 1,
+          label: branchLetter(i),
         ),
     ];
   }

@@ -26,8 +26,8 @@ class MoveArrow {
   /// 箭头颜色（连线半透明同色）。
   final Color color;
 
-  /// 显示在箭尾的数字（如分支序号，1-based）；null 表示不显示圆点。
-  final int? label;
+  /// 显示在箭尾的序号文字（如分支序号字母 A-Z）；null 表示不显示圆点。
+  final String? label;
 }
 
 /// 通用棋盘箭头绘制器：在起点与终点之间画半透明连线，终点绘制指向
@@ -149,7 +149,7 @@ class MoveArrowPainter extends CustomPainter {
   }
 
   void _drawDot(Canvas canvas, Offset center, double radius, Color color,
-      int label, double fontSize) {
+      String label, double fontSize) {
     // 白色描边底
     canvas.drawCircle(
       center,
@@ -161,7 +161,7 @@ class MoveArrowPainter extends CustomPainter {
 
     final tp = TextPainter(
       text: TextSpan(
-        text: '$label',
+        text: label,
         style: TextStyle(
           color: Colors.white,
           fontSize: fontSize,

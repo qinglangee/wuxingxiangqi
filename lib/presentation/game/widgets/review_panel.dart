@@ -14,6 +14,14 @@ import 'cloud_base_panel.dart';
 import 'engine_status_bar.dart';
 import 'pv_view.dart';
 
+/// 分支序号转字母：0→A、1→B … 25→Z，之后继续用小写 a-z 表示
+/// （超过 52 个分支时小写字母循环复用）。
+String branchLetter(int index) {
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if (index < upper.length) return upper[index];
+  return upper[(index - upper.length) % upper.length].toLowerCase();
+}
+
 /// 打谱页面底部面板：三个标签页（棋谱注释 / 引擎 / 云库）。
 ///
 /// - 「棋谱注释」：左 1/3 竖向着法列表 + 右 2/3 注释显示与编辑区。
@@ -220,9 +228,9 @@ class _NotationTabState extends State<_NotationTab> {
 
     return Row(
       children: [
-        // 左 1/3：着法列表
+        // 左 2/5：着法列表
         Expanded(
-          flex: 1,
+          flex: 2,
           child: Container(
             decoration: const BoxDecoration(
               border: Border(
@@ -257,9 +265,9 @@ class _NotationTabState extends State<_NotationTab> {
                   ),
           ),
         ),
-        // 右 2/3：注释区
+        // 右 3/5：注释区
         Expanded(
-          flex: 2,
+          flex: 3,
           child: _CommentArea(
             controller: controller,
             highlightEnabled: widget.highlightEnabled,
@@ -288,8 +296,8 @@ class _NotationTabState extends State<_NotationTab> {
 
 /// 分支选择条：浮动在底部导航栏上方，仅在分支点显示。
 ///
-/// 一条水平长条，按分支数等分宽度，每段显示一个 1-based 数字。
-/// 点击数字即选择对应分支并跳转。
+/// 一条水平长条，按分支数等分宽度，每段显示一个分支序号字母
+/// （A-Z，超过 26 个继续用小写 a-z）。点击字母即选择对应分支并跳转。
 class _BranchSelectorBar extends StatelessWidget {
   const _BranchSelectorBar({required this.controller});
 
@@ -327,7 +335,7 @@ class _BranchSelectorBar extends StatelessWidget {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      '${i + 1}',
+                      branchLetter(i),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -367,21 +375,17 @@ class _MoveRow extends StatelessWidget {
 
     Color bg;
     Color fg;
-    Color sideDot;
     if (isCurrent) {
       bg = AppTheme.boardLine;
       fg = Colors.white;
-      sideDot = isRed ? Colors.red.shade100 : Colors.black87;
     } else if (isFuture) {
       bg = Colors.transparent;
       fg = const Color(0xFFB0A48A);
-      sideDot = const Color(0xFFC9B68C);
     } else {
       bg = isRed
           ? const Color(0x11C62828)
           : const Color(0x112C3E2D);
       fg = isRed ? AppTheme.redPiece : AppTheme.blackPiece;
-      sideDot = isRed ? AppTheme.redPiece : AppTheme.blackPiece;
     }
 
     return InkWell(
@@ -406,13 +410,6 @@ class _MoveRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            // 红黑小圆点
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(color: sideDot, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 record.notation,
@@ -424,7 +421,25 @@ class _MoveRow extends StatelessWidget {
               ),
             ),
             if (node.children.length > 1)
-              Icon(Icons.account_tree, size: 12, color: fg),
+              // 分支标记：圆角背景上显示「当前分支序号字母 / 分支总数」
+              Container(
+                margin: const EdgeInsets.only(left: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: fg.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${branchLetter(node.parent!.children.indexOf(node))}'
+                  '/${node.children.length}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                ),
+              ),
             if (record.comment != null && record.comment!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 4),
