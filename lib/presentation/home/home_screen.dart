@@ -301,16 +301,46 @@ class HomeScreen extends StatelessWidget {
       path = picked;
     }
 
-    // 已配置：打开文件选择器，让用户在仓库目录中选择棋谱或进入子目录
+    // 已配置：打开文件选择器，让用户在仓库目录中选择棋谱或进入子目录。
+    // Android 的 SAF 选择器按 MIME 过滤，pgn/xqf/cbf 属非标准扩展名映射
+    // 不到 MIME 类型，文件会变成"不可选"（点击无反应），因此 Android 上
+    // 选任意文件、由应用自行校验扩展名；桌面端仍用系统过滤。
+    final isAndroid = Platform.isAndroid;
+    final allowedExts = const ['pgn', 'xqf', 'cbf', 'txt'];
     final file = await FilePicker.pickFiles(
       dialogTitle: '选择棋谱文件',
       initialDirectory: path,
-      type: FileType.custom,
-      allowedExtensions: const ['pgn', 'xqf', 'cbf', 'txt'],
+      type: isAndroid ? FileType.any : FileType.custom,
+      allowedExtensions: isAndroid ? null : allowedExts,
     );
     if (file.isEmpty) return;
     final pickedPath = file.single.path;
     if (pickedPath == null || pickedPath.isEmpty) return;
+
+    // Android 上自行校验扩展名
+    if (isAndroid) {
+      final ext = pickedPath.split('.').last.toLowerCase();
+      if (!allowedExts.contains(ext)) {
+        if (!context.mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('不支持的文件类型'),
+            content: Text(
+              '请选择以下类型的棋谱文件：\n${allowedExts.join('、')}\n\n'
+              '所选文件：${pickedPath.split(Platform.pathSeparator).last}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
 
     // 读取文件字节并交给解析器；解析后还会在内存中完整回放一遍校验，
     // 任何一步失败都弹窗提示，且不跳转到打谱页（避免在页面构建期抛异常）。
