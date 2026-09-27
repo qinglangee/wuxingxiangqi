@@ -49,21 +49,21 @@ class HomeScreen extends StatelessWidget {
                         _MenuCard(
                           title: '棋谱',
                           subtitle: '收藏与浏览经典棋谱',
-                          icon: const _BoardIcon(),
+                          icon: const _MenuImage('assets/images/app/item01.jpg'),
                           onTap: () => _openNotationLibrary(context),
                         ),
                         const SizedBox(height: 24),
                         _MenuCard(
                           title: '残局',
                           subtitle: '练习经典残局破解',
-                          icon: const _PiecesIcon(),
+                          icon: const _MenuImage('assets/images/app/item02.jpg'),
                           onTap: () => _openCanju(context),
                         ),
                         const SizedBox(height: 24),
                         _MenuCard(
                           title: '打谱',
                           subtitle: '开始一局新棋',
-                          icon: const _BoardIcon(),
+                          icon: const _MenuImage('assets/images/app/item03.jpg'),
                           highlight: true,
                           onTap: () => Navigator.of(context).pushNamed('/play'),
                         ),
@@ -404,181 +404,24 @@ class _MenuCard extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// 左侧插画：棋盘缩略
+// 左侧插画：资源图片（圆角裁切铺满）
 // ---------------------------------------------------------------------------
 
-class _BoardIcon extends StatelessWidget {
-  const _BoardIcon();
+class _MenuImage extends StatelessWidget {
+  final String asset;
+
+  const _MenuImage(this.asset);
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _BoardPainter(),
-      size: const Size(double.infinity, double.infinity),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.asset(
+        asset,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      ),
     );
   }
-}
-
-class _BoardPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final linePaint = Paint()
-      ..color = const Color(0xFF5A3A1A)
-      ..strokeWidth = 1.0;
-
-    const cols = 8;
-    const rows = 9;
-    final pad = 4.0;
-    final gridW = size.width - pad * 2;
-    final gridH = size.height - pad * 2;
-    final cellW = gridW / cols;
-    final cellH = gridH / rows;
-
-    // 竖线
-    for (var c = 0; c <= cols; c++) {
-      canvas.drawLine(
-        Offset(pad + c * cellW, pad),
-        Offset(pad + c * cellW, pad + rows * cellH),
-        linePaint,
-      );
-    }
-    // 横线
-    for (var r = 0; r <= rows; r++) {
-      canvas.drawLine(
-        Offset(pad, pad + r * cellH),
-        Offset(pad + cols * cellW, pad + r * cellH),
-        linePaint,
-      );
-    }
-
-    // 上九宫斜线
-    canvas.drawLine(
-      Offset(pad + 3 * cellW, pad),
-      Offset(pad + 5 * cellW, pad + 2 * cellH),
-      linePaint,
-    );
-    canvas.drawLine(
-      Offset(pad + 5 * cellW, pad),
-      Offset(pad + 3 * cellW, pad + 2 * cellH),
-      linePaint,
-    );
-    // 下九宫斜线
-    canvas.drawLine(
-      Offset(pad + 3 * cellW, pad + 7 * cellH),
-      Offset(pad + 5 * cellW, pad + rows * cellH),
-      linePaint,
-    );
-    canvas.drawLine(
-      Offset(pad + 5 * cellW, pad + 7 * cellH),
-      Offset(pad + 3 * cellW, pad + rows * cellH),
-      linePaint,
-    );
-
-    // 象征性棋子
-    final redPaint = Paint()..color = const Color(0xFFC62828);
-    const positions = [
-      (0, 0), (4, 0), (8, 0),
-      (2, 4), (6, 4),
-      (3, 7), (5, 7),
-      (0, 9), (4, 9), (8, 9),
-    ];
-    for (final (r, c) in positions) {
-      canvas.drawCircle(
-        Offset(pad + c * cellW, pad + r * cellH),
-        3.5,
-        redPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ---------------------------------------------------------------------------
-// 左侧插画：散落棋子
-// ---------------------------------------------------------------------------
-
-class _PiecesIcon extends StatelessWidget {
-  const _PiecesIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _PiecesPainter(),
-      size: const Size(double.infinity, double.infinity),
-    );
-  }
-}
-
-class _PiecesPainter extends CustomPainter {
-  static const _pieces = [
-    _Piece(0.25, 0.30, 8.0, Color(0xFFC62828), '帅'),
-    _Piece(0.55, 0.22, 7.0, Color(0xFF2C3E2D), '将'),
-    _Piece(0.72, 0.38, 8.0, Color(0xFFC62828), '车'),
-    _Piece(0.30, 0.55, 9.0, Color(0xFF2C3E2D), '马'),
-    _Piece(0.55, 0.62, 8.0, Color(0xFFC62828), '炮'),
-    _Piece(0.20, 0.78, 7.0, Color(0xFF2C3E2D), '兵'),
-    _Piece(0.68, 0.80, 7.0, Color(0xFFC62828), '相'),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final p in _pieces) {
-      final cx = size.width * p.x;
-      final cy = size.height * p.y;
-
-      // 阴影
-      canvas.drawCircle(
-        Offset(cx + 1.5, cy + 1.5),
-        p.radius,
-        Paint()..color = const Color(0x30000000),
-      );
-      // 棋子底
-      canvas.drawCircle(
-        Offset(cx, cy),
-        p.radius,
-        Paint()
-          ..color = const Color(0xFFFDF6E3)
-          ..style = PaintingStyle.fill,
-      );
-      // 棋子边框
-      canvas.drawCircle(
-        Offset(cx, cy),
-        p.radius,
-        Paint()
-          ..color = const Color(0xFF8B5A2B)
-          ..style = PaintingStyle.stroke,
-      );
-      // 棋子文字
-      final tp = TextPainter(
-        text: TextSpan(
-          text: p.char,
-          style: TextStyle(
-            color: p.color,
-            fontSize: p.radius * 1.1,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(
-        canvas,
-        Offset(cx - tp.width / 2, cy - tp.height / 2),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _Piece {
-  final double x;
-  final double y;
-  final double radius;
-  final Color color;
-  final String char;
-
-  const _Piece(this.x, this.y, this.radius, this.color, this.char);
 }
