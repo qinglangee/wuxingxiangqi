@@ -190,7 +190,14 @@ class _CanjuBar extends StatelessWidget {
           icon: Icons.auto_awesome,
           label: '提示自动',
           checked: controller.autoHint,
-          onTap: () => controller.setAutoHint(!controller.autoHint),
+          onCheckedChanged: controller.setAutoHint,
+        ),
+        FreeButton(
+          id: '自动下一局',
+          icon: Icons.skip_next,
+          label: '自动下一局',
+          checked: controller.autoNext,
+          onCheckedChanged: controller.setAutoNext,
         ),
         FreeButton(
           id: '重开',
@@ -301,7 +308,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           icon: Icons.computer,
           label: '红AI',
           checked: ctrl.redIsAi,
-          onTap: () => ctrl.setRedAi(!ctrl.redIsAi),
+          onCheckedChanged: ctrl.setRedAi,
           iconColor: const Color(0xFFC62828),
         ),
         FreeButton(
@@ -309,7 +316,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           icon: Icons.computer,
           label: '黑AI',
           checked: ctrl.blackIsAi,
-          onTap: () => ctrl.setBlackAi(!ctrl.blackIsAi),
+          onCheckedChanged: ctrl.setBlackAi,
           iconColor: const Color(0xFF1A1A1A),
         ),
         FreeButton(
@@ -317,7 +324,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           icon: Icons.search,
           label: '分析',
           checked: ctrl.isAnalysisOn,
-          onTap: () => ctrl.setAnalysis(!ctrl.isAnalysisOn),
+          onCheckedChanged: ctrl.setAnalysis,
         ),
         FreeButton(
           id: '出招',
@@ -336,7 +343,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           icon: Icons.swap_vert,
           label: '反转',
           checked: ctrl.boardFlipped,
-          onTap: ctrl.toggleBoardFlip,
+          onCheckedChanged: ctrl.setBoardFlipped,
         ),
       ],
     );

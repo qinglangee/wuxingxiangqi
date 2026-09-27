@@ -14,23 +14,33 @@ class FreeButton {
     required this.id,
     required this.icon,
     required this.label,
-    required this.onTap,
+    this.onTap,
     this.enabled = true,
     this.checked,
     this.showLabel = true,
     this.iconColor,
     this.flipIcon = false,
+    this.onCheckedChanged,
   });
 
   /// 稳定标识，用于在重建间保持顺序与常驻状态。
   final String id;
   final IconData icon;
   final String label;
+
+  /// 点击回调。check button 提供了 [onCheckedChanged] 时可省略
+  /// （点击走 [onCheckedChanged]）；普通按钮必填。
+  final VoidCallback? onTap;
+
+  /// 是否可用（禁用时置灰且不可点击）。
   final bool enabled;
-  final VoidCallback onTap;
 
   /// 选中态：null 为普通按钮；非 null 时作为 check button 渲染，
   /// 选中时带高亮底框（如「红方电脑」开关）。
+  ///
+  /// 仅作为 check button 的**初始值**（配置无记录时使用）；用户点击后
+  /// 的实际选中状态由工具条持久化到 [ButtonBarConfig.checked]，父组件
+  /// 通过 [onCheckedChanged] 接收新值并同步自身逻辑状态。
   final bool? checked;
 
   /// 是否显示文字；false 时仅显示图标。
@@ -41,6 +51,13 @@ class FreeButton {
 
   /// 图标是否水平镜像显示（方向性图标对称成对用，如「下一分支」）。
   final bool flipIcon;
+
+  /// check button 的状态变化回调：用户点击后以**新选中值**回调。
+  ///
+  /// 提供时优先于 [onTap] 被调用，推荐 check button 使用本回调接收
+  /// 新值（如 `(v) => ctrl.setAnalysis(v)`），避免与工具条持久化的
+  /// 选中状态各自翻转导致不同步。
+  final ValueChanged<bool>? onCheckedChanged;
 }
 
 /// 通用的「可调整窗口控件」。
@@ -92,6 +109,12 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
 
   /// 本工具条自身的文字显示开关（统一管理关闭时生效）。
   late bool _showLabels;
+
+  /// 各 check button 的选中状态（按按钮 id）。
+  ///
+  /// 初始化时从配置恢复；用户点击 check button 时更新并落盘。显示值
+  /// 取本表，无记录时回退到按钮自带的初始 [FreeButton.checked]。
+  late Map<String, bool> _checkedState;
 
   /// 内置「显示文字」切换按钮的稳定 id（默认不常驻，可像普通按钮一样
   /// 排序与设为常驻）。
@@ -145,6 +168,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
       _pinned = widget.defaultPinnedIds.where(_order.contains).toSet();
     }
     _showLabels = saved?.showLabels ?? true;
+    _checkedState = Map<String, bool>.of(saved?.checked ?? const {});
     // 设置页修改统一管理/全局文字开关后，本工具条立即刷新
     ConfigManager.instance.addListener(_onConfigChanged);
   }
@@ -159,7 +183,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
     if (mounted) setState(() {});
   }
 
-  /// 把当前顺序、常驻列表、本工具条文字开关写入配置并落盘。
+  /// 把当前顺序、常驻列表、本工具条文字开关与 check button 状态写入配置并落盘。
   void _persistBarConfig() {
     ConfigManager.instance.saveButtonBar(
       widget.id,
@@ -167,6 +191,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
         order: List<String>.of(_order),
         pinned: _pinned.toList(),
         showLabels: _showLabels,
+        checked: Map<String, bool>.of(_checkedState),
       ),
     );
   }
@@ -185,8 +210,40 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   }
 
   Map<String, FreeButton> get _btnMap => {
-        for (final b in _allButtons) b.id: b,
+        for (final b in _allButtons) b.id: _withPersistedCheck(b),
       };
+
+  /// check button 包一层持久化：显示值取 [_checkedState]，点击时翻转
+  /// 状态、落盘，并以新值回调父组件（无 [FreeButton.onCheckedChanged]
+  /// 的旧式按钮退回调用 [FreeButton.onTap]，由父组件自行翻转）。
+  ///
+  /// 内置「显示文字」按钮不走该机制（其状态即全局/自身文字开关）。
+  FreeButton _withPersistedCheck(FreeButton b) {
+    if (b.id == _toggleLabelsId) return b;
+    if (b.checked == null && b.onCheckedChanged == null) return b;
+    final displayed = _checkedState[b.id] ?? b.checked ?? false;
+    return FreeButton(
+      id: b.id,
+      icon: b.icon,
+      label: b.label,
+      enabled: b.enabled,
+      checked: displayed,
+      showLabel: b.showLabel,
+      iconColor: b.iconColor,
+      flipIcon: b.flipIcon,
+      onCheckedChanged: b.onCheckedChanged,
+      onTap: () {
+        final newVal = !displayed;
+        setState(() => _checkedState[b.id] = newVal);
+        _persistBarConfig();
+        if (b.onCheckedChanged != null) {
+          b.onCheckedChanged!(newVal);
+        } else {
+          b.onTap?.call();
+        }
+      },
+    );
+  }
 
   /// 按钮实际是否显示文字：内置切换按钮始终显示，其余受生效开关控制。
   bool _effectiveShowLabel(FreeButton b) =>
@@ -326,7 +383,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                             showLabel: _effectiveShowLabel(b),
                             iconColor: b.iconColor,
                             flipIcon: b.flipIcon,
-                            onTap: b.onTap,
+                            onTap: b.onTap ?? () {},
                           ),
                         ),
                     ],

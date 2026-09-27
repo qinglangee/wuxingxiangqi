@@ -302,7 +302,8 @@ class ButtonBarConfig {
     this.order = const [],
     this.pinned = const [],
     this.showLabels = true,
-  });
+    Map<String, bool>? checked,
+  }) : checked = checked ?? <String, bool>{};
 
   /// 按钮 id 的完整排列顺序（含内置按钮）。
   List<String> order;
@@ -313,6 +314,12 @@ class ButtonBarConfig {
   /// 非统一管理时，该工具条自身是否显示文字。
   bool showLabels;
 
+  /// 各 check button（按按钮 id）的选中状态。
+  ///
+  /// 工具条在用户点击 check button 时写入；父组件初始化状态时读取，
+  /// 使「红AI / 分析 / 自动下一局」等开关在重启后保持。
+  Map<String, bool> checked;
+
   factory ButtonBarConfig.fromJson(Map<String, dynamic> json) =>
       ButtonBarConfig(
         order: (json['order'] as List?)?.map((e) => e.toString()).toList() ??
@@ -321,12 +328,18 @@ class ButtonBarConfig {
             (json['pinned'] as List?)?.map((e) => e.toString()).toList() ??
                 const [],
         showLabels: json['showLabels'] as bool? ?? true,
+        checked: (json['checked'] is Map)
+            ? Map<String, dynamic>.from(json['checked'] as Map).map(
+                (k, v) => MapEntry(k.toString(), v as bool? ?? false),
+              )
+            : <String, bool>{},
       );
 
   Map<String, dynamic> toJson() => {
         'order': order,
         'pinned': pinned,
         'showLabels': showLabels,
+        'checked': checked,
       };
 }
 

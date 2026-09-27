@@ -20,6 +20,7 @@ import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
 import '../settings/eval_file_dialog.dart';
+import '../../core/config/config_manager.dart';
 import '../../core/services/sound_service.dart';
 import 'board_change_notifier.dart';
 
@@ -30,6 +31,14 @@ class GameController extends ChangeNotifier {
         super() {
     _root = NotationNode.root(_state.board.clone());
     _current = _root;
+    // 从打谱功能条的按钮配置恢复 check button 的上次状态
+    // （与 AdjustableButtonBar 的持久化同源，配置不存在时用默认值）
+    final checks =
+        ConfigManager.instance.buttonBarConfig('ai_config_bar')?.checked;
+    _redIsAi = checks?['红AI'] ?? false;
+    _blackIsAi = checks?['黑AI'] ?? false;
+    _analysisOn = checks?['分析'] ?? false;
+    _boardFlipped = checks?['反转'] ?? false;
     // 标准开局 = 一局新游戏
     _ai.notifyNewGame();
     // 引擎搜索 info 实时转发给监听方（引擎面板）
@@ -627,6 +636,12 @@ class GameController extends ChangeNotifier {
   void toggleBoardFlip() {
     _boardFlipped = !_boardFlipped;
     notifyListeners();
+  }
+
+  /// 直接设置棋盘反转状态（check button 回调用）。
+  void setBoardFlipped(bool v) {
+    if (_boardFlipped == v) return;
+    toggleBoardFlip();
   }
 
   /// 从外部（如云库面板点击着法）尝试在当前局面走 from → to。

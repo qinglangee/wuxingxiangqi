@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/canju/canju_library.dart';
 import '../../core/canju/canju_progress.dart';
+import '../../core/config/config_manager.dart';
 import '../../domain/game/game_result.dart';
 import '../../domain/models/piece.dart';
 import '../controllers/game_controller.dart';
@@ -44,6 +45,12 @@ class CanjuController extends ChangeNotifier {
     gameController.setRedAi(false, notify: false);
     gameController.setBlackAi(true, notify: false);
     gameController.addListener(_onGameControllerChanged);
+    // 从残局功能条的按钮配置恢复 check button 的上次状态
+    // （与 AdjustableButtonBar 的持久化同源，配置不存在时用默认值）
+    final checks =
+        ConfigManager.instance.buttonBarConfig('canju_bar')?.checked;
+    _autoHint = checks?['提示自动'] ?? false;
+    _autoNext = checks?['自动下一局'] ?? false;
   }
 
   final GameController gameController;
@@ -59,6 +66,10 @@ class CanjuController extends ChangeNotifier {
   /// 提示自动开关：开启时点击「提示」按钮直接让引擎走子，否则仅标记。
   bool _autoHint = false;
   bool get autoHint => _autoHint;
+
+  /// 自动下一局开关：开启时本局结束后（红胜/黑胜/和棋）自动跳下一局。
+  bool _autoNext = false;
+  bool get autoNext => _autoNext;
 
   /// 分析模式：残局页面点击「分析」后切换为分析状态显示
   /// （显示 _AiConfigRow 与 ReviewPanel，隐藏 AppBar 与 _CanjuBar）。
@@ -90,6 +101,12 @@ class CanjuController extends ChangeNotifier {
   /// 切换「提示自动」开关。
   void setAutoHint(bool v) {
     _autoHint = v;
+    notifyListeners();
+  }
+
+  /// 切换「自动下一局」开关。
+  void setAutoNext(bool v) {
+    _autoNext = v;
     notifyListeners();
   }
 
@@ -158,21 +175,42 @@ class CanjuController extends ChangeNotifier {
     await store.setLastLibrary(lib.name);
   }
 
-  /// [GameController] 状态变化时检测：若当前局面"红方胜"，标记本局过关。
+  /// [GameController] 状态变化时检测：若当前局面"红方胜"，标记本局过关；
+  /// 开启「自动下一局」时，本局结束（红胜/黑胜/和棋）后延时跳下一局。
   void _onGameControllerChanged() {
     final tick = gameController.resultTick;
     if (tick == _lastSeenResultTick) return;
     _lastSeenResultTick = tick;
-    if (_alreadyClearedForCurrent) return;
     final result = gameController.result;
-    if (result.status == GameResultStatus.redWins) {
+    if (!_alreadyClearedForCurrent &&
+        result.status == GameResultStatus.redWins) {
       _alreadyClearedForCurrent = true;
       // 异步持久化，不阻塞 UI
       store.markCleared(library.name, _currentIndex).then((_) {
         notifyListeners();
       });
     }
+    // 终局自动跳下一局（延时给结果展示与音效留一点时间）
+    if (_autoNext &&
+        result.status != GameResultStatus.ongoing &&
+        canNext &&
+        !_autoNextScheduled) {
+      _autoNextScheduled = true;
+      Future.delayed(const Duration(milliseconds: 900), () {
+        _autoNextScheduled = false;
+        if (_disposed) return;
+        final stillEnded =
+            gameController.result.status != GameResultStatus.ongoing;
+        if (stillEnded) goNext();
+      });
+    }
   }
+
+  /// 是否已排定一次自动跳下一局（防止重复排程）。
+  bool _autoNextScheduled = false;
+
+  /// 本控制器是否已销毁（延时回调中防止误用）。
+  bool _disposed = false;
 
   void _loadCurrent() {
     gameController.loadFen(library[_currentIndex]);
@@ -180,6 +218,7 @@ class CanjuController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     gameController.removeListener(_onGameControllerChanged);
     super.dispose();
   }
