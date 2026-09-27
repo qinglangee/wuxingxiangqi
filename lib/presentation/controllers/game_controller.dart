@@ -848,11 +848,16 @@ class GameController extends ChangeNotifier {
         // 仅当胜方是 AI 时才自动应手；胜方为人类则等其自行走子。
         if (rest.isNotEmpty && _isAiSide(matched.winner)) {
           final reply = rest.first;
-          if (reply.moving.side == matched.winner &&
-              _applyAndRecord(reply.from, reply.to)) {
-            notifyListeners();
-            await _afterMoveApplied();
-            return;
+          if (reply.moving.side == matched.winner) {
+            // 胜方应手不请求引擎：走棋前停顿 300ms，模拟思考节奏
+            await Future.delayed(const Duration(milliseconds: 300));
+            // 停顿期间局面可能已变（重开/跳转/终局），重新校验后再走
+            if (isOver || !atTip) return;
+            if (_applyAndRecord(reply.from, reply.to)) {
+              notifyListeners();
+              await _afterMoveApplied();
+              return;
+            }
           }
         }
         // 不自动应手（胜方是人类）：败方若为 AI 会在下面按线跟线，
@@ -883,6 +888,13 @@ class GameController extends ChangeNotifier {
     final follow = _followLineFor(currentSide);
     if (follow != null) {
       final m = follow.moves.first;
+      // 跟线走棋不请求引擎：走棋前停顿 300ms，模拟思考节奏
+      await Future.delayed(const Duration(milliseconds: 300));
+      // 停顿期间局面可能已变（重开/跳转/终局），重新校验后再走
+      if (isOver || _aiThinking || !atTip || _analysisOn ||
+          !_isAiSide(currentSide)) {
+        return;
+      }
       if (_applyAndRecord(m.from, m.to)) {
         notifyListeners();
         await _afterMoveApplied();
