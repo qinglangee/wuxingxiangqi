@@ -65,10 +65,10 @@ class BoardWidget extends StatefulWidget {
 
 class _BoardWidgetState extends State<BoardWidget>
     with SingleTickerProviderStateMixin {
-  /// 单步走子移动动画（300ms 直线插值）。
+  /// 单步走子移动动画（时长与衔接计算共用 [kMoveAnimDuration]）。
   late final AnimationController _anim = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 300),
+    duration: kMoveAnimDuration,
   );
 
   /// 当前正在播放的动画事件；null 表示无动画。

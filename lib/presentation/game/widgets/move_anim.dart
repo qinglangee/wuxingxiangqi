@@ -1,6 +1,13 @@
 import '../../../domain/models/piece.dart';
 import '../../../domain/models/position.dart';
 
+/// 单步走子动画时长。
+const Duration kMoveAnimDuration = Duration(milliseconds: 300);
+
+/// 帧调度余量：动画事件发出后要到下一帧才真正开始播放，
+/// 控制器据此推算动画的实际结束时刻。
+const Duration kMoveAnimFrameSlack = Duration(milliseconds: 20);
+
 /// 棋盘单步走子动画事件。
 ///
 /// 由控制器在单步前进/后退/用户走子时创建；棋盘组件检测到新事件

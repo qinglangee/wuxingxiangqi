@@ -96,6 +96,10 @@ class GameController extends ChangeNotifier {
   MoveAnimEvent? _moveAnim;
   MoveAnimEvent? get moveAnim => _moveAnim;
 
+  /// 最近一次走子动画的预计结束时刻（含一帧调度余量）；
+  /// 初始为过去时刻，表示当前没有动画在播放。
+  DateTime _animEndTime = DateTime.fromMillisecondsSinceEpoch(0);
+
   /// 引擎无限分析开关（「分析」check button）。
   bool _analysisOn = false;
   bool get isAnalysisOn => _analysisOn;
@@ -549,6 +553,16 @@ class GameController extends ChangeNotifier {
   bool _isAiSide(Side side) =>
       side == Side.red ? _redIsAi : _blackIsAi;
 
+  /// 杀线走子前的停顿：保证走前至少停 300ms（模拟思考节奏）；
+  /// 若上一个走子动画还没播完，则等它播完再走，使连续杀线走子的
+  /// 动画依次完整播放、互不覆盖。
+  Future<void> _pauseBeforeWinLineMove() async {
+    var wait = const Duration(milliseconds: 300);
+    final remain = _animEndTime.difference(DateTime.now());
+    if (remain > wait) wait = remain;
+    await Future.delayed(wait);
+  }
+
   /// 请求引擎为当前局面给出 bestmove，并根据 [autoMove] 决定处理方式。
   ///
   /// - [autoMove] 为 true：直接按 bestmove 走子，并交给
@@ -570,8 +584,8 @@ class GameController extends ChangeNotifier {
 
       final (from, to) = Fen.parseUciMove(uci);
       if (autoMove) {
-        // _applyAndRecord 内部已清除提示标记
-        moveApplied = _applyAndRecord(from, to);
+        // _applyAndRecord 内部已清除提示标记；AI 走子播放移动动画
+        moveApplied = _applyAndRecord(from, to, animate: true);
       } else {
         _hintMark = (from, to);
         notifyListeners();
@@ -721,7 +735,8 @@ class GameController extends ChangeNotifier {
         return;
       }
       final (from, to) = Fen.parseUciMove(uci);
-      moveApplied = _applyAndRecord(from, to);
+      // 出招按钮的 AI 走子同样播放移动动画
+      moveApplied = _applyAndRecord(from, to, animate: true);
       notifyListeners();
     } on EvalFileMissingException {
       evalInstalled = await _promptEvalFile();
@@ -787,7 +802,8 @@ class GameController extends ChangeNotifier {
     if (isOver) return false;
     if (_aiThinking) return false;
     if (_isAiSide(currentSide)) return false;
-    if (!_applyAndRecord(from, to)) return false;
+    // 与人类点击走子等价，播放移动动画
+    if (!_applyAndRecord(from, to, animate: true)) return false;
     notifyListeners();
     _afterMoveApplied();
     return true;
@@ -813,6 +829,9 @@ class GameController extends ChangeNotifier {
       // 单步走子动画：棋子从起点滑向终点（仅用户走子时播放，
       // AI 走子与批量回放不播）
       _moveAnim = MoveAnimEvent(piece: moving, from: from, to: to, forward: true);
+      // 记录动画预计结束时刻，供杀线连续走子时依次衔接动画
+      _animEndTime =
+          DateTime.now().add(kMoveAnimDuration).add(kMoveAnimFrameSlack);
     }
     final record = MoveRecord(
       from: from,
@@ -890,11 +909,12 @@ class GameController extends ChangeNotifier {
         if (rest.isNotEmpty && _isAiSide(matched.winner)) {
           final reply = rest.first;
           if (reply.moving.side == matched.winner) {
-            // 胜方应手不请求引擎：走棋前停顿 300ms，模拟思考节奏
-            await Future.delayed(const Duration(milliseconds: 300));
+            // 胜方应手不请求引擎：走棋前停顿 300ms（并等上一个走子
+            // 动画播完），模拟思考节奏
+            await _pauseBeforeWinLineMove();
             // 停顿期间局面可能已变（重开/跳转/终局），重新校验后再走
             if (isOver || !atTip) return;
-            if (_applyAndRecord(reply.from, reply.to)) {
+            if (_applyAndRecord(reply.from, reply.to, animate: true)) {
               notifyListeners();
               await _afterMoveApplied();
               return;
@@ -929,14 +949,15 @@ class GameController extends ChangeNotifier {
     final follow = _followLineFor(currentSide);
     if (follow != null) {
       final m = follow.moves.first;
-      // 跟线走棋不请求引擎：走棋前停顿 300ms，模拟思考节奏
-      await Future.delayed(const Duration(milliseconds: 300));
+      // 跟线走棋不请求引擎：走棋前停顿 300ms（并等上一个走子
+      // 动画播完），模拟思考节奏
+      await _pauseBeforeWinLineMove();
       // 停顿期间局面可能已变（重开/跳转/终局），重新校验后再走
       if (isOver || _aiThinking || !atTip || _analysisOn ||
           !_isAiSide(currentSide)) {
         return;
       }
-      if (_applyAndRecord(m.from, m.to)) {
+      if (_applyAndRecord(m.from, m.to, animate: true)) {
         notifyListeners();
         await _afterMoveApplied();
       }
@@ -975,7 +996,8 @@ class GameController extends ChangeNotifier {
       final win = _simulateWinLine(lineUci);
 
       final (from, to) = Fen.parseUciMove(uci);
-      if (_applyAndRecord(from, to)) {
+      // AI 引擎走子播放移动动画
+      if (_applyAndRecord(from, to, animate: true)) {
         moveApplied = true;
         // 仅当线路以 AI 方胜利告终时记录；去掉 AI 刚走的首招，
         // 剩余 [对方应手, 我方应手, ...] 挂到走子后的节点
