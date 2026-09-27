@@ -411,88 +411,145 @@ class _MoveRow extends StatelessWidget {
 // 注释区
 // ---------------------------------------------------------------------------
 
-class _CommentArea extends StatelessWidget {
+class _CommentArea extends StatefulWidget {
   const _CommentArea({required this.controller});
 
   final GameController controller;
 
   @override
-  Widget build(BuildContext context) {
-    // 注释属于「到达当前节点的那步棋」；根节点没有对应走法。
-    final hasMove = controller.currentNode.move != null;
-    final comment = controller.currentComment;
+  State<_CommentArea> createState() => _CommentAreaState();
+}
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 顶部操作条：步号 + 添加/编辑注释按钮
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Color(0xFFD8C69A), width: 0.6),
+class _CommentAreaState extends State<_CommentArea>
+    with SingleTickerProviderStateMixin {
+  /// 注释高亮动画：0 = 浅绿背景，1 = 透明（恢复原色），时长 3 秒。
+  late final AnimationController _highlightCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 3),
+    value: 1,
+  );
+
+  /// 上一次浏览到的节点，用于识别「前进/后退/跳转」导致的节点切换。
+  NotationNode? _lastNode;
+
+  /// 高亮起始浅绿。
+  static const Color _highlightColor = Color.fromARGB(255, 116, 245, 120);
+
+  GameController get controller => widget.controller;
+
+  @override
+  void dispose() {
+    _highlightCtrl.dispose();
+    super.dispose();
+  }
+
+  /// 节点切换时：若新节点（到达它的那步）带有注释，重新播放高亮，
+  /// 让注释框由浅绿在 3 秒内逐渐恢复；无注释则直接保持透明。
+  void _maybeHighlight(NotationNode node) {
+    if (identical(_lastNode, node)) return;
+    final firstBuild = _lastNode == null;
+    _lastNode = node;
+    if (firstBuild) return; // 首次进入页面不高亮，仅导航切换时触发
+    final hasComment = controller.currentComment.trim().isNotEmpty;
+    if (hasComment) {
+      _highlightCtrl.forward(from: 0);
+    } else {
+      _highlightCtrl.value = 1;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([controller, _highlightCtrl]),
+      builder: (context, _) {
+        final current = controller.currentNode;
+        _maybeHighlight(current);
+        // 注释属于「到达当前节点的那步棋」；根节点没有对应走法。
+        final hasMove = current.move != null;
+        final comment = controller.currentComment;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 顶部操作条：步号 + 添加/编辑注释按钮
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Color(0xFFD8C69A), width: 0.6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      hasMove
+                          ? '第 ${current.moveNumber} 回合注释'
+                          : '开局注释',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF8B6B3D),
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _editComment(context),
+                    icon: const Icon(Icons.edit_note, size: 18),
+                    label: Text(
+                      comment.isEmpty ? '添加注释' : '编辑注释',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.boardLine,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  hasMove
-                      ? '第 ${controller.currentNode.moveNumber} 回合注释'
-                      : '开局注释',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF8B6B3D),
+            // 注释内容区：导航到带注释的着法时浅绿高亮，3 秒渐退
+            Expanded(
+              child: AnimatedBuilder(
+                animation: _highlightCtrl,
+                builder: (context, child) => Container(
+                  // 固定浅绿、仅对透明度插值，避免渐隐过程中颜色发暗
+                  color: _highlightColor
+                      .withValues(alpha: 1 - _highlightCtrl.value),
+                  padding: const EdgeInsets.all(12),
+                  child: child,
+                ),
+                child: SingleChildScrollView(
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: comment.isNotEmpty
+                        ? SelectableText(
+                            comment,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              height: 1.6,
+                              color: Color(0xFF2C3E2D),
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              '（暂无注释）',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: const Color(0xFFB0A48A),
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
               ),
-              TextButton.icon(
-                onPressed: () => _editComment(context),
-                icon: const Icon(Icons.edit_note, size: 18),
-                label: Text(
-                  comment.isEmpty ? '添加注释' : '编辑注释',
-                  style: const TextStyle(fontSize: 13),
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.boardLine,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 注释内容区
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            child: SingleChildScrollView(
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: comment.isNotEmpty
-                    ? SelectableText(
-                        comment,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 1.6,
-                          color: Color(0xFF2C3E2D),
-                        ),
-                      )
-                    : Center(
-                        child: Text(
-                          '（暂无注释）',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: const Color(0xFFB0A48A),
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-              ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
