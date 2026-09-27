@@ -9,7 +9,7 @@ import '../canju/canju_selector_dialog.dart';
 import '../../core/canju/canju_library.dart';
 import '../controllers/game_controller.dart';
 import '../shared/adjustable_button_bar.dart';
-import 'result_dialog.dart';
+import '../shared/floating_toast.dart';
 import 'widgets/board_widget.dart';
 import 'widgets/move_arrow_painter.dart';
 import 'widgets/review_panel.dart';
@@ -350,7 +350,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
   }
 }
 
-/// 监听 controller 结束态并显示结果弹窗。
+/// 监听 controller 结束态并显示浮动结果提示。
 ///
 /// 自身不可见(返回 SizedBox.shrink)，仅用于副作用。
 class _ResultWatcher extends StatefulWidget {
@@ -369,18 +369,15 @@ class _ResultWatcherState extends State<_ResultWatcher> {
     final tick = controller.resultTick;
     if (tick != _lastTick) {
       _lastTick = tick;
-      // 仅在「新走子将死」时弹窗；前进/后退浏览已记录的终局不弹
+      // 仅在「新走子将死」时提示；前进/后退浏览已记录的终局不弹。
+      // 使用非模式浮动提示，3 秒后自动消失，不阻断操作。
       if (controller.isOver) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => ResultDialog(
-              result: controller.result,
-              onRestart: () {
-                controller.restart();
-              },
-            ),
+          if (!mounted) return;
+          FloatingToast.show(
+            context,
+            '对局结束：${controller.result}',
+            icon: Icons.flag_outlined,
           );
         });
       }
