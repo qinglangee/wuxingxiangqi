@@ -8,7 +8,7 @@ import 'app_config.dart';
 
 /// 程序配置管理器：负责配置的加载、保存与修改通知。
 ///
-/// - 配置文件位于应用默认数据目录（系统文档目录下的 `wuxingxingqi`
+/// - 配置文件位于应用默认数据目录（系统文档目录下的 `wuxingxiangqi`
 ///   子目录）中的 `app_config.json`（JSON 文本）。
 /// - 启动时调用 [load] 从磁盘读取；修改后通过 [save] 落盘。
 /// - 继承 [ChangeNotifier]，可被 Provider 注入到 UI 层，UI 在 [notifyListeners]
@@ -34,7 +34,7 @@ class ConfigManager extends ChangeNotifier {
   static const String kFileName = 'app_config.json';
 
   /// 应用默认数据目录名（位于系统文档目录之下）。
-  static const String kDataDirName = 'wuxingxingqi';
+  static const String kDataDirName = 'wuxingxiangqi';
 
   /// 启动时调用：从磁盘读取配置。文件不存在或解析失败时使用默认配置。
   ///
@@ -184,7 +184,7 @@ class ConfigManager extends ChangeNotifier {
   String? _dataDirPathCache;
   String? _configFilePathCache;
 
-  /// 应用默认数据目录：系统文档目录下的 `wuxingxingqi` 子目录。
+  /// 应用默认数据目录：系统文档目录下的 `wuxingxiangqi` 子目录。
   /// 配置文件、权重回退副本等应用数据都放在这里。
   Future<String> get dataDirPath async => _dataDirPathCache ??=
       '${(await getApplicationDocumentsDirectory()).path}'

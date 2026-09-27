@@ -14,7 +14,7 @@ import '../../domain/engine/pikafish_engine.dart';
 /// - Windows 上若所选路径为纯 ASCII（Pikafish 窄字符路径可以直接打开），
 ///   则直接记录原路径使用，不做复制；
 /// - 路径含中文等非 ASCII 字符、或引擎报告无法加载时，再复制到应用
-///   默认数据目录（文档目录/wuxingxingqi），并记录副本路径。
+///   默认数据目录（文档目录/wuxingxiangqi），并记录副本路径。
 ///
 /// 最终使用的绝对路径写入引擎配置持久保存。
 class EvalFileService {

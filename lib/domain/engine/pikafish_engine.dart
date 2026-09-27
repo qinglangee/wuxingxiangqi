@@ -78,7 +78,7 @@ class EnginePosition {
 ///   数据/缓存目录执行代码，必须走原生库路径，无需也不能 chmod。
 /// - 权重文件 pikafish.nnue 不随包分发：由用户选择文件，Windows 下
 ///   ASCII 路径直接使用原文件；路径无法加载时自动复制到应用数据目录
-///   （文档目录/wuxingxingqi）后重试，路径记录在
+///   （文档目录/wuxingxiangqi）后重试，路径记录在
 ///   [EngineConfig.evalFilePath]；未配置或文件不存在时启动抛出
 ///   [EvalFileMissingException]。
 class PikafishEngine {
