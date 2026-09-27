@@ -7,6 +7,7 @@ import '../canju/canju_controller.dart';
 import '../canju/canju_level_dialog.dart';
 import '../canju/canju_selector_dialog.dart';
 import '../../core/canju/canju_library.dart';
+import '../../core/services/sound_service.dart';
 import '../controllers/game_controller.dart';
 import '../shared/adjustable_button_bar.dart';
 import '../shared/floating_toast.dart';
@@ -221,7 +222,11 @@ class _CanjuBar extends StatelessWidget {
           id: '分析',
           icon: Icons.analytics_outlined,
           label: '分析',
-          onTap: controller.enterAnalysisMode,
+          onTap: () {
+            // 先播放切换音效，再进入分析状态
+            SoundService.playChua();
+            controller.enterAnalysisMode();
+          },
         ),
         FreeButton(
           id: '题库',

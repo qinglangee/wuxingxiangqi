@@ -18,6 +18,7 @@ class SoundService {
   static const _checkPath = '$_dir/check.mp3';
   static const _winPath = '$_dir/win.mp3';
   static const _alarmPath = '$_dir/alarm.mp3';
+  static const _chuaPath = '$_dir/chua.mp3';
 
   static final AudioPlayer _player = AudioPlayer();
   static final AudioCache _cache = AudioCache(prefix: 'assets/');
@@ -35,6 +36,7 @@ class SoundService {
       _cache.load(_checkPath),
       _cache.load(_winPath),
       _cache.load(_alarmPath),
+      _cache.load(_chuaPath),
     ]);
   }
 
@@ -52,6 +54,9 @@ class SoundService {
 
   /// 取消选中提示音效。
   static void playAlarm() => _play(_alarmPath);
+
+  /// 切换分析状态音效。
+  static void playChua() => _play(_chuaPath);
 
   static void _play(String path) {
     // 无论当前状态（idle/playing/completed/paused）都先停掉，
