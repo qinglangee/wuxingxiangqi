@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
+/// 水平镜像包裹 [child]（以中心为轴翻转，用于方向性图标对称成对）。
+Widget mirrored(Widget child) => Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.identity()..scaleByDouble(-1.0, 1.0, 1.0, 1.0),
+      child: child,
+    );
+
 /// 通用选择按钮（check button）：图标在上、文字在下，文字可整体隐藏。
 ///
 /// - [checked] 为 null 时按普通按钮渲染（无选中态）；
 /// - [checked] 非 null 时作为选择按钮使用，选中时显示高亮底框；
-/// - [showLabel] 为 false 时只显示图标，按钮更紧凑。
+/// - [showLabel] 为 false 时只显示图标，按钮更紧凑；
+/// - [flipIcon] 为 true 时图标水平镜像显示（方向性图标对称成对用）。
 ///
 /// 典型用法：打谱页顶部的「红方电脑 / 黑方电脑」开关。
 class IconCheckButton extends StatelessWidget {
@@ -19,6 +27,7 @@ class IconCheckButton extends StatelessWidget {
     this.enabled = true,
     this.showLabel = true,
     this.iconColor,
+    this.flipIcon = false,
   });
 
   final IconData icon;
@@ -35,6 +44,9 @@ class IconCheckButton extends StatelessWidget {
 
   /// 图标颜色；null 时使用主题默认色。禁用时始终为灰色。
   final Color? iconColor;
+
+  /// 图标是否水平镜像显示。
+  final bool flipIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +75,9 @@ class IconCheckButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 26, color: effectiveIconColor),
+            flipIcon
+                ? mirrored(Icon(icon, size: 26, color: effectiveIconColor))
+                : Icon(icon, size: 26, color: effectiveIconColor),
             if (showLabel) ...[
               const SizedBox(height: 2),
               Text(

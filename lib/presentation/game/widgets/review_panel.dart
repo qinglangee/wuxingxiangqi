@@ -128,6 +128,8 @@ class _ReviewPanelState extends State<ReviewPanel>
                 id: '下一分支',
                 icon: Icons.alt_route,
                 label: '下一分支',
+                // 与「上一分支」共用同一图标，水平镜像后方向相反、视觉对称
+                flipIcon: true,
                 enabled: controller.canGoNextBranch,
                 onTap: controller.goToNextBranch,
               ),

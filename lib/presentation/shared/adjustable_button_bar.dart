@@ -19,6 +19,7 @@ class FreeButton {
     this.checked,
     this.showLabel = true,
     this.iconColor,
+    this.flipIcon = false,
   });
 
   /// 稳定标识，用于在重建间保持顺序与常驻状态。
@@ -37,6 +38,9 @@ class FreeButton {
 
   /// 图标颜色；null 时使用主题默认色（如红黑方用各自的颜色）。
   final Color? iconColor;
+
+  /// 图标是否水平镜像显示（方向性图标对称成对用，如「下一分支」）。
+  final bool flipIcon;
 }
 
 /// 通用的「可调整窗口控件」。
@@ -321,6 +325,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
                             enabled: b.enabled,
                             showLabel: _effectiveShowLabel(b),
                             iconColor: b.iconColor,
+                            flipIcon: b.flipIcon,
                             onTap: b.onTap,
                           ),
                         ),
@@ -569,7 +574,10 @@ class _DrawerChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(button.icon, size: 18, color: color),
+            if (button.flipIcon)
+              mirrored(Icon(button.icon, size: 18, color: color))
+            else
+              Icon(button.icon, size: 18, color: color),
             if (showLabel) ...[
               const SizedBox(width: 6),
               Text(
@@ -609,7 +617,9 @@ class _EditRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       key: key,
-      leading: Icon(button.icon, color: AppTheme.boardLine, size: 22),
+      leading: button.flipIcon
+          ? mirrored(Icon(button.icon, color: AppTheme.boardLine, size: 22))
+          : Icon(button.icon, color: AppTheme.boardLine, size: 22),
       title: Text(
         button.label,
         style: const TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
