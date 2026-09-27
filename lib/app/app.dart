@@ -61,7 +61,12 @@ class App extends StatelessWidget {
           // 棋谱模式
           ParsedGame? game;
           ReplayData? replay;
-          if (args is (ParsedGame, ReplayData)) {
+          String? sourcePath;
+          if (args is (ParsedGame, ReplayData, String?)) {
+            game = args.$1;
+            replay = args.$2;
+            sourcePath = args.$3;
+          } else if (args is (ParsedGame, ReplayData)) {
             game = args.$1;
             replay = args.$2;
           } else if (args is ParsedGame) {
@@ -74,7 +79,8 @@ class App extends StatelessWidget {
                 // 防御性兜底：首页理论上已校验通过，这里即使再失败
                 // 也不让异常逃逸到框架层导致红屏，改为打开空白对局。
                 try {
-                  gc.loadParsedGame(game, replay: replay);
+                  gc.loadParsedGame(game,
+                      replay: replay, sourcePath: sourcePath);
                 } catch (e) {
                   debugPrint('载入棋谱失败: $e');
                 }

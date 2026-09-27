@@ -14,4 +14,10 @@ abstract class NotationParser {
   /// [bytes] 为原始文件字节，[filename] 仅用于错误信息（可选）。
   /// 不同格式可选择用字节或解码后的文本进行解析。
   ParsedGame parse(List<int> bytes, {String? filename});
+
+  /// 把内部统一格式 [game] 序列化为该格式的文件字节（解析的逆操作）。
+  ///
+  /// 输出需包含全部主线着法、分支变着与各节点注释；不支持的内容
+  /// （如某格式无法表达的字段）可安全丢弃。
+  List<int> write(ParsedGame game);
 }

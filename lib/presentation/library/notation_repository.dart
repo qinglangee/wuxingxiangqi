@@ -34,10 +34,11 @@ Future<void> openNotationFile(BuildContext context, String path) async {
 
   if (!context.mounted) return;
   if (parsed != null && replay != null) {
-    // 解析与回放均成功：把棋谱与已验证的坐标一起传给打谱页
+    // 解析与回放均成功：把棋谱、已验证坐标与来源文件路径一起传给打谱页
+    // （来源路径用于保存时「覆盖原文件」）
     Navigator.of(context).pushNamed(
       '/play',
-      arguments: (parsed, replay),
+      arguments: (parsed, replay, path),
     );
   } else {
     await showDialog<void>(

@@ -86,6 +86,7 @@ class ParsedMove {
     this.side,
     this.comment,
     this.branches = const [],
+    this.notation,
   });
 
   /// 着法文本：UCI 坐标串（如 `'e3e4'`）或中文招法（如 `'炮二平五'`）。
@@ -106,6 +107,13 @@ class ParsedMove {
   /// 又可带自己的 [branches]，形成递归树。PGN 当前只解析主线，
   /// 此字段为空；XQF 把整棵着法树拍扁为「主线 + 每步挂变着」。
   final List<List<ParsedMove>> branches;
+
+  /// 该步的中文记谱文本（如 `'炮二平五'`），可选。
+  ///
+  /// 由内部棋谱树导出时填充：写 PGN 优先使用中文招法，可读性更好；
+  /// 坐标类格式（XQF）仍使用 [moveText] 中的 UCI 串。解析器不产生
+  /// 此字段。
+  final String? notation;
 
   @override
   String toString() =>

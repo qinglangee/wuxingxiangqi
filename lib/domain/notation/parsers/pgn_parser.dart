@@ -58,6 +58,126 @@ class PgnParser implements NotationParser {
     );
   }
 
+  // ---- 写入（解析的逆操作） ------------------------------------------------
+
+  /// 标准开局 FEN（与 [Fen.fromBoard] 输出风格一致）。
+  ///
+  /// 起始局面等价于标准开局且红先时不写 FEN 头标（PGN 约定）。
+  static const String _standardFen =
+      'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
+
+  @override
+  List<int> write(ParsedGame game) => utf8.encode(encodeText(game));
+
+  /// 把 [game] 序列化为 PGN 文本：头部标签 + 着法区（含分支与注释）。
+  String encodeText(ParsedGame game) {
+    final sb = StringBuffer();
+
+    // ---- 头部标签 ----
+    void tag(String key, String? value) {
+      if (value == null || value.trim().isEmpty) return;
+      final escaped = value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+      sb.writeln('[$key "$escaped"]');
+    }
+
+    tag('Event', game.info.event);
+    tag('Site', game.info.site);
+    tag('Date', game.info.date);
+    tag('Red', game.info.red);
+    tag('Black', game.info.black);
+    tag('Opening', game.info.opening);
+    tag('Note', game.info.note);
+    // 非标准开局（让子/排局/黑先）才写 FEN
+    final fen = game.startingFen;
+    if (fen != null && fen.trim() != _standardFen) {
+      tag('FEN', fen.trim());
+    }
+    tag('Result', game.info.result ?? '*');
+    sb.writeln();
+
+    // ---- 着法区 ----
+    final tokens = <String>[];
+
+    // 开局评注：着法区开头的 {…}，载入时由根节点注释承接
+    final rootComment = game.rootComment?.trim();
+    if (rootComment != null && rootComment.isNotEmpty) {
+      tokens.add('{${_sanitizeComment(rootComment)}}');
+    }
+
+    // 起始局面的分支（替代首着的变着线）
+    for (final branch in game.rootBranches) {
+      tokens.add('(');
+      _appendLine(tokens, branch, game.startingSide, 1);
+      tokens.add(')');
+    }
+
+    _appendLine(tokens, game.moves, game.startingSide, 1);
+
+    final result = (game.info.result ?? '').trim();
+    tokens.add(result.isEmpty ? '*' : result);
+
+    // 按约 78 列折行，保持 PGN 可读性
+    final line = StringBuffer();
+    for (final t in tokens) {
+      if (line.length + t.length + 1 > 78 && line.isNotEmpty) {
+        sb.writeln(line.toString().trimRight());
+        line.clear();
+      }
+      line.write('$t ');
+    }
+    if (line.isNotEmpty) sb.writeln(line.toString().trimRight());
+
+    return sb.toString();
+  }
+
+  /// 递归拼接一条着法线（含每步的分支变着与注释）。
+  ///
+  /// [startSide] 为该线首着的走子方，[startRound] 为首着所在回合号。
+  /// 红着前输出 `N.`；线首（含括号内变着首着为黑方）输出 `N...`。
+  /// 每步走完后，其 [ParsedMove.branches] 以 `(…)` 形式紧随该步输出。
+  void _appendLine(
+    List<String> out,
+    List<ParsedMove> line,
+    Side startSide,
+    int startRound,
+  ) {
+    var round = startRound;
+    for (var i = 0; i < line.length; i++) {
+      final m = line[i];
+      final side = m.side ?? (i == 0 ? startSide : _flip(line[i - 1].side ?? startSide));
+
+      if (side == Side.red) {
+        out.add('$round.');
+      } else if (i == 0) {
+        // 黑方先行的主线或变着首着：N...
+        out.add('$round...');
+      }
+
+      // 注释写在着法记号之前：标准 PGN 中该位置的 {…} 注解走子前局面，
+      // 同时也与本应用解析器「{…} 附加到下一步」的约定一致，保证
+      // 保存后重新打开注释不丢失。
+      final comment = m.comment?.trim();
+      if (comment != null && comment.isNotEmpty) {
+        out.add('{${_sanitizeComment(comment)}}');
+      }
+
+      out.add(m.notation ?? m.moveText);
+
+      // 本步走完后局面的变着（替代下一着），递归输出
+      for (final branch in m.branches) {
+        out.add('(');
+        _appendLine(out, branch, _flip(side), side == Side.red ? round : round + 1);
+        out.add(')');
+      }
+
+      if (side == Side.black) round++;
+    }
+  }
+
+  /// 注释中不允许出现未转义的花括号（PGN 注释定界符）。
+  String _sanitizeComment(String text) =>
+      text.replaceAll('{', '(').replaceAll('}', ')');
+
   // ---- 文本解码 ------------------------------------------------------------
 
   /// 默认按 UTF-8 解码；失败时退回 latin1 兜底（不崩溃）。

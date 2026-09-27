@@ -67,6 +67,18 @@ class GameController extends ChangeNotifier {
   /// 当前浏览/对弈所在的节点。
   late NotationNode _current;
 
+  /// 棋谱来源文件的绝对路径（从文件打开时设置）；
+  /// null 表示新对局或从残局/FEN 开始，保存时走「另存为」。
+  String? _sourceFilePath;
+  String? get sourceFilePath => _sourceFilePath;
+
+  /// 最近一次载入棋谱的元信息（赛事、对弈方等），保存时写回。
+  GameInfo _gameInfo = const GameInfo();
+
+  /// 保存成功后更新来源路径（「另存为」后再次保存即覆盖新文件）。
+  // ignore: use_setters_to_change_properties
+  void markSavedTo(String path) => _sourceFilePath = path;
+
   bool _redIsAi = false;
   bool _blackIsAi = false;
   bool _aiThinking = false;
@@ -224,6 +236,8 @@ class GameController extends ChangeNotifier {
     _aiThinking = false;
     _resultTick = 0;
     _hintMark = null;
+    _sourceFilePath = null;
+    _gameInfo = const GameInfo();
     // 重开 = 一局新游戏
     _ai.notifyNewGame();
     boardChange.emit();
@@ -241,8 +255,15 @@ class GameController extends ChangeNotifier {
   /// 3. 完成后跳回根节点，显示棋谱初始状态。
   ///
   /// 解析或规则校验失败时抛 [NotationParseException]。
-  void loadParsedGame(ParsedGame game, {ReplayData? replay}) {
+  void loadParsedGame(
+    ParsedGame game, {
+    ReplayData? replay,
+    String? sourcePath,
+  }) {
     final data = replay ?? NotationReplay.resolve(game);
+
+    _sourceFilePath = sourcePath;
+    _gameInfo = game.info;
 
     _state.restoreFrom(
       board: data.startBoard,
@@ -304,11 +325,89 @@ class GameController extends ChangeNotifier {
     _aiThinking = false;
     _resultTick = 0;
     _hintMark = null;
+    _sourceFilePath = null;
+    _gameInfo = const GameInfo();
     // 载入残局局面 = 一局新游戏
     _ai.notifyNewGame();
     boardChange.emit();
     if (notify) notifyListeners();
     _restartAnalysisForNewPosition();
+  }
+
+  /// 把当前整棵棋谱树（含全部分支与注释）导出为 [ParsedGame]，供保存。
+  ///
+  /// - 起始 FEN 取根节点盘面；首步走子方取根节点行棋方；
+  /// - 主线沿各节点 mainChild 指针，其余孩子作为同位变着递归导出；
+  /// - 每步同时输出 UCI 坐标与中文记谱；
+  /// - 根节点 [NotationNode.comment] 作为开局评注；
+  /// - 结果取主线末梢节点的胜负状态（进行中时保留载入时的原结果）。
+  ParsedGame exportParsedGame() {
+    final startFen = Fen.fromBoard(_root.board, _root.sideToMove);
+
+    String? result;
+    switch (_root.mainLine().last.result.status) {
+      case GameResultStatus.redWins:
+        result = '1-0';
+      case GameResultStatus.blackWins:
+        result = '0-1';
+      case GameResultStatus.draw:
+        result = '1/2-1/2';
+      case GameResultStatus.ongoing:
+        result = _gameInfo.result;
+    }
+
+    final orderedRoot = _orderedChildren(_root);
+    final moves = orderedRoot.isEmpty
+        ? <ParsedMove>[]
+        : _exportLine(orderedRoot.first);
+    final rootBranches =
+        orderedRoot.skip(1).map((n) => _exportLine(n)).toList();
+
+    return ParsedGame(
+      info: GameInfo(
+        event: _gameInfo.event,
+        site: _gameInfo.site,
+        date: _gameInfo.date,
+        red: _gameInfo.red,
+        black: _gameInfo.black,
+        result: result,
+        opening: _gameInfo.opening,
+        note: _gameInfo.note,
+      ),
+      startingFen: startFen,
+      startingSide: _root.sideToMove,
+      rootComment: _root.comment,
+      moves: moves,
+      rootBranches: rootBranches,
+    );
+  }
+
+  /// 节点的续着列表：当前主线孩子排首位，其余分支按原顺序在后。
+  List<NotationNode> _orderedChildren(NotationNode node) {
+    if (node.children.isEmpty) return const [];
+    final mi = node.mainChildIndex.clamp(0, node.children.length - 1);
+    final main = node.children[mi];
+    return [
+      main,
+      ...node.children.where((n) => !identical(n, main)),
+    ];
+  }
+
+  /// 从某着法节点起导出一条着法线（主线续着在前，分支挂在各步上）。
+  List<ParsedMove> _exportLine(NotationNode first) {
+    final rec = first.move!;
+    final children = _orderedChildren(first);
+    final branches =
+        children.skip(1).map((sib) => _exportLine(sib)).toList();
+    final pm = ParsedMove(
+      moveText: Fen.moveToUci(rec.from, rec.to),
+      side: rec.side,
+      notation: rec.notation,
+      comment: rec.comment,
+      branches: branches,
+    );
+    if (children.isEmpty) return [pm];
+    return [pm, ..._exportLine(children.first)];
   }
 
   /// 后退一步：回到上一节点并恢复盘面。导航操作不触发 AI。

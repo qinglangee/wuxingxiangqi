@@ -6,6 +6,7 @@ import '../../../../domain/notation/move_record.dart';
 import '../../../../domain/notation/notation_node.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../controllers/game_controller.dart';
+import '../../library/game_saver.dart';
 import '../../shared/adjustable_button_bar.dart';
 import 'cloud_base_controller.dart';
 import 'cloud_base_panel.dart';
@@ -143,6 +144,12 @@ class _ReviewPanelState extends State<ReviewPanel>
                     controller.goForward();
                   }
                 },
+              ),
+              FreeButton(
+                id: '保存',
+                icon: Icons.save,
+                label: '保存',
+                onTap: () => GameSaver.saveGame(context, controller),
               ),
             ],
           ),

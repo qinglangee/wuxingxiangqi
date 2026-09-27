@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'notation_exception.dart';
 import 'notation_parser.dart';
 import 'parsed_game.dart';
@@ -46,5 +48,28 @@ class NotationLoader {
     final dot = path.lastIndexOf('.');
     if (dot < 0 || dot == path.length - 1) return '';
     return path.substring(dot + 1);
+  }
+
+  /// 支持写入的格式扩展名列表（供另存为对话框选择）。
+  static List<String> get writableExtensions =>
+      _parsers.keys.toList(growable: false);
+
+  /// 把 [game] 按 [path] 的扩展名序列化为对应格式并写入文件。
+  ///
+  /// 不支持的扩展名或写入失败时抛出 [NotationParseException]（或 IO 异常）。
+  static Future<void> saveToFile({
+    required String path,
+    required ParsedGame game,
+  }) async {
+    final ext = _extensionOf(path).toLowerCase();
+    final parser = _parsers[ext];
+    if (parser == null) {
+      throw NotationParseException(
+        '不支持的棋谱格式：.$ext（当前支持：${_parsers.keys.map((e) => '.$e').join(' / ')}）',
+        cause: 'path=$path',
+      );
+    }
+    final bytes = parser.write(game);
+    await File(path).writeAsBytes(bytes, flush: true);
   }
 }

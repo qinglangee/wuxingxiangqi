@@ -54,6 +54,223 @@ class XqfParser implements NotationParser {
     }
   }
 
+  // ---- 写入（解析的逆操作） ------------------------------------------------
+
+  /// 标准开局 FEN（起始 FEN 为空时使用）。
+  static const String _standardFen =
+      'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
+
+  /// 文件头总长度：着法段从 0x400 开始。
+  static const int _headerSize = 1024;
+
+  @override
+  List<int> write(ParsedGame game) {
+    // 输出固定使用 XQF 1.0（version=10）——该版本着法段与棋子坐标
+    // 均不加密，现有 parse() 可直接读回，兼容象棋演播室系列软件。
+    final header = Uint8List(_headerSize);
+    header[0] = 0x58; // 'X'
+    header[1] = 0x51; // 'Q'
+    header[2] = 10; // version
+
+    // 32 枚棋子位置
+    _writePiecePositions(header, game.startingFen ?? _standardFen);
+
+    // 轮次与结果
+    header[50] = game.startingSide == Side.black ? 1 : 0;
+    header[51] = switch (game.info.result) {
+      '1-0' => 1,
+      '0-1' => 2,
+      '1/2-1/2' => 3,
+      _ => 0,
+    };
+
+    // 文本字段（GBK，长度前缀）
+    _writeHeaderString(header, 80, 128, game.info.note ?? '');
+    _writeHeaderString(header, 208, 64, game.info.event ?? '');
+    _writeHeaderString(header, 272, 16, game.info.date ?? '');
+    _writeHeaderString(header, 288, 16, game.info.site ?? '');
+    _writeHeaderString(header, 304, 16, game.info.red ?? '');
+    _writeHeaderString(header, 320, 16, game.info.black ?? '');
+
+    // 着法树：根节点 + 子节点（第 0 节点承载开局评注）
+    final root = _buildWriteTree(game);
+    final moveBytes = BytesBuilder();
+    _writeNode(moveBytes, root,
+        isRoot: true,
+        hasNext: root.children.isNotEmpty,
+        hasChange: root.children.length > 1);
+    if (root.children.isNotEmpty) {
+      _writeChildren(moveBytes, root.children);
+    }
+
+    final out = BytesBuilder()
+      ..add(header)
+      ..add(moveBytes.toBytes());
+    return out.toBytes();
+  }
+
+  /// 从 FEN 推导 32 枚棋子位置并写入文件头 16..47。
+  ///
+  /// 槽位顺序固定为 [_fenPieces]；同类棋子的多个槽位可互换（FEN 字符
+  /// 相同）。棋盘上缺失的棋子写 0xFF（>= 90，解析时视为不存在）。
+  void _writePiecePositions(Uint8List h, String fen) {
+    final placement = fen.trim().split(RegExp(r'\s+')).first;
+    // 展开为 90 格字符列表（row 0 = 黑方顶部，与 FEN 行序一致）
+    final cells = <String>[];
+    for (final ch in placement.split('')) {
+      if (ch == '/') continue;
+      if (RegExp(r'[1-9]').hasMatch(ch)) {
+        cells.addAll(List.filled(int.parse(ch), ''));
+      } else {
+        cells.add(ch);
+      }
+    }
+    if (cells.length != 90) {
+      throw NotationParseException('XQF 写入失败：起始 FEN 不合法');
+    }
+
+    for (var i = 0; i < 32; i++) {
+      final target = _fenPieces[i];
+      var pos = 0xFF;
+      final idx = cells.indexWhere((c) => c == target);
+      if (idx >= 0) {
+        final row = idx ~/ 9;
+        final col = idx % 9;
+        cells[idx] = ''; // 已占用
+        pos = col * 10 + (9 - row);
+      }
+      h[16 + i] = pos;
+    }
+  }
+
+  /// 写一个「长度前缀 + GBK 内容（剩余补零）」的文件头文本字段。
+  void _writeHeaderString(
+      Uint8List h, int offset, int maxLen, String text) {
+    final t = text.trim();
+    if (t.isEmpty) {
+      h[offset] = 0;
+      return;
+    }
+    List<int> gb;
+    try {
+      gb = gbk_bytes.encode(t);
+    } catch (_) {
+      gb = gbk_bytes.encode(t.replaceAll(RegExp(r'[^\x00-\x7F一-鿿]'), '?'));
+    }
+    final len = gb.length > maxLen - 1 ? maxLen - 1 : gb.length;
+    h[offset] = len;
+    for (var i = 0; i < len; i++) {
+      h[offset + 1 + i] = gb[i] & 0xFF;
+    }
+  }
+
+  /// 把 [ParsedGame] 的主线/根分支/各步变着构建为写入用着法树。
+  ///
+  /// 每个节点 children[0] 为主线续着，其余为同位变着，与解析端
+  /// `_flattenLine` 的拍扁方式互逆。
+  _WNode _buildWriteTree(ParsedGame game) {
+    final root = _WNode(move: '', remark: game.rootComment);
+    if (game.moves.isNotEmpty) {
+      root.children.add(_buildChain(game.moves, 0));
+    }
+    for (final branch in game.rootBranches) {
+      if (branch.isNotEmpty) root.children.add(_buildChain(branch, 0));
+    }
+    return root;
+  }
+
+  /// 构建一条着法线从 [i] 起的节点；i+1 为主线续着（置于 children[0]），
+  /// 该步自带的 branches 为同位变着。
+  _WNode _buildChain(List<ParsedMove> line, int i) {
+    final m = line[i];
+    final uci = _requireUci(m.moveText);
+    final node = _WNode(
+      move: uci,
+      remark: (m.comment?.trim().isNotEmpty ?? false) ? m.comment!.trim() : '',
+    );
+    // 先放变着，再把主线续着插到首位
+    for (final b in m.branches) {
+      if (b.isNotEmpty) node.children.add(_buildChain(b, 0));
+    }
+    if (i + 1 < line.length) {
+      node.children.insert(0, _buildChain(line, i + 1));
+    }
+    return node;
+  }
+
+  /// 校验并规范化为 ICCS/UCI 坐标串（XQF 着法段只存坐标）。
+  String _requireUci(String text) {
+    final t = text.trim();
+    final uci = RegExp(r'^[a-i][0-9][a-i][0-9]$');
+    if (!uci.hasMatch(t)) {
+      throw NotationParseException(
+        'XQF 写入失败：着法必须是 UCI 坐标（如 h2e2），实际为「$t」',
+      );
+    }
+    return t;
+  }
+
+  /// DFS 写一层兄弟节点。
+  ///
+  /// flag 规则（与解析端 fork 栈互逆）：
+  /// - hasNext：本节点有续着（children 非空）；
+  /// - hasChange：本节点之后还有同父兄弟（不是最后一个孩子）。
+  void _writeChildren(BytesBuilder out, List<_WNode> children) {
+    for (var i = 0; i < children.length; i++) {
+      final node = children[i];
+      final hasNext = node.children.isNotEmpty;
+      final hasChange = i < children.length - 1;
+      _writeNode(out, node, isRoot: false, hasNext: hasNext, hasChange: hasChange);
+      if (hasNext) _writeChildren(out, node.children);
+    }
+  }
+
+  /// 写单个着法节点（8 字节头 + GBK 注释），v10 不加密。
+  void _writeNode(
+    BytesBuilder out,
+    _WNode node, {
+    required bool isRoot,
+    required bool hasNext,
+    required bool hasChange,
+  }) {
+    if (isRoot) {
+      // 根节点着法字节无意义，置 0
+      out.addByte(0);
+      out.addByte(0);
+    } else {
+      final pf = _iccsToPos(node.move.substring(0, 2));
+      final pt = _iccsToPos(node.move.substring(2, 4));
+      out.addByte((pf + 24) & 0xFF);
+      out.addByte((pt + 32) & 0xFF);
+    }
+    // v10：高 4 位 hasNext，低 4 位 hasChange
+    out.addByte((hasNext ? 0xF0 : 0x00) | (hasChange ? 0x0F : 0x00));
+    out.addByte(0);
+
+    final remark = node.remark;
+    List<int> commentBytes = const [];
+    if (remark != null && remark.isNotEmpty) {
+      try {
+        commentBytes = gbk_bytes.encode(remark);
+      } catch (_) {
+        commentBytes = const [];
+      }
+    }
+    final len = commentBytes.length;
+    out.addByte(len & 0xFF);
+    out.addByte((len >> 8) & 0xFF);
+    out.addByte((len >> 16) & 0xFF);
+    out.addByte((len >> 24) & 0xFF);
+    out.add(commentBytes);
+  }
+
+  /// ICCS 坐标（如 a0）转 XQF 位置（x*10+y）。
+  int _iccsToPos(String iccs) {
+    final x = iccs.codeUnitAt(0) - 0x61;
+    final y = int.parse(iccs[1]);
+    return x * 10 + y;
+  }
+
   // ---- 文件头 -------------------------------------------------------------
 
   /// 32 枚棋子的 FEN 表示顺序（红方车马相士帅士相马车炮炮兵×5 + 黑方同序）。
@@ -421,6 +638,14 @@ class _TreeNode {
   String move;
   String? remark;
   final List<_TreeNode> children = [];
+}
+
+/// 写入用着法树节点（结构同 [_TreeNode]，语义独立，避免与解析逻辑耦合）。
+class _WNode {
+  _WNode({required this.move, this.remark});
+  final String move;
+  final String? remark;
+  final List<_WNode> children = [];
 }
 
 /// 内部走子方枚举（避免在解析循环里反复与 Flutter 的 Side 互转）。
