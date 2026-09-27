@@ -15,6 +15,7 @@ class SoundService {
 
   static const _movePath = '$_dir/move.mp3';
   static const _eatPath = '$_dir/eat.mp3';
+  static const _checkPath = '$_dir/check.mp3';
   static const _winPath = '$_dir/win.mp3';
   static const _alarmPath = '$_dir/alarm.mp3';
 
@@ -31,6 +32,7 @@ class SoundService {
     await Future.wait([
       _cache.load(_movePath),
       _cache.load(_eatPath),
+      _cache.load(_checkPath),
       _cache.load(_winPath),
       _cache.load(_alarmPath),
     ]);
@@ -41,6 +43,9 @@ class SoundService {
 
   /// 吃子音效。
   static void playEat() => _play(_eatPath);
+
+  /// 将军音效。
+  static void playCheck() => _play(_checkPath);
 
   /// 游戏结束音效。
   static void playWin() => _play(_winPath);

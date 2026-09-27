@@ -788,9 +788,12 @@ class GameController extends ChangeNotifier {
       result: _state.result,
     );
     if (_state.isOver) _resultTick++;
-    // 音效：终局 > 吃子 > 普通走子
+    // 音效：终局 > 将军 > 吃子 > 普通走子
     if (_state.isOver) {
       SoundService.playWin();
+    } else if (_engine.isInCheck(_state.currentSide)) {
+      // 走子后新的行棋方被将军
+      SoundService.playCheck();
     } else if (captured != null) {
       SoundService.playEat();
     } else {
