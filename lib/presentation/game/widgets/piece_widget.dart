@@ -33,6 +33,28 @@ class PieceWidget extends StatelessWidget {
     return _buildClassicPiece();
   }
 
+  /// 按配置生成棋子阴影；开关关闭时返回空列表（不绘制阴影）。
+  ///
+  /// 阴影圆半径 = 棋子半径 × [BoardConfig.shadowRadiusFactor]
+  /// （通过 spreadRadius 调整），偏移量为棋子半径的倍数，
+  /// 模糊程度 [BoardConfig.shadowBlur] 为绝对像素值。
+  List<BoxShadow> _pieceShadows() {
+    final bc = ConfigManager.instance.config.board;
+    if (!bc.pieceShadow) return const [];
+    final r = size / 2;
+    return [
+      BoxShadow(
+        color: Colors.black26,
+        blurRadius: bc.shadowBlur,
+        spreadRadius: (bc.shadowRadiusFactor - 1) * r,
+        offset: Offset(
+          bc.shadowOffsetXFactor * r,
+          bc.shadowOffsetYFactor * r,
+        ),
+      ),
+    ];
+  }
+
   /// 图片棋子：套系图片裁圆显示，选中时加高亮描边。
   Widget _buildImagePiece(String setName) {
     final path = AssetCatalog.pieceAsset(setName, piece.side, piece.type);
@@ -45,13 +67,7 @@ class PieceWidget extends StatelessWidget {
           border: selected
               ? Border.all(color: AppTheme.selectedHighlight, width: 3)
               : null,
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 3,
-              offset: Offset(0, 2),
-            ),
-          ],
+          boxShadow: _pieceShadows(),
         ),
         child: ClipOval(
           child: Image.asset(
@@ -80,13 +96,7 @@ class PieceWidget extends StatelessWidget {
             color: selected ? AppTheme.selectedHighlight : AppTheme.pieceBorder,
             width: selected ? 3 : 2,
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 3,
-              offset: Offset(0, 2),
-            ),
-          ],
+          boxShadow: _pieceShadows(),
         ),
         child: Center(
           child: Text(

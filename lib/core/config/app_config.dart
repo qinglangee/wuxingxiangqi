@@ -351,6 +351,32 @@ class BoardConfig {
   /// 显示类型：图片。
   static const String kTypeImage = 'image';
 
+  // ---- 棋子大小 / 阴影设置取值范围（供设置页滑块与绘制层共用） ----
+
+  /// 棋子大小缩放最小值（相对默认大小）。
+  static const double kMinPieceSizeScale = 0.2;
+
+  /// 棋子大小缩放最大值。
+  static const double kMaxPieceSizeScale = 2.0;
+
+  /// 阴影半径倍数最小值（相对棋子半径）。
+  static const double kMinShadowRadiusFactor = 0.2;
+
+  /// 阴影半径倍数最大值。
+  static const double kMaxShadowRadiusFactor = 2.0;
+
+  /// 阴影偏移倍数最小值（相对棋子半径，负值表示向左/向上）。
+  static const double kMinShadowOffsetFactor = -1.0;
+
+  /// 阴影偏移倍数最大值。
+  static const double kMaxShadowOffsetFactor = 1.0;
+
+  /// 阴影模糊最小值（像素）。
+  static const double kMinShadowBlur = 0.0;
+
+  /// 阴影模糊最大值（像素）。
+  static const double kMaxShadowBlur = 20.0;
+
   BoardConfig({
     this.boardType = kTypeClassic,
     this.pieceType = kTypeClassic,
@@ -358,6 +384,12 @@ class BoardConfig {
     this.boardStyle = 'classic',
     this.customPiecePath,
     this.customBoardPath,
+    this.pieceSizeScale = 1.0,
+    this.pieceShadow = true,
+    this.shadowRadiusFactor = 1.0,
+    this.shadowOffsetXFactor = 0.15,
+    this.shadowOffsetYFactor = 0.2,
+    this.shadowBlur = 4.0,
   });
 
   /// 棋盘显示类型：[kTypeClassic] 代码绘制；[kTypeImage] 图片，
@@ -380,6 +412,30 @@ class BoardConfig {
   /// 用户自定义棋盘背景资源路径。为空表示使用 [boardStyle]。
   String? customBoardPath;
 
+  /// 棋子大小缩放（相对默认大小），1.0 为默认，范围 [kMinPieceSizeScale, kMaxPieceSizeScale]。
+  double pieceSizeScale;
+
+  /// 是否绘制棋子阴影。
+  bool pieceShadow;
+
+  /// 阴影半径倍数：阴影圆半径 = 棋子半径 × 此值，默认 1.0 即与棋子等大。
+  double shadowRadiusFactor;
+
+  /// 阴影水平偏移倍数（相对棋子半径，正值向右、负值向左）。
+  double shadowOffsetXFactor;
+
+  /// 阴影垂直偏移倍数（相对棋子半径，正值向下、负值向上）。
+  double shadowOffsetYFactor;
+
+  /// 阴影模糊程度（blurRadius，像素）。
+  double shadowBlur;
+
+  /// 读取数值字段并 clamp 到 [min, max]，缺失或非数值时用 [def]。
+  static double _clamp(Object? v, double min, double max, double def) {
+    final d = (v as num?)?.toDouble() ?? def;
+    return d < min ? min : (d > max ? max : d);
+  }
+
   factory BoardConfig.fromJson(Map<String, dynamic> json) => BoardConfig(
         boardType: json['boardType'] as String? ?? kTypeClassic,
         pieceType: json['pieceType'] as String? ?? kTypeClassic,
@@ -387,6 +443,17 @@ class BoardConfig {
         boardStyle: json['boardStyle'] as String? ?? 'classic',
         customPiecePath: json['customPiecePath'] as String?,
         customBoardPath: json['customBoardPath'] as String?,
+        pieceSizeScale: _clamp(json['pieceSizeScale'], kMinPieceSizeScale,
+            kMaxPieceSizeScale, 1.0),
+        pieceShadow: json['pieceShadow'] as bool? ?? true,
+        shadowRadiusFactor: _clamp(json['shadowRadiusFactor'],
+            kMinShadowRadiusFactor, kMaxShadowRadiusFactor, 1.0),
+        shadowOffsetXFactor: _clamp(json['shadowOffsetXFactor'],
+            kMinShadowOffsetFactor, kMaxShadowOffsetFactor, 0.15),
+        shadowOffsetYFactor: _clamp(json['shadowOffsetYFactor'],
+            kMinShadowOffsetFactor, kMaxShadowOffsetFactor, 0.2),
+        shadowBlur:
+            _clamp(json['shadowBlur'], kMinShadowBlur, kMaxShadowBlur, 4.0),
       );
 
   Map<String, dynamic> toJson() => {
@@ -396,6 +463,12 @@ class BoardConfig {
         'boardStyle': boardStyle,
         'customPiecePath': customPiecePath,
         'customBoardPath': customBoardPath,
+        'pieceSizeScale': pieceSizeScale,
+        'pieceShadow': pieceShadow,
+        'shadowRadiusFactor': shadowRadiusFactor,
+        'shadowOffsetXFactor': shadowOffsetXFactor,
+        'shadowOffsetYFactor': shadowOffsetYFactor,
+        'shadowBlur': shadowBlur,
       };
 
   BoardConfig copyWith({
@@ -405,6 +478,12 @@ class BoardConfig {
     String? boardStyle,
     String? customPiecePath,
     String? customBoardPath,
+    double? pieceSizeScale,
+    bool? pieceShadow,
+    double? shadowRadiusFactor,
+    double? shadowOffsetXFactor,
+    double? shadowOffsetYFactor,
+    double? shadowBlur,
   }) =>
       BoardConfig(
         boardType: boardType ?? this.boardType,
@@ -413,6 +492,12 @@ class BoardConfig {
         boardStyle: boardStyle ?? this.boardStyle,
         customPiecePath: customPiecePath ?? this.customPiecePath,
         customBoardPath: customBoardPath ?? this.customBoardPath,
+        pieceSizeScale: pieceSizeScale ?? this.pieceSizeScale,
+        pieceShadow: pieceShadow ?? this.pieceShadow,
+        shadowRadiusFactor: shadowRadiusFactor ?? this.shadowRadiusFactor,
+        shadowOffsetXFactor: shadowOffsetXFactor ?? this.shadowOffsetXFactor,
+        shadowOffsetYFactor: shadowOffsetYFactor ?? this.shadowOffsetYFactor,
+        shadowBlur: shadowBlur ?? this.shadowBlur,
       );
 }
 

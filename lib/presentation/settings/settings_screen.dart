@@ -421,8 +421,8 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
     );
   }
 
-  /// 棋子选择网格：第一项经典绘制（默认），之后为所有棋子套系。
-  /// 每个套系用红帅 + 黑将两张图片预览。
+  /// 棋子选择网格：顶部为棋子大小与阴影设置区，其下第一项为经典绘制
+  /// （默认），之后为所有棋子套系。每个套系用红帅 + 黑将两张图片预览。
   Widget _buildPieceGrid() {
     final useImage = _cfg.pieceType == BoardConfig.kTypeImage;
     return FutureBuilder<List<String>>(
@@ -432,40 +432,51 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
           return const Center(child: CircularProgressIndicator(strokeWidth: 2));
         }
         final sets = snap.data ?? const <String>[];
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 0.72,
-          ),
-          itemCount: sets.length + 1,
-          itemBuilder: (context, i) {
-            if (i == 0) {
-              return _OptionTile(
-                selected: !useImage,
-                label: '经典绘制（默认）',
-                onTap: () => _pickPieceSet(null),
-                child: const Icon(Icons.font_download,
-                    size: 40, color: Color(0xFF8B6B3D)),
-              );
-            }
-            final name = sets[i - 1];
-            return _OptionTile(
-              selected: useImage && _cfg.pieceStyle == name,
-              label: name,
-              onTap: () => _pickPieceSet(name),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _piecePreview(name, Side.red),
-                  const SizedBox(width: 4),
-                  _piecePreview(name, Side.black),
-                ],
+        return CustomScrollView(
+          slivers: [
+            // 顶部：棋子大小与阴影设置
+            const SliverToBoxAdapter(child: _PieceAdjustSettings()),
+            // 棋子套系选择网格
+            SliverPadding(
+              padding: const EdgeInsets.all(12),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 0.72,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  childCount: sets.length + 1,
+                  (context, i) {
+                    if (i == 0) {
+                      return _OptionTile(
+                        selected: !useImage,
+                        label: '经典绘制（默认）',
+                        onTap: () => _pickPieceSet(null),
+                        child: const Icon(Icons.font_download,
+                            size: 40, color: Color(0xFF8B6B3D)),
+                      );
+                    }
+                    final name = sets[i - 1];
+                    return _OptionTile(
+                      selected: useImage && _cfg.pieceStyle == name,
+                      label: name,
+                      onTap: () => _pickPieceSet(name),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _piecePreview(name, Side.red),
+                          const SizedBox(width: 4),
+                          _piecePreview(name, Side.black),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-            );
-          },
+            ),
+          ],
         );
       },
     );
@@ -488,6 +499,168 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
   static String _prettyName(String fileName) {
     final dot = fileName.lastIndexOf('.');
     return dot > 0 ? fileName.substring(0, dot) : fileName;
+  }
+}
+
+/// 棋子标签页顶部的「大小 / 阴影」设置区。
+///
+/// 棋子大小按默认大小的百分比调整（20%-200%）；阴影含开关、半径
+/// （棋子半径的倍数）、水平/垂直偏移（棋子半径的倍数，正负均可：
+/// 正值向右/向下、负值向左/向上，默认偏移右下方）与模糊程度（像素）。
+/// 所有修改即时落盘，ConfigManager 通知后由 ListenableBuilder 自动刷新。
+class _PieceAdjustSettings extends StatelessWidget {
+  const _PieceAdjustSettings();
+
+  BoardConfig get _cfg => ConfigManager.instance.config.board;
+
+  /// 修改棋盘配置并落盘。
+  Future<void> _update(void Function(BoardConfig c) apply) =>
+      ConfigManager.instance.updateBoard((c) {
+        apply(c);
+        return c;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ConfigManager.instance,
+      builder: (context, _) {
+        final cfg = _cfg;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFDF6E3),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFC9B68C)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sliderRow(
+                label: '棋子大小',
+                value: cfg.pieceSizeScale,
+                min: BoardConfig.kMinPieceSizeScale,
+                max: BoardConfig.kMaxPieceSizeScale,
+                divisions: 18,
+                format: (v) => '${(v * 100).round()}%',
+                onChanged: (v) => _update((c) => c.pieceSizeScale = v),
+              ),
+              const Divider(height: 10, color: Color(0xFFC9B68C)),
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 64,
+                    child: Text(
+                      '棋子阴影',
+                      style:
+                          TextStyle(fontSize: 13, color: Color(0xFF5A3A1A)),
+                    ),
+                  ),
+                  Switch(
+                    value: cfg.pieceShadow,
+                    activeThumbColor: AppTheme.boardLine,
+                    onChanged: (v) => _update((c) => c.pieceShadow = v),
+                  ),
+                  Expanded(
+                    child: Text(
+                      cfg.pieceShadow ? '默认偏移右下方' : '已关闭',
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF8B6B4A)),
+                    ),
+                  ),
+                ],
+              ),
+              _sliderRow(
+                label: '阴影半径',
+                value: cfg.shadowRadiusFactor,
+                min: BoardConfig.kMinShadowRadiusFactor,
+                max: BoardConfig.kMaxShadowRadiusFactor,
+                divisions: 18,
+                format: (v) => '${v.toStringAsFixed(1)} 倍',
+                onChanged: (v) => _update((c) => c.shadowRadiusFactor = v),
+                enabled: cfg.pieceShadow,
+              ),
+              _sliderRow(
+                label: '水平偏移',
+                value: cfg.shadowOffsetXFactor,
+                min: BoardConfig.kMinShadowOffsetFactor,
+                max: BoardConfig.kMaxShadowOffsetFactor,
+                divisions: 40,
+                format: (v) => v.toStringAsFixed(2),
+                onChanged: (v) => _update((c) => c.shadowOffsetXFactor = v),
+                enabled: cfg.pieceShadow,
+              ),
+              _sliderRow(
+                label: '垂直偏移',
+                value: cfg.shadowOffsetYFactor,
+                min: BoardConfig.kMinShadowOffsetFactor,
+                max: BoardConfig.kMaxShadowOffsetFactor,
+                divisions: 40,
+                format: (v) => v.toStringAsFixed(2),
+                onChanged: (v) => _update((c) => c.shadowOffsetYFactor = v),
+                enabled: cfg.pieceShadow,
+              ),
+              _sliderRow(
+                label: '模糊程度',
+                value: cfg.shadowBlur,
+                min: BoardConfig.kMinShadowBlur,
+                max: BoardConfig.kMaxShadowBlur,
+                divisions: 40,
+                format: (v) => '${v.toStringAsFixed(1)} px',
+                onChanged: (v) => _update((c) => c.shadowBlur = v),
+                enabled: cfg.pieceShadow,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 单行滑块：左侧固定宽标签、中间滑条、右侧当前值。
+  Widget _sliderRow({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required String Function(double) format,
+    required ValueChanged<double> onChanged,
+    bool enabled = true,
+  }) {
+    final textColor = enabled
+        ? const Color(0xFF5A3A1A)
+        : const Color(0xFFB0A48A);
+    return Row(
+      children: [
+        SizedBox(
+          width: 64,
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 13, color: textColor),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max).toDouble(),
+            min: min,
+            max: max,
+            divisions: divisions,
+            label: format(value),
+            onChanged: enabled ? onChanged : null,
+          ),
+        ),
+        SizedBox(
+          width: 56,
+          child: Text(
+            format(value),
+            textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 12, color: textColor),
+          ),
+        ),
+      ],
+    );
   }
 }
 

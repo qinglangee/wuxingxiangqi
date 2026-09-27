@@ -88,7 +88,10 @@ class BoardWidget extends StatelessWidget {
         final cellWidth = metrics.cellW;
         final cellHeight = metrics.cellH;
         final padding = metrics.padding;
-        final pieceSize = cellWidth * BoardLayout.pieceRatio;
+        // 棋子大小 = 格宽 × 占格比例 × 用户设置的大小缩放（0.2-2.0）
+        final pieceSize = cellWidth *
+            BoardLayout.pieceRatio *
+            boardCfg.pieceSizeScale;
 
         return SizedBox(
           width: boardWidth,
