@@ -32,11 +32,14 @@ class NotationManagerScreen extends StatelessWidget {
 ///   且目标目录必须可写（Android 上必要时引导授权）；
 /// - [onExternalRepository] 非空时显示「外部仓库」按钮，走旧版外部
 ///   目录流程（系统文件选择器）。
+/// - [onOpenFile] 非空时点击棋谱文件交给外部处理（如先关闭所在浮动
+///   窗口再打开打谱页）；为 null 时控件自行打开打谱页。
 class NotationManagerWidget extends StatefulWidget {
   const NotationManagerWidget({
     super.key,
     this.initialDirectory,
     this.onExternalRepository,
+    this.onOpenFile,
   });
 
   /// 起始浏览目录；为空时打开应用数据目录下的默认 books 目录。
@@ -44,6 +47,10 @@ class NotationManagerWidget extends StatefulWidget {
 
   /// 「外部仓库」按钮回调；为 null 时不显示该按钮。
   final VoidCallback? onExternalRepository;
+
+  /// 点击棋谱文件回调（入参为文件绝对路径）；为 null 时控件自行
+  /// 打开打谱页。
+  final ValueChanged<String>? onOpenFile;
 
   @override
   State<NotationManagerWidget> createState() => _NotationManagerWidgetState();
@@ -160,12 +167,20 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
   }
 
   /// 点击文件：仅支持棋谱扩展名，解析后打开到打谱页。
+  ///
+  /// 控件嵌入浮动窗口时由外部传入 [NotationManagerWidget.onOpenFile]：
+  /// 先关闭浮动窗口，再打开打谱页。
   Future<void> _openFile(BuildContext context, String path) async {
     final ext = path.split('.').last.toLowerCase();
     if (!kNotationExtensions.contains(ext)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('不支持的文件类型，仅支持：pgn、xqf、cbf、txt'),
       ));
+      return;
+    }
+    final external = widget.onOpenFile;
+    if (external != null) {
+      external(path);
       return;
     }
     await openNotationFile(context, path);

@@ -21,6 +21,7 @@ class FreeButton {
     this.iconColor,
     this.flipIcon = false,
     this.onCheckedChanged,
+    this.closesDrawer = false,
   });
 
   /// 稳定标识，用于在重建间保持顺序与常驻状态。
@@ -58,6 +59,12 @@ class FreeButton {
   /// 新值（如 `(v) => ctrl.setAnalysis(v)`），避免与工具条持久化的
   /// 选中状态各自翻转导致不同步。
   final ValueChanged<bool>? onCheckedChanged;
+
+  /// 点击后是否收起本工具条展开的抽屉（默认不收起）。
+  ///
+  /// 用于点击后马上打开遮挡性弹窗的按钮（如残局条的「题库」「选关」）：
+  /// 选择完成、弹窗关闭后，棋盘不被仍展开的抽屉遮挡。
+  final bool closesDrawer;
 }
 
 /// 通用的「可调整窗口控件」。
@@ -210,8 +217,29 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
   }
 
   Map<String, FreeButton> get _btnMap => {
-        for (final b in _allButtons) b.id: _withPersistedCheck(b),
+        for (final b in _allButtons) b.id: _withPersistedCheck(_wrapDrawerClose(b)),
       };
+
+  /// 给设置了 [FreeButton.closesDrawer] 的按钮包一层：点击时先收起
+  /// 本工具条展开的抽屉，再执行原回调。
+  FreeButton _wrapDrawerClose(FreeButton b) {
+    if (!b.closesDrawer) return b;
+    return FreeButton(
+      id: b.id,
+      icon: b.icon,
+      label: b.label,
+      enabled: b.enabled,
+      checked: b.checked,
+      showLabel: b.showLabel,
+      iconColor: b.iconColor,
+      flipIcon: b.flipIcon,
+      onCheckedChanged: b.onCheckedChanged,
+      onTap: () {
+        if (_drawerOpen) _closeDrawer();
+        b.onTap?.call();
+      },
+    );
+  }
 
   /// check button 包一层持久化：显示值取 [_checkedState]，点击时翻转
   /// 状态、落盘，并以新值回调父组件（无 [FreeButton.onCheckedChanged]
@@ -231,6 +259,7 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
       showLabel: b.showLabel,
       iconColor: b.iconColor,
       flipIcon: b.flipIcon,
+      closesDrawer: b.closesDrawer,
       onCheckedChanged: b.onCheckedChanged,
       onTap: () {
         final newVal = !displayed;

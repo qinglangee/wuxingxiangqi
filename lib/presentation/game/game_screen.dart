@@ -232,12 +232,15 @@ class _CanjuBar extends StatelessWidget {
           id: '题库',
           icon: Icons.menu_book_outlined,
           label: '题库',
+          // 选择后弹窗与按钮栏抽屉都关闭，棋盘直接显示局面
+          closesDrawer: true,
           onTap: () => _pickLibrary(context),
         ),
         FreeButton(
           id: '选关',
           icon: Icons.grid_view,
           label: '选关',
+          closesDrawer: true,
           onTap: () => _pickLevel(context),
         ),
       ],

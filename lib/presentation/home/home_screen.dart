@@ -137,6 +137,11 @@ class HomeScreen extends StatelessWidget {
                   Navigator.of(dialogCtx).pop();
                   openExternalRepository(context);
                 },
+                // 先关闭浮动窗口，再打开打谱页面
+                onOpenFile: (path) {
+                  Navigator.of(dialogCtx).pop();
+                  openNotationFile(context, path);
+                },
               ),
             ),
           ),
