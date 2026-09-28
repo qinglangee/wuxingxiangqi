@@ -16,6 +16,7 @@ import '../../review/review_analysis_controller.dart';
 import '../../review/session_games_dialog.dart';
 import '../../shared/adjustable_button_bar.dart';
 import '../../shared/error_dialog.dart';
+import '../../shared/floating_star_menu.dart';
 import 'cloud_base_controller.dart';
 import 'cloud_base_panel.dart';
 import 'engine_status_bar.dart';
@@ -134,6 +135,7 @@ class _ReviewPanelState extends State<ReviewPanel>
 
   @override
   Widget build(BuildContext context) {
+    final navButtons = _buildNavButtons();
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.85),
@@ -143,6 +145,12 @@ class _ReviewPanelState extends State<ReviewPanel>
       ),
       child: Column(
         children: [
+          // 浮动红星：管理复盘导航条的全部按钮（不参与布局，
+          // 通过 Overlay 浮在所有组件上方）
+          FloatingStarMenu(
+            id: 'review_floating_star',
+            buttons: navButtons,
+          ),
           // 复盘模块：显示 AnalysisPanel，隐藏普通三标签页
           if (_showAnalysis)
             Expanded(
@@ -207,7 +215,16 @@ class _ReviewPanelState extends State<ReviewPanel>
           AdjustableButtonBar(
             id: 'review_nav_bar',
             defaultPinnedIds: const {'前进', '后退'},
-            buttons: [
+            buttons: navButtons,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 复盘导航条的全部按钮（底部导航条与浮动红星共用同一份定义）。
+  List<FreeButton> _buildNavButtons() {
+    return [
               FreeButton(
                 id: '开局',
                 icon: Icons.skip_previous,
@@ -317,11 +334,7 @@ class _ReviewPanelState extends State<ReviewPanel>
                 onCheckedChanged: (v) =>
                     setState(() => _commentHighlight = v),
               ),
-            ],
-          ),
-        ],
-      ),
-    );
+            ];
   }
 }
 

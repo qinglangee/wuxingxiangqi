@@ -303,6 +303,8 @@ class ButtonBarConfig {
     this.pinned = const [],
     this.showLabels = true,
     Map<String, bool>? checked,
+    this.starX,
+    this.starY,
   }) : checked = checked ?? <String, bool>{};
 
   /// 按钮 id 的完整排列顺序（含内置按钮）。
@@ -320,6 +322,14 @@ class ButtonBarConfig {
   /// 使「红AI / 分析 / 自动下一局」等开关在重启后保持。
   Map<String, bool> checked;
 
+  /// 浮动红星中心位置：在屏幕坐标系中的 x 坐标（相对屏幕左侧，0-1 归一化），
+  /// null 表示未设置（首帧居中显示）。
+  double? starX;
+
+  /// 浮动红星中心位置：在屏幕坐标系中的 y 坐标（相对屏幕顶部，0-1 归一化），
+  /// null 表示未设置（首帧居中显示）。
+  double? starY;
+
   factory ButtonBarConfig.fromJson(Map<String, dynamic> json) =>
       ButtonBarConfig(
         order: (json['order'] as List?)?.map((e) => e.toString()).toList() ??
@@ -333,6 +343,8 @@ class ButtonBarConfig {
                 (k, v) => MapEntry(k.toString(), v as bool? ?? false),
               )
             : <String, bool>{},
+        starX: (json['starX'] as num?)?.toDouble(),
+        starY: (json['starY'] as num?)?.toDouble(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -340,6 +352,8 @@ class ButtonBarConfig {
         'pinned': pinned,
         'showLabels': showLabels,
         'checked': checked,
+        'starX': starX,
+        'starY': starY,
       };
 }
 
