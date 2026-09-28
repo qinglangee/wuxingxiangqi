@@ -151,10 +151,13 @@ class _FloatingStarMenuState extends State<FloatingStarMenu> {
   void _refreshOverlay() {
     final entry = _entry;
     if (entry == null || !mounted) return;
-    // 本方法可能在父组件 build 阶段被调用（didUpdateWidget / 配置监听），
-    // 直接 markNeedsBuild 会触发 "called during build" 异常，
-    // 统一推迟到下一帧再刷新浮层
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // 使用 Future.microtask 在当前事件循环结束后立即重建：
+    // - 比 addPostFrameCallback 更早触发（在下一帧绘制前），
+    //   保证 UI 能及时刷新；
+    // - 又足够晚，不会打断正在进行的手势（如 onTap 的 pointer up）。
+    // 桌面端若用 postFrameCallback，可能因帧时序导致 pointer up
+    // 落在重建后、GestureDetector 被替换，从而 tap 丢失。
+    Future.microtask(() {
       if (mounted) entry.markNeedsBuild();
     });
   }
