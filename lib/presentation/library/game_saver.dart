@@ -31,9 +31,13 @@ class GameSaver {
   ) async {
     final game = controller.exportParsedGame();
     final source = controller.sourceFilePath;
+    // 应用数据目录（…/wuxingxiangqi）：向用户展示路径时，位于该目录下
+    // 的部分只显示相对路径，前面的系统目录部分隐藏。
+    final dataDir = await ConfigManager.instance.dataDirPath;
+    if (!context.mounted) return;
 
     if (source != null) {
-      final choice = await _askOverwrite(context, source);
+      final choice = await _askOverwrite(context, source, dataDir);
       if (!context.mounted) return;
       switch (choice) {
         case _SaveChoice.cancel:
@@ -44,6 +48,7 @@ class GameSaver {
             game: game,
             path: source,
             controller: controller,
+            dataDir: dataDir,
             overwriteConfirmed: true,
           );
           return;
@@ -55,6 +60,7 @@ class GameSaver {
     if (!context.mounted) return;
     final picked = await _SaveAsDialog.show(
       context,
+      dataDir: dataDir,
       defaultName: _defaultFileName(game),
       defaultExt: source == null ? 'pgn' : p.extension(source).substring(1),
     );
@@ -66,7 +72,23 @@ class GameSaver {
       game: game,
       path: path,
       controller: controller,
+      dataDir: dataDir,
     );
+  }
+
+  /// 把绝对路径裁剪为用户可见形式：位于应用数据目录 [dataDir] 内时
+  /// 只显示其下的相对部分（如 `books/xxx.pgn`），前面的系统目录隐藏；
+  /// 在数据目录之外（用户自选的系统目录）则显示完整路径。
+  static String displayPath(String path, String dataDir) {
+    final sep = Platform.pathSeparator;
+    final base = dataDir.endsWith(sep)
+        ? dataDir.substring(0, dataDir.length - sep.length)
+        : dataDir;
+    if (path == base) return '.';
+    if (path.startsWith('$base$sep')) {
+      return path.substring(base.length + sep.length);
+    }
+    return path;
   }
 
   /// 默认文件名：赛事名 → 标题 → 「棋谱」。
@@ -86,12 +108,12 @@ class GameSaver {
 
   /// 覆盖原文件 / 另存为 / 取消 三选一。
   static Future<_SaveChoice> _askOverwrite(
-      BuildContext context, String source) async {
+      BuildContext context, String source, String dataDir) async {
     final result = await showDialog<_SaveChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('保存棋谱'),
-        content: Text('是否覆盖原文件？\n\n$source'),
+        content: Text('是否覆盖原文件？\n\n${displayPath(source, dataDir)}'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, _SaveChoice.cancel),
@@ -117,6 +139,7 @@ class GameSaver {
     required ParsedGame game,
     required String path,
     required GameController controller,
+    required String dataDir,
     bool overwriteConfirmed = false,
   }) async {
     final dir = p.dirname(path);
@@ -125,7 +148,11 @@ class GameSaver {
     final writable = await ensureDirectoryWritable(context, dir);
     if (!writable) {
       if (!context.mounted) return;
-      await _alert(context, '目标目录不可写', '没有向目标目录写入的权限：\n$dir');
+      await _alert(
+        context,
+        '目标目录不可写',
+        '没有向目标目录写入的权限：\n${displayPath(dir, dataDir)}',
+      );
       return;
     }
 
@@ -168,7 +195,7 @@ class GameSaver {
     controller.markSavedTo(path);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已保存：$path')),
+      SnackBar(content: Text('已保存：${displayPath(path, dataDir)}')),
     );
   }
 
@@ -208,11 +235,14 @@ class SaveAsResult {
 /// 另存为对话框：选择目录（默认 books）、文件名与格式。
 class _SaveAsDialog extends StatefulWidget {
   const _SaveAsDialog({
+    required this.dataDir,
     required this.defaultDir,
     required this.defaultName,
     required this.defaultExt,
   });
 
+  /// 应用数据目录（…/wuxingxiangqi），用于裁剪展示路径。
+  final String dataDir;
   final String defaultDir;
   final String defaultName;
   final String defaultExt;
@@ -220,15 +250,17 @@ class _SaveAsDialog extends StatefulWidget {
   /// 弹出对话框；取消返回 null。
   static Future<SaveAsResult?> show(
     BuildContext context, {
+    required String dataDir,
     required String defaultName,
     required String defaultExt,
   }) async {
     final books =
-        '${await ConfigManager.instance.dataDirPath}${Platform.pathSeparator}books';
+        '$dataDir${Platform.pathSeparator}books';
     if (!context.mounted) return null;
     return showDialog<SaveAsResult>(
       context: context,
       builder: (_) => _SaveAsDialog(
+        dataDir: dataDir,
         defaultDir: books,
         defaultName: defaultName,
         defaultExt: defaultExt,
@@ -302,7 +334,10 @@ class _SaveAsDialogState extends State<_SaveAsDialog> {
                       border: Border.all(color: const Color(0xFFC9B68C)),
                     ),
                     child: Text(
-                      _directory,
+                      // 只显示应用数据目录下的相对部分（如 books/对局）；
+                      // 用户自选的系统目录则显示完整路径。
+                      GameSaver.displayPath(_directory, widget.dataDir)
+                          .replaceAll(Platform.pathSeparator, '/'),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12.5),
