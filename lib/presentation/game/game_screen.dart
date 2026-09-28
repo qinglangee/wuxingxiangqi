@@ -166,7 +166,7 @@ class GameScreen extends StatelessWidget {
   }
 }
 
-/// 残局功能条：上一局/下一局 + 提示自动/重开/悔棋/提示/分析/题库/选关。
+/// 残局功能条：上一局/下一局 + 提示自动/重开/悔棋/提示/分析/题库/选棋。
 class _CanjuBar extends StatelessWidget {
   const _CanjuBar({required this.controller});
 
@@ -243,9 +243,9 @@ class _CanjuBar extends StatelessWidget {
           onTap: () => _pickLibrary(context),
         ),
         FreeButton(
-          id: '选关',
+          id: '选棋',
           icon: Icons.grid_view,
-          label: '选关',
+          label: '选棋',
           closesDrawer: true,
           onTap: () => _pickLevel(context),
         ),
@@ -268,7 +268,7 @@ class _CanjuBar extends StatelessWidget {
     }
   }
 
-  /// 打开选关弹窗，选择后跳转到对应局。
+  /// 打开选棋弹窗，选择后跳转到对应局。
   Future<void> _pickLevel(BuildContext context) async {
     final rec = controller.store.recordOf(controller.library.name);
     final chosen = await CanjuLevelDialog.show(

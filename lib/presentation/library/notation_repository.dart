@@ -32,13 +32,25 @@ Future<void> openNotationFile(BuildContext context, String path) async {
     errMsg = '读取或解析文件时出错：$e';
   }
 
+  // 会话棋谱列表：同目录下的全部棋谱文件（与 context 无关，先算好
+  // 再检查 mounted，避免跨 async 使用 BuildContext）。
+  var sessionGames = [path];
+  var sessionGameIndex = 0;
+  if (parsed != null && replay != null) {
+    sessionGames = await _listSessionGames(path);
+    sessionGameIndex = sessionGames
+        .indexWhere((p) => p.toLowerCase() == path.toLowerCase());
+  }
+
   if (!context.mounted) return;
   if (parsed != null && replay != null) {
     // 解析与回放均成功：把棋谱、已验证坐标与来源文件路径一起传给打谱页
     // （来源路径用于保存时「覆盖原文件」）
+    // 同时把同目录下的全部棋谱文件作为当前会话的棋谱列表传入，
+    // 供复盘导航条「上一局/下一局/选棋」切换。
     Navigator.of(context).pushNamed(
       '/play',
-      arguments: (parsed, replay, path),
+      arguments: (parsed, replay, path, sessionGames, sessionGameIndex),
     );
   } else {
     await showDialog<void>(
@@ -54,6 +66,33 @@ Future<void> openNotationFile(BuildContext context, String path) async {
         ],
       ),
     );
+  }
+}
+
+/// 列出 [path] 所在目录下的全部棋谱文件（名称升序，忽略大小写），
+/// 作为当前会话的棋谱列表。
+///
+/// 目录读取失败时退化为仅含当前文件；当前文件因故不在列表中时补入，
+/// 保证「选棋」总能回到当前局。
+Future<List<String>> _listSessionGames(String path) async {
+  try {
+    final dir = File(path).parent;
+    final files = <String>[];
+    await for (final e in dir.list(followLinks: false)) {
+      if (e is File) {
+        final ext = e.path.split('.').last.toLowerCase();
+        if (kNotationExtensions.contains(ext)) files.add(e.path);
+      }
+    }
+    String nameKey(String p) =>
+        p.split(Platform.pathSeparator).last.toLowerCase();
+    files.sort((a, b) => nameKey(a).compareTo(nameKey(b)));
+    if (!files.any((p) => p.toLowerCase() == path.toLowerCase())) {
+      files.add(path);
+    }
+    return files;
+  } catch (_) {
+    return [path];
   }
 }
 

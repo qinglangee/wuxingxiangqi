@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -18,6 +19,7 @@ import '../../domain/notation/notation_node.dart';
 import '../../domain/notation/notation_text.dart';
 import '../../domain/notation/win_line.dart';
 import '../../domain/notation/parsers/notation_exception.dart';
+import '../../domain/notation/parsers/notation_loader.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
 import '../../domain/notation/parsers/pgn_parser.dart';
@@ -333,6 +335,8 @@ class GameController extends ChangeNotifier {
     _aiThinking = false;
     _resultTick = 0;
     _moveAnim = null;
+    // 新棋谱与旧复盘分析数据不匹配，清空待重新分析
+    reviewAnalysis = null;
     // 导入棋谱 = 一局新游戏
     _ai.notifyNewGame();
 
@@ -430,6 +434,59 @@ class GameController extends ChangeNotifier {
     boardChange.emit();
     if (notify) notifyListeners();
     _restartAnalysisForNewPosition();
+  }
+
+  // ---- 会话棋谱列表（复盘导航条 上一局/下一局/选棋） ----
+
+  /// 当前会话的棋谱列表：从首页打开棋谱文件时，取同目录下的全部棋谱
+  /// 文件（名称升序）。空列表表示无会话列表（新对局/会话恢复/残局）。
+  List<String> _sessionGames = const [];
+  List<String> get sessionGames => _sessionGames;
+
+  /// 当前局在 [_sessionGames] 中的下标；-1 表示不在列表中。
+  int _sessionGameIndex = -1;
+  int get sessionGameIndex => _sessionGameIndex;
+
+  bool get canPrevGame => _sessionGameIndex > 0;
+  bool get canNextGame =>
+      _sessionGameIndex >= 0 && _sessionGameIndex < _sessionGames.length - 1;
+
+  /// 设置会话棋谱列表与当前局下标（从首页打开棋谱文件时由路由调用）。
+  void setSessionGames(List<String> paths, int currentIndex) {
+    _sessionGames = List.unmodifiable(paths);
+    _sessionGameIndex =
+        currentIndex >= 0 && currentIndex < paths.length ? currentIndex : -1;
+  }
+
+  /// 载入会话列表中下标 [index] 的棋谱（上一局/下一局/选棋共用）。
+  ///
+  /// 成功返回 null；失败（读取/解析/校验出错）返回错误信息供 UI 提示，
+  /// 此时保留当前棋谱不变。
+  Future<String?> loadSessionGame(int index) async {
+    if (index < 0 || index >= _sessionGames.length) return '棋谱不存在';
+    final path = _sessionGames[index];
+    try {
+      final bytes = await File(path).readAsBytes();
+      final parsed = NotationLoader.load(path: path, bytes: bytes);
+      final replay = NotationReplay.resolve(parsed);
+      _sessionGameIndex = index;
+      loadParsedGame(parsed, replay: replay, sourcePath: path);
+      return null;
+    } catch (e) {
+      return '打开棋谱失败：$e';
+    }
+  }
+
+  /// 切换到上一局。无上一局时无操作（返回 null）。
+  Future<String?> loadPrevGame() async {
+    if (!canPrevGame) return null;
+    return loadSessionGame(_sessionGameIndex - 1);
+  }
+
+  /// 切换到下一局。无下一局时无操作（返回 null）。
+  Future<String?> loadNextGame() async {
+    if (!canNextGame) return null;
+    return loadSessionGame(_sessionGameIndex + 1);
   }
 
   /// 把当前整棵棋谱树（含全部分支与注释）导出为 [ParsedGame]，供保存。

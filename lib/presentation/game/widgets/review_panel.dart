@@ -11,6 +11,7 @@ import '../../library/game_saver.dart';
 import '../../memorize/memorize_screen.dart';
 import '../../review/analysis_panel.dart';
 import '../../review/review_analysis_controller.dart';
+import '../../review/session_games_dialog.dart';
 import '../../shared/adjustable_button_bar.dart';
 import 'cloud_base_controller.dart';
 import 'cloud_base_panel.dart';
@@ -101,6 +102,34 @@ class _ReviewPanelState extends State<ReviewPanel>
         ],
       ),
     );
+  }
+
+  /// 载入会话棋谱列表中下标 [index] 的棋谱（上一局/下一局共用）。
+  ///
+  /// 失败时提示错误信息并保留当前棋谱；成功后重置复盘模块
+  /// （旧棋谱的分析数据对新棋谱已失效）。
+  Future<void> _loadSessionGame(int index) async {
+    final err = await controller.loadSessionGame(index);
+    if (err != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err)),
+        );
+      }
+      return;
+    }
+    _reviewAnalysis.resetForNewGame();
+  }
+
+  /// 打开「选棋」弹窗，从会话棋谱列表中选择并载入对应棋谱。
+  Future<void> _pickSessionGame() async {
+    final chosen = await SessionGamesDialog.show(
+      context,
+      paths: controller.sessionGames,
+      currentIndex: controller.sessionGameIndex,
+    );
+    if (chosen == null || chosen == controller.sessionGameIndex) return;
+    await _loadSessionGame(chosen);
   }
 
   @override
@@ -230,6 +259,29 @@ class _ReviewPanelState extends State<ReviewPanel>
                     controller.goForward();
                   }
                 },
+              ),
+              FreeButton(
+                id: '上一局',
+                icon: Icons.keyboard_double_arrow_left,
+                label: '上一局',
+                enabled: controller.canPrevGame,
+                onTap: () => _loadSessionGame(controller.sessionGameIndex - 1),
+              ),
+              FreeButton(
+                id: '下一局',
+                icon: Icons.keyboard_double_arrow_right,
+                label: '下一局',
+                enabled: controller.canNextGame,
+                onTap: () => _loadSessionGame(controller.sessionGameIndex + 1),
+              ),
+              FreeButton(
+                id: '选棋',
+                icon: Icons.grid_view,
+                label: '选棋',
+                enabled: controller.sessionGames.isNotEmpty,
+                // 选择后弹窗与按钮栏抽屉都关闭，棋盘直接显示局面
+                closesDrawer: true,
+                onTap: _pickSessionGame,
               ),
               FreeButton(
                 id: '保存',

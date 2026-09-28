@@ -154,6 +154,9 @@ class ReviewAnalysisController extends ChangeNotifier {
 
     await infoSub.cancel();
 
+    // 被取消（或换局重置）时不产出半成品分析结果
+    if (!_analyzing) return;
+
     // 检测失误与漏杀
     final mistakes = _detectMistakes(evaluations, mainLine);
 
@@ -188,6 +191,21 @@ class ReviewAnalysisController extends ChangeNotifier {
     _analyzing = false;
     _engine.cancelSearch();
     _statusText = '已取消';
+    notifyListeners();
+  }
+
+  /// 换局后重置：中止进行中的分析并清空旧棋谱的分析数据。
+  ///
+  /// 供「上一局/下一局/选棋」切换棋谱后调用——旧棋谱的评分曲线与
+  /// 失误列表对新棋谱已失效，需要重新分析。
+  void resetForNewGame() {
+    if (_analyzing) {
+      _analyzing = false;
+      _engine.cancelSearch();
+    }
+    _analysis = null;
+    _progress = 0;
+    _statusText = '';
     notifyListeners();
   }
 

@@ -29,7 +29,10 @@ class App extends StatelessWidget {
       theme: AppTheme.light,
       home: const HomeScreen(),
       routes: {
-        // 路由参数支持三种形态：
+        // 路由参数支持以下形态：
+        // - (ParsedGame, ReplayData, String?, List<String>, int)：
+        //   棋谱模式，附带会话棋谱列表（同目录棋谱文件）与当前局下标
+        // - (ParsedGame, ReplayData, String?)：棋谱模式（无会话列表）
         // - (ParsedGame, ReplayData)：棋谱模式，首页已完成解析与回放校验
         // - ParsedGame：兼容只传棋谱的情况
         // - CanjuSession：残局模式，由首页残局入口构造
@@ -63,7 +66,15 @@ class App extends StatelessWidget {
           ParsedGame? game;
           ReplayData? replay;
           String? sourcePath;
-          if (args is (ParsedGame, ReplayData, String?)) {
+          List<String>? sessionGames;
+          int sessionGameIndex = -1;
+          if (args is (ParsedGame, ReplayData, String?, List<String>, int)) {
+            game = args.$1;
+            replay = args.$2;
+            sourcePath = args.$3;
+            sessionGames = args.$4;
+            sessionGameIndex = args.$5;
+          } else if (args is (ParsedGame, ReplayData, String?)) {
             game = args.$1;
             replay = args.$2;
             sourcePath = args.$3;
@@ -83,6 +94,10 @@ class App extends StatelessWidget {
                       replay: replay, sourcePath: sourcePath);
                 } catch (e) {
                   debugPrint('载入棋谱失败: $e');
+                }
+                // 会话棋谱列表：供复盘导航条「上一局/下一局/选棋」切换
+                if (sessionGames != null) {
+                  gc.setSessionGames(sessionGames, sessionGameIndex);
                 }
               } else {
                 // 无传入棋谱：异步加载上次保存的会话
