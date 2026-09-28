@@ -280,96 +280,99 @@ class _ReportTab extends StatelessWidget {
 
   final ReviewAnalysis? analysis;
 
+  static const _redColor = Color(0xFFC62828);
+  static const _blackColor = Color(0xFF1A1A1A);
+  static const _labelColor = Color(0xFF8B6B3D);
+  static const _headerColor = Color(0xFF5D4423);
+
   @override
   Widget build(BuildContext context) {
     if (analysis == null) {
       return const Center(child: Text('暂无报告数据',
-          style: TextStyle(color: Color(0xFF8B6B3D))));
+          style: TextStyle(color: _labelColor)));
     }
     final a = analysis!;
+
+    final rows = <TableRow>[
+      // 表头
+      TableRow(
+        decoration: const BoxDecoration(color: Color(0xFFF5E6C8)),
+        children: [
+          _cell('', bold: true, color: _headerColor),
+          _cell('红方', bold: true, color: _redColor, align: TextAlign.center),
+          _cell('黑方', bold: true, color: _blackColor, align: TextAlign.center),
+        ],
+      ),
+      _scoreRow('开局评分', a.redOpeningScore, a.blackOpeningScore),
+      _scoreRow('中局评分', a.redMiddleScore, a.blackMiddleScore),
+      _scoreRow('残局评分', a.redEndgameScore, a.blackEndgameScore),
+      _countRow('漏杀次数', a.redMissedMates, a.blackMissedMates),
+      _countRow('失误次数', a.redMistakes, a.blackMistakes),
+    ];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionTitle('红方'),
-          _buildScoreRow('开局', a.redOpeningScore),
-          _buildScoreRow('中局', a.redMiddleScore),
-          _buildScoreRow('残局', a.redEndgameScore),
-          _buildCountRow('漏杀次数', a.redMissedMates),
-          _buildCountRow('失误次数', a.redMistakes),
-          const SizedBox(height: 12),
-          _buildSectionTitle('黑方'),
-          _buildScoreRow('开局', a.blackOpeningScore),
-          _buildScoreRow('中局', a.blackMiddleScore),
-          _buildScoreRow('残局', a.blackEndgameScore),
-          _buildCountRow('漏杀次数', a.blackMissedMates),
-          _buildCountRow('失误次数', a.blackMistakes),
-        ],
+      child: Table(
+        border: const TableBorder(
+          horizontalInside: BorderSide(color: Color(0xFFE0D5B8), width: 0.5),
+        ),
+        columnWidths: const {
+          0: FlexColumnWidth(2),
+          1: FlexColumnWidth(1.5),
+          2: FlexColumnWidth(1.5),
+        },
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: rows,
       ),
     );
   }
 
-  Widget _buildSectionTitle(String text) {
+  /// 评分行：红方列正值标红，黑方列负值标黑（评分均为红方视角）。
+  TableRow _scoreRow(String label, int? red, int? black) {
+    return TableRow(
+      children: [
+        _cell(label, color: _labelColor),
+        _cell(
+          red == null ? '—' : (red >= 0 ? '+$red' : '$red'),
+          align: TextAlign.center,
+          color: red != null && red > 0 ? _redColor : _blackColor,
+        ),
+        _cell(
+          black == null ? '—' : (black >= 0 ? '+$black' : '$black'),
+          align: TextAlign.center,
+          color: black != null && black < 0 ? _blackColor : _redColor,
+        ),
+      ],
+    );
+  }
+
+  /// 计数行：红方列标红，黑方列标黑。
+  TableRow _countRow(String label, int red, int black) {
+    return TableRow(
+      children: [
+        _cell(label, color: _labelColor),
+        _cell('$red', align: TextAlign.center, color: _redColor),
+        _cell('$black', align: TextAlign.center, color: _blackColor),
+      ],
+    );
+  }
+
+  Widget _cell(
+    String text, {
+    Color color = _headerColor,
+    bool bold = false,
+    TextAlign align = TextAlign.left,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Text(
         text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF5D4423),
+        textAlign: align,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+          color: color,
         ),
-      ),
-    );
-  }
-
-  Widget _buildScoreRow(String label, int? score) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: 12, color: Color(0xFF8B6B3D))),
-          ),
-          Text(
-            score == null ? '—' : (score >= 0 ? '+$score' : '$score'),
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: score != null && score > 0
-                  ? const Color(0xFFC62828)
-                  : const Color(0xFF1A1A1A),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCountRow(String label, int count) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: 12, color: Color(0xFF8B6B3D))),
-          ),
-          Text(
-            '$count',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF5D4423),
-            ),
-          ),
-        ],
       ),
     );
   }

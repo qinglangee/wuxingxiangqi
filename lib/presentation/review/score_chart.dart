@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../../../domain/models/piece.dart';
@@ -25,8 +27,30 @@ class ScoreChart extends StatefulWidget {
 }
 
 class _ScoreChartState extends State<ScoreChart> {
-  /// Y 轴最大绝对值（厘兵）。超过此值的数据点会被截断到边缘。
-  static const double _yMax = 1200;
+  /// Y 轴最大绝对值（厘兵）。初始为 50，当有评分超过此值时自动扩大（只增不减）。
+  double _yMax = 50.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _yMax = _computeMaxAbs(widget.evaluations);
+  }
+
+  @override
+  void didUpdateWidget(covariant ScoreChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final newMax = _computeMaxAbs(widget.evaluations);
+    if (newMax > _yMax) {
+      setState(() => _yMax = newMax);
+    }
+  }
+
+  /// 计算评估数据中绝对值的最大值，下限为 50。
+  double _computeMaxAbs(List<MoveEvaluation> evals) {
+    if (evals.isEmpty) return 50.0;
+    final m = evals.map((e) => e.redPerspectiveScore.abs()).reduce(max);
+    return max(50.0, m.toDouble());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +80,7 @@ class _ScoreChartState extends State<ScoreChart> {
               plotBottom: plotBottom,
               plotW: plotW,
               plotH: plotH,
-              yMax: _yMax.toDouble(),
+              yMax: _yMax,
             ),
           ),
         );
@@ -134,11 +158,12 @@ class _ChartPainter extends CustomPainter {
       blackBg,
     );
 
-    // 网格线
+    // 网格线（步长随 yMax 自适应）
     final gridPaint = Paint()
       ..color = const Color(0xFFE0D5B8)
       ..strokeWidth = 0.5;
-    for (var v = -yMax.toInt(); v <= yMax.toInt(); v += 300) {
+    final step = yMax <= 100 ? 25 : yMax <= 500 ? 100 : 300;
+    for (var v = -yMax.toInt(); v <= yMax.toInt(); v += step) {
       final y = _yOfScore(v);
       canvas.drawLine(
         Offset(plotLeft, y),
@@ -231,5 +256,7 @@ class _ChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ChartPainter old) =>
-      evaluations != old.evaluations || currentIndex != old.currentIndex;
+      evaluations != old.evaluations ||
+      currentIndex != old.currentIndex ||
+      yMax != old.yMax;
 }
