@@ -397,6 +397,7 @@ class BoardConfig {
     this.shadowOffsetYFactor = 0.2,
     this.shadowBlur = 4.0,
     this.boardScale = 1.0,
+    this.boardHandleEnabled = false,
   });
 
   /// 棋盘显示类型：[kTypeClassic] 代码绘制；[kTypeImage] 图片，
@@ -441,6 +442,10 @@ class BoardConfig {
   /// 打谱页棋盘上的五角星把手拖动调整，范围 [kMinBoardScale, kMaxBoardScale]。
   double boardScale;
 
+  /// 五角星缩放把手是否启用。默认 false 显示灰色（禁用），此时点击与
+  /// 拖动均无效；长按把手可切换启用状态，启用后显示黄色。
+  bool boardHandleEnabled;
+
   /// 读取数值字段并 clamp 到 [min, max]，缺失或非数值时用 [def]。
   static double _clamp(Object? v, double min, double max, double def) {
     final d = (v as num?)?.toDouble() ?? def;
@@ -467,6 +472,7 @@ class BoardConfig {
             _clamp(json['shadowBlur'], kMinShadowBlur, kMaxShadowBlur, 4.0),
         boardScale:
             _clamp(json['boardScale'], kMinBoardScale, kMaxBoardScale, 1.0),
+        boardHandleEnabled: json['boardHandleEnabled'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -483,6 +489,7 @@ class BoardConfig {
         'shadowOffsetYFactor': shadowOffsetYFactor,
         'shadowBlur': shadowBlur,
         'boardScale': boardScale,
+        'boardHandleEnabled': boardHandleEnabled,
       };
 
   BoardConfig copyWith({
@@ -499,6 +506,7 @@ class BoardConfig {
     double? shadowOffsetYFactor,
     double? shadowBlur,
     double? boardScale,
+    bool? boardHandleEnabled,
   }) =>
       BoardConfig(
         boardType: boardType ?? this.boardType,
@@ -514,6 +522,7 @@ class BoardConfig {
         shadowOffsetYFactor: shadowOffsetYFactor ?? this.shadowOffsetYFactor,
         shadowBlur: shadowBlur ?? this.shadowBlur,
         boardScale: boardScale ?? this.boardScale,
+        boardHandleEnabled: boardHandleEnabled ?? this.boardHandleEnabled,
       );
 }
 

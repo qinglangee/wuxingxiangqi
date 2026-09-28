@@ -521,12 +521,20 @@ class _ScalableBoardState extends State<_ScalableBoard> {
   }
 
   /// 构建浮动五角星：定位在棋盘下边缘横向 1/3 处，中心压在边缘线上。
+  ///
+  /// 把手默认禁用（灰色）：点击与拖动均无效，仅长按可切换为启用（黄色）。
+  /// 启用后：点击在最大/最小缩放之间切换；上下拖动连续调整缩放。
   Widget _buildHandle(BuildContext context) {
     final box = _boardAreaKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return const SizedBox.shrink();
     final origin = box.localToGlobal(Offset.zero);
     final boardWidth = box.size.width;
     final boardHeight = box.size.height;
+    final boardCfg = ConfigManager.instance.config.board;
+    final enabled = boardCfg.boardHandleEnabled;
+    // 禁用灰 / 启用黄
+    final starColor =
+        enabled ? const Color(0xFFFFD54F) : const Color(0xFF9E9E9E);
     return Positioned(
       left: origin.dx + boardWidth / 3 - _handleSize / 2,
       top: origin.dy + boardHeight - _handleSize / 2,
@@ -534,36 +542,64 @@ class _ScalableBoardState extends State<_ScalableBoard> {
       height: _handleSize,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onVerticalDragUpdate: (d) {
-          setState(() {
-            final next = _scale + d.delta.dy / _dragPixelsPerScale;
-            _draggingScale = next.clamp(
-                BoardConfig.kMinBoardScale, BoardConfig.kMaxBoardScale);
+        // 长按切换启用状态（禁用态下唯一可用的手势）
+        onLongPress: () {
+          ConfigManager.instance.updateBoard((b) {
+            b.boardHandleEnabled = !b.boardHandleEnabled;
+            return b;
           });
-          // 棋盘尺寸变化后跟随移动把手
-          _refreshHandle();
         },
-        onVerticalDragEnd: (_) {
-          final v = _draggingScale;
-          _draggingScale = null;
-          if (v != null &&
-              v != ConfigManager.instance.config.board.boardScale) {
-            ConfigManager.instance.updateBoard((b) {
-              b.boardScale = v;
-              return b;
-            });
-          }
-        },
-        child: const Stack(
+        // 启用后点击：在最大与最小缩放之间切换
+        onTap: enabled
+            ? () {
+                final cur = _scale;
+                final mid = (BoardConfig.kMinBoardScale +
+                        BoardConfig.kMaxBoardScale) /
+                    2;
+                _applyScale(cur >= mid
+                    ? BoardConfig.kMinBoardScale
+                    : BoardConfig.kMaxBoardScale);
+              }
+            : null,
+        // 启用后上下拖动：连续调整缩放（下拖放大、上拖缩小）
+        onVerticalDragUpdate: enabled
+            ? (d) {
+                final next = _scale + d.delta.dy / _dragPixelsPerScale;
+                setState(() {
+                  _draggingScale = next.clamp(
+                      BoardConfig.kMinBoardScale, BoardConfig.kMaxBoardScale);
+                });
+                // 棋盘尺寸变化后跟随移动把手
+                _refreshHandle();
+              }
+            : null,
+        onVerticalDragEnd: enabled
+            ? (_) {
+                final v = _draggingScale;
+                _draggingScale = null;
+                if (v != null) _applyScale(v);
+              }
+            : null,
+        child: Stack(
           alignment: Alignment.center,
           children: [
-            // 深色描边底层，保证黄色五角星在浅色棋盘上可见
-            Icon(Icons.star, size: _handleSize + 4, color: Color(0xFF7A5C1E)),
-            Icon(Icons.star, size: _handleSize, color: Color(0xFFFFD54F)),
+            // 深色描边底层，保证五角星在浅色棋盘上可见
+            const Icon(Icons.star,
+                size: _handleSize + 4, color: Color(0xFF7A5C1E)),
+            Icon(Icons.star, size: _handleSize, color: starColor),
           ],
         ),
       ),
     );
+  }
+
+  /// 应用缩放值并写入配置持久化（点击切换与拖动结束共用）。
+  void _applyScale(double v) {
+    if (v == ConfigManager.instance.config.board.boardScale) return;
+    ConfigManager.instance.updateBoard((b) {
+      b.boardScale = v;
+      return b;
+    });
   }
 
   @override
