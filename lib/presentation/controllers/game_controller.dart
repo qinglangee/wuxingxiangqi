@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -19,10 +20,12 @@ import '../../domain/notation/win_line.dart';
 import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
+import '../../domain/notation/parsers/pgn_parser.dart';
 import '../settings/eval_file_dialog.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/services/sound_service.dart';
 import '../game/widgets/move_anim.dart';
+import '../session/game_session_store.dart';
 import 'board_change_notifier.dart';
 
 /// UI 控制器：选中态、点击处理、AI 走子、棋谱树记录与前进/后退导航。
@@ -144,6 +147,34 @@ class GameController extends ChangeNotifier {
 
   /// 根 → 末梢的主线（含根节点），用于棋谱栏展示。
   List<NotationNode> get mainLine => _root.mainLine();
+
+  /// 从根到当前节点的子索引路径（用于会话保存/恢复浏览位置）。
+  ///
+  /// 每个元素是父节点 children 列表中下一步节点的索引。
+  /// 根节点返回空列表。
+  List<int> get currentPath {
+    final path = _current.pathFromRoot();
+    final indices = <int>[];
+    for (var i = 0; i < path.length - 1; i++) {
+      indices.add(path[i].children.indexOf(path[i + 1]));
+    }
+    return indices;
+  }
+
+  /// 沿 [indices] 指定的子索引路径从根跳到目标节点，恢复浏览位置。
+  void jumpToPath(List<int> indices) {
+    _current = _root;
+    for (final idx in indices) {
+      if (idx >= 0 && idx < _current.children.length) {
+        _current = _current.children[idx];
+      } else {
+        break;
+      }
+    }
+    _restoreStateFromCurrent();
+    boardChange.emit();
+    notifyListeners();
+  }
 
   bool get canGoBack => !_current.isRoot;
   bool get canGoForward => _current.mainChild != null;
@@ -1294,6 +1325,8 @@ class GameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    // 离开打谱页时保存当前会话（棋谱 + 浏览位置），以便下次恢复
+    _saveSession();
     // 引擎是跨页面共享的全局单例，不能在此关闭进程，否则再次进入打谱页
     // 时进程已死且不会被重新拉起（命令全部丢失）。
     // 只中止当前思考请求：发 stop 并丢弃待返回的 bestmove。
@@ -1301,5 +1334,21 @@ class GameController extends ChangeNotifier {
     _ai.cancelSearch();
     boardChange.dispose();
     super.dispose();
+  }
+
+  /// 把当前棋谱树与浏览位置保存到会话文件（fire-and-forget）。
+  void _saveSession() {
+    try {
+      final game = exportParsedGame();
+      final pgnBytes = const PgnParser().write(game);
+      final pgnText = utf8.decode(pgnBytes);
+      GameSessionStore.save(
+        pgnText: pgnText,
+        sourcePath: _sourceFilePath,
+        nodePath: currentPath,
+      );
+    } catch (e) {
+      debugPrint('保存会话失败: $e');
+    }
   }
 }

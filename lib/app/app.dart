@@ -10,6 +10,7 @@ import '../presentation/game/game_screen.dart';
 import '../presentation/home/home_screen.dart';
 import '../presentation/library/notation_manager_widget.dart'
     show NotationManagerScreen;
+import '../presentation/session/game_session_store.dart';
 import '../presentation/settings/settings_screen.dart';
 
 /// 全局导航 key：供无 BuildContext 的层（如控制器）弹出权重引导等对话框。
@@ -76,14 +77,16 @@ class App extends StatelessWidget {
             create: (_) {
               final gc = GameController();
               if (game != null) {
-                // 防御性兜底：首页理论上已校验通过，这里即使再失败
-                // 也不让异常逃逸到框架层导致红屏，改为打开空白对局。
+                // 有传入的棋谱：使用新棋局
                 try {
                   gc.loadParsedGame(game,
                       replay: replay, sourcePath: sourcePath);
                 } catch (e) {
                   debugPrint('载入棋谱失败: $e');
                 }
+              } else {
+                // 无传入棋谱：异步加载上次保存的会话
+                _loadSavedSession(gc);
               }
               return gc;
             },
@@ -100,5 +103,20 @@ class App extends StatelessWidget {
         },
       },
     );
+  }
+}
+
+/// 异步加载上次保存的会话状态并恢复到 [gc]。
+///
+/// 无保存或解析失败时静默失败，[gc] 保持标准开局。
+void _loadSavedSession(GameController gc) async {
+  try {
+    final session = await GameSessionStore.load();
+    if (session != null) {
+      gc.loadParsedGame(session.game, sourcePath: session.sourcePath);
+      gc.jumpToPath(session.nodePath);
+    }
+  } catch (e) {
+    debugPrint('恢复会话失败: $e');
   }
 }
