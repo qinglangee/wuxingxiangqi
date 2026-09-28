@@ -46,6 +46,10 @@ class GameScreen extends StatelessWidget {
   /// 棋盘组件的全局键，用于在绝杀时定位特效到棋盘中心。
   final boardKey = GlobalKey();
 
+  /// 棋盘区域（缩放后）的定位键：黄星缩放把手与打谱页浮动红星
+  /// 都据此计算默认/当前位置。
+  final boardAreaKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<GameController>();
@@ -92,6 +96,7 @@ class GameScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
               child: _ScalableBoard(
                 showHandle: !isCanju,
+                boardAreaKey: boardAreaKey,
                 child: BoardWidget(
                   key: boardKey,
                   board: state.board,
@@ -112,7 +117,10 @@ class GameScreen extends StatelessWidget {
             // 下半部分：三标签打谱面板（占据棋盘外剩余的全部空间）
             if (!isCanju)
               Expanded(
-                child: ReviewPanel(controller: controller),
+                child: ReviewPanel(
+                  controller: controller,
+                  boardAreaKey: boardAreaKey,
+                ),
               ),
           ],
         ),
@@ -445,13 +453,21 @@ class _ResultWatcherState extends State<_ResultWatcher> {
 ///
 /// 棋盘宽度 = 可用宽度 × 配置缩放比例（[BoardConfig.boardScale]，默认 1.0
 /// 占满）。缩放把手是一个黄色五角星，通过 [OverlayEntry] 浮动显示——
-/// 不参与页面布局，绘制在所有组件之上；位置跟随棋盘下边缘横向 1/3 处，
+/// 不参与页面布局，绘制在所有组件之上；位置跟随棋盘下边缘横向 2/3 处，
 /// 上下拖动可整体缩放棋盘：向下放大、向上缩小；拖动结束后写入配置持久化。
 class _ScalableBoard extends StatefulWidget {
-  const _ScalableBoard({required this.child, this.showHandle = true});
+  const _ScalableBoard({
+    required this.child,
+    required this.boardAreaKey,
+    this.showHandle = true,
+  });
 
   /// 棋盘组件（[BoardWidget]），按缩放后的宽度约束显示。
   final Widget child;
+
+  /// 棋盘区域定位键：由外部创建并传入，黄星把手据此定位，
+  /// 打谱页浮动红星也用它计算默认位置（棋盘下边缘 1/3 处）。
+  final GlobalKey boardAreaKey;
 
   /// 是否显示五角星缩放把手（残局模式不显示，但仍按配置缩放）。
   final bool showHandle;
@@ -467,8 +483,8 @@ class _ScalableBoardState extends State<_ScalableBoard> {
   /// 拖动灵敏度：拖动 300 像素对应缩放 1.0。
   static const double _dragPixelsPerScale = 300;
 
-  /// 棋盘区域定位键：浮层把手据此计算屏幕坐标。
-  final _boardAreaKey = GlobalKey();
+  /// 棋盘区域定位键（由 [widget] 传入）：浮层把手据此计算屏幕坐标。
+  GlobalKey get _boardAreaKey => widget.boardAreaKey;
 
   /// 浮动五角星的 Overlay 入口。
   OverlayEntry? _handleEntry;
@@ -520,7 +536,7 @@ class _ScalableBoardState extends State<_ScalableBoard> {
     });
   }
 
-  /// 构建浮动五角星：定位在棋盘下边缘横向 1/3 处，中心压在边缘线上。
+  /// 构建浮动五角星：定位在棋盘下边缘横向 2/3 处，中心压在边缘线上。
   ///
   /// 把手默认禁用（灰色）：点击与拖动均无效，仅长按可切换为启用（黄色）。
   /// 启用后：点击在最大/最小缩放之间切换；上下拖动连续调整缩放。
@@ -536,7 +552,7 @@ class _ScalableBoardState extends State<_ScalableBoard> {
     final starColor =
         enabled ? const Color(0xFFFFD54F) : const Color(0xFF9E9E9E);
     return Positioned(
-      left: origin.dx + boardWidth / 3 - _handleSize / 2,
+      left: origin.dx + boardWidth * 2 / 3 - _handleSize / 2,
       top: origin.dy + boardHeight - _handleSize / 2,
       width: _handleSize,
       height: _handleSize,

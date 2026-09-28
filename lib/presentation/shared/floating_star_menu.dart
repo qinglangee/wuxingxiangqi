@@ -27,6 +27,8 @@ class FloatingStarMenu extends StatefulWidget {
     required this.id,
     required this.buttons,
     this.defaultPinnedIds = const <String>{},
+    this.defaultAnchorKey,
+    this.defaultAnchorFraction = const Offset(1 / 3, 1.0),
   });
 
   /// 实例稳定标识，用于持久化按钮顺序/常驻列表/选中状态/星位置。
@@ -37,6 +39,15 @@ class FloatingStarMenu extends StatefulWidget {
 
   /// 默认常驻按钮 id 集合（无配置记录时使用）。
   final Set<String> defaultPinnedIds;
+
+  /// 红星默认位置的锚点区域（如棋盘）。提供后，未保存过位置时红星
+  /// 显示在锚点区域内 [defaultAnchorFraction] 指定的相对位置；
+  /// 为 null 时默认屏幕右侧垂直居中。
+  final GlobalKey? defaultAnchorKey;
+
+  /// 默认位置在锚点区域内的相对坐标（0-1），默认 (1/3, 1.0) 即
+  /// 下边缘横向 1/3 处。
+  final Offset defaultAnchorFraction;
 
   @override
   State<FloatingStarMenu> createState() => _FloatingStarMenuState();
@@ -194,6 +205,23 @@ class _FloatingStarMenuState extends State<FloatingStarMenu> {
     );
   }
 
+  /// 未保存过位置时的默认归一化坐标。
+  ///
+  /// 有锚点 key 时取锚点区域内的 [defaultAnchorFraction] 相对位置；
+  /// 无锚点或锚点尚未布局时回退到屏幕右侧垂直居中。
+  Offset _defaultPos(Size screenSize) {
+    final key = widget.defaultAnchorKey;
+    if (key == null) return const Offset(0.92, 0.5);
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return const Offset(0.92, 0.5);
+    final origin = box.localToGlobal(Offset.zero);
+    final x = origin.dx +
+        box.size.width * widget.defaultAnchorFraction.dx;
+    final y = origin.dy +
+        box.size.height * widget.defaultAnchorFraction.dy;
+    return Offset(x / screenSize.width, y / screenSize.height);
+  }
+
   List<FreeButton> get _pinnedButtons => _order
       .where((id) => _pinned.contains(id))
       .map((id) => _btnMap[id])
@@ -212,8 +240,7 @@ class _FloatingStarMenuState extends State<FloatingStarMenu> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        // 首次布局：默认屏幕右侧垂直居中
-        final pos = _starPos ?? const Offset(0.92, 0.5);
+        final pos = _starPos ?? _defaultPos(size);
         var center =
             Offset(pos.dx * size.width, pos.dy * size.height);
         center = _clampCenter(center, size);
@@ -261,8 +288,9 @@ class _FloatingStarMenuState extends State<FloatingStarMenu> {
             // 不能基于本闭包捕获的 center（上次构建时的旧值），
             // 否则同帧内多次 delta 相互覆盖，星几乎不动。
             onPanUpdate: (d) {
-              // 直接读状态里的最新位置，不能用闭包捕获的 pos/center
-              final curPos = _starPos ?? const Offset(0.92, 0.5);
+              // 直接读状态里的最新位置；未保存过位置时用锚点默认位置，
+              // 不能回退到固定坐标，否则首次拖动会瞬移
+              final curPos = _starPos ?? _defaultPos(size);
               final cur = Offset(
                 curPos.dx * size.width,
                 curPos.dy * size.height,

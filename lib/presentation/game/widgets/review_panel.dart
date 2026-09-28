@@ -38,9 +38,16 @@ String branchLetter(int index) {
 /// - 「云库」：ChessDB 开局库，局面变化时查询并展示按评分排序的候选
 ///   着法，点击条目即走子。
 class ReviewPanel extends StatefulWidget {
-  const ReviewPanel({super.key, required this.controller});
+  const ReviewPanel({
+    super.key,
+    required this.controller,
+    this.boardAreaKey,
+  });
 
   final GameController controller;
+
+  /// 棋盘区域定位键：浮动红星据此计算默认位置（棋盘下边缘 1/3 处）。
+  final GlobalKey? boardAreaKey;
 
   @override
   State<ReviewPanel> createState() => _ReviewPanelState();
@@ -150,6 +157,7 @@ class _ReviewPanelState extends State<ReviewPanel>
           FloatingStarMenu(
             id: 'review_floating_star',
             buttons: navButtons,
+            defaultAnchorKey: widget.boardAreaKey,
           ),
           // 复盘模块：显示 AnalysisPanel，隐藏普通三标签页
           if (_showAnalysis)
