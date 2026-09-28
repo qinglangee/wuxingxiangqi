@@ -44,27 +44,21 @@ class _MemorizeScreenState extends State<MemorizeScreen> {
     super.dispose();
   }
 
-  /// 0 → A、1 → B … 的分支字母（与复盘面板保持一致）。
-  String _branchLetter(int i) =>
-      String.fromCharCode(i < 26 ? 65 + i : 97 + (i - 26));
-
-  /// 当前分支点的候选续着标记：未走过的按调色板着色并标分支字母，
-  /// 已走过的置灰并打勾。
+  /// 分支点只显示**已走过**的续着标记（灰色 ✓），不显示未走过的箭头，
+  /// 让用户自己思考该走哪一步。
   List<MoveArrow> _buildMarkers() {
     final node = _controller.currentNode;
     if (node.children.length <= 1) return const [];
     final markers = <MoveArrow>[];
     for (var i = 0; i < node.children.length; i++) {
       final child = node.children[i];
+      if (!_controller.isWalked(child)) continue; // 未走过：不提示
       final m = child.move!;
-      final walked = _controller.isWalked(child);
       markers.add(MoveArrow(
         from: m.from,
         to: m.to,
-        color: walked
-            ? const Color(0x889E9E9E)
-            : MoveArrowPainter.palette[i % MoveArrowPainter.palette.length],
-        label: walked ? '✓' : _branchLetter(i),
+        color: const Color(0x889E9E9E),
+        label: '✓',
       ));
     }
     return markers;
