@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../core/config/config_manager.dart';
 import '../../domain/notation/parsers/pgn_parser.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
+import '../../domain/review/review_analysis.dart';
 
 /// 打谱页面的会话状态：保存/恢复离开时的棋谱与浏览位置。
 ///
@@ -33,6 +34,7 @@ class GameSessionStore {
     required String pgnText,
     String? sourcePath,
     required List<int> nodePath,
+    ReviewAnalysis? analysis,
   }) async {
     try {
       final file = await _getFile();
@@ -42,6 +44,7 @@ class GameSessionStore {
         'pgn': pgnText,
         'sourcePath': sourcePath,
         'nodePath': nodePath,
+        if (analysis != null) 'analysis': analysis.toJson(),
       });
       await file.writeAsString(json);
     } catch (e) {
@@ -69,10 +72,21 @@ class GameSessionStore {
         utf8.encode(pgnText),
         filename: 'session.pgn',
       );
+      // 恢复复盘分析数据（可选）
+      ReviewAnalysis? analysis;
+      final analysisJson = json['analysis'];
+      if (analysisJson is Map<String, dynamic>) {
+        try {
+          analysis = ReviewAnalysis.fromJson(analysisJson);
+        } catch (_) {
+          analysis = null;
+        }
+      }
       return GameSessionData(
         game: game,
         sourcePath: sourcePath,
         nodePath: nodePath,
+        analysis: analysis,
       );
     } catch (e) {
       // ignore: avoid_print
@@ -88,9 +102,11 @@ class GameSessionData {
     required this.game,
     required this.sourcePath,
     required this.nodePath,
+    this.analysis,
   });
 
   final ParsedGame game;
   final String? sourcePath;
   final List<int> nodePath;
+  final ReviewAnalysis? analysis;
 }

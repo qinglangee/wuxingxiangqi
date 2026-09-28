@@ -21,6 +21,7 @@ import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
 import '../../domain/notation/parsers/pgn_parser.dart';
+import '../../domain/review/review_analysis.dart';
 import '../settings/eval_file_dialog.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/services/sound_service.dart';
@@ -120,6 +121,10 @@ class GameController extends ChangeNotifier {
 
   /// 标记为残局模式（由 [CanjuController] 构造时调用）。
   set isCanjuMode(bool v) => _isCanjuMode = v;
+
+  /// 当前复盘分析结果（由 ReviewAnalysisController 设置），
+  /// 会话保存时一并写入 session.json，下次打开时恢复。
+  ReviewAnalysis? reviewAnalysis;
 
   /// 引擎最近一次搜索信息快照（引擎面板展示）；无搜索时为 null。
   EngineSearchInfo? _engineInfo;
@@ -1355,6 +1360,7 @@ class GameController extends ChangeNotifier {
         pgnText: pgnText,
         sourcePath: _sourceFilePath,
         nodePath: currentPath,
+        analysis: reviewAnalysis,
       );
     } catch (e) {
       debugPrint('保存会话失败: $e');

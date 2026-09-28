@@ -9,6 +9,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../controllers/game_controller.dart';
 import '../../library/game_saver.dart';
 import '../../memorize/memorize_screen.dart';
+import '../../review/analysis_panel.dart';
+import '../../review/review_analysis_controller.dart';
 import '../../shared/adjustable_button_bar.dart';
 import 'cloud_base_controller.dart';
 import 'cloud_base_panel.dart';
@@ -49,6 +51,13 @@ class _ReviewPanelState extends State<ReviewPanel>
   late final CloudBaseController _cloud =
       CloudBaseController(gameController: widget.controller);
 
+  /// 复盘分析控制器（与面板同生命周期）。
+  late final ReviewAnalysisController _reviewAnalysis =
+      ReviewAnalysisController(widget.controller);
+
+  /// 是否显示复盘模块（true 时隐藏 review_panel 三标签页，显示复盘模块）。
+  bool _showAnalysis = false;
+
   /// 「走到带注释的着法时注释框浅绿高亮」开关（默认开启）。
   ///
   /// 初值从复盘导航条按钮配置恢复；check button 状态由
@@ -63,6 +72,7 @@ class _ReviewPanelState extends State<ReviewPanel>
   @override
   void dispose() {
     _cloud.dispose();
+    _reviewAnalysis.dispose();
     _tab.dispose();
     super.dispose();
   }
@@ -104,56 +114,64 @@ class _ReviewPanelState extends State<ReviewPanel>
       ),
       child: Column(
         children: [
-          Material(
-            color: const Color(0xFFF5E6C8),
-            child: TabBar(
-              controller: _tab,
-              labelColor: AppTheme.boardLine,
-              unselectedLabelColor: const Color(0xFF8B6B3D),
-              indicatorColor: AppTheme.boardLine,
-              indicatorSize: TabBarIndicatorSize.label,
-              labelStyle:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              tabs: [
-                Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('棋谱注释'),
-                      const SizedBox(width: 4),
-                      // 帮助图标：点击弹出操作说明；IconButton 自身的
-                      // 手势会优先于 Tab 的切换手势，不会误触发标签切换。
-                      IconButton(
-                        icon: const Icon(Icons.help_outline, size: 16),
-                        onPressed: _showNotationHelp,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 22,
-                          minHeight: 22,
+          // 复盘模块：显示 AnalysisPanel，隐藏普通三标签页
+          if (_showAnalysis)
+            Expanded(
+              child: AnalysisPanel(
+                controller: controller,
+                analysisController: _reviewAnalysis,
+              ),
+            )
+          else ...[
+            Material(
+              color: const Color(0xFFF5E6C8),
+              child: TabBar(
+                controller: _tab,
+                labelColor: AppTheme.boardLine,
+                unselectedLabelColor: const Color(0xFF8B6B3D),
+                indicatorColor: AppTheme.boardLine,
+                indicatorSize: TabBarIndicatorSize.label,
+                labelStyle:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                tabs: [
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('棋谱注释'),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.help_outline, size: 16),
+                          onPressed: _showNotationHelp,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 22,
+                            minHeight: 22,
+                          ),
+                          tooltip: '操作说明',
                         ),
-                        tooltip: '操作说明',
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const Tab(text: '引擎'),
-                const Tab(text: '云库'),
-              ],
+                  const Tab(text: '引擎'),
+                  const Tab(text: '云库'),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tab,
-              children: [
-                _NotationTab(
-                  controller: controller,
-                  highlightEnabled: _commentHighlight,
-                ),
-                _EngineTab(controller: controller),
-                CloudBasePanel(controller: _cloud),
-              ],
+            Expanded(
+              child: TabBarView(
+                controller: _tab,
+                children: [
+                  _NotationTab(
+                    controller: controller,
+                    highlightEnabled: _commentHighlight,
+                  ),
+                  _EngineTab(controller: controller),
+                  CloudBasePanel(controller: _cloud),
+                ],
+              ),
             ),
-          ),
+          ],
           // 底部导航条：任意标签页都可用，控制棋谱前进/后退
           // 仅当当前节点为分支点时，在导航条上方显示分支选择条
           if (controller.atBranch) _BranchSelectorBar(controller: controller),
@@ -233,6 +251,13 @@ class _ReviewPanelState extends State<ReviewPanel>
                   }
                   MemorizeScreen.open(context, controller.exportParsedGame());
                 },
+              ),
+              FreeButton(
+                id: '复盘',
+                icon: Icons.insights,
+                label: '复盘',
+                checked: _showAnalysis,
+                onCheckedChanged: (v) => setState(() => _showAnalysis = v),
               ),
               FreeButton(
                 id: '注释高亮',

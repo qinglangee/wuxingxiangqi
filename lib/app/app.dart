@@ -115,6 +115,10 @@ void _loadSavedSession(GameController gc) async {
     if (session != null) {
       gc.loadParsedGame(session.game, sourcePath: session.sourcePath);
       gc.jumpToPath(session.nodePath);
+      // 恢复复盘分析数据
+      if (session.analysis != null) {
+        gc.reviewAnalysis = session.analysis;
+      }
     }
   } catch (e) {
     debugPrint('恢复会话失败: $e');
