@@ -11,6 +11,7 @@ import '../../core/services/sound_service.dart';
 import '../controllers/game_controller.dart';
 import '../shared/adjustable_button_bar.dart';
 import '../shared/floating_toast.dart';
+import '../shared/effect_image_player.dart';
 import 'widgets/board_widget.dart';
 import 'widgets/move_arrow_painter.dart';
 import 'widgets/review_panel.dart';
@@ -383,6 +384,8 @@ class _ResultWatcherState extends State<_ResultWatcher> {
       if (controller.isOver) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
+          // 绝杀特效：屏幕中央播放 over.png 动画
+          EffectImagePlayer.show(context, 'assets/images/app/over.png');
           FloatingToast.show(
             context,
             '对局结束：${controller.result}',
