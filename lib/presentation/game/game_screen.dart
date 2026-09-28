@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../domain/models/piece.dart';
 import '../../domain/models/position.dart';
+import '../../core/config/app_config.dart';
+import '../../core/config/config_manager.dart';
 import '../canju/canju_controller.dart';
 import '../canju/canju_level_dialog.dart';
 import '../canju/canju_selector_dialog.dart';
@@ -10,6 +12,7 @@ import '../../core/canju/canju_library.dart';
 import '../../core/services/sound_service.dart';
 import '../controllers/game_controller.dart';
 import '../shared/adjustable_button_bar.dart';
+import '../shared/board_grid_painter.dart';
 import '../shared/floating_toast.dart';
 import '../shared/effect_image_player.dart';
 import 'widgets/board_widget.dart';
@@ -84,10 +87,11 @@ class GameScreen extends StatelessWidget {
               _AiConfigRow(
                 controller: controller,
               ),
-            // 上半部分：棋盘（按宽度自适应高度，不抢占下半部分空间）
+            // 上半部分：棋盘（整体可缩放，五角星把手上下拖动调整大小）
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-              child: Center(
+              child: _ScalableBoard(
+                showHandle: !isCanju,
                 child: BoardWidget(
                   key: boardKey,
                   board: state.board,
@@ -434,5 +438,111 @@ class _ResultWatcherState extends State<_ResultWatcher> {
       }
     }
     return const SizedBox.shrink();
+  }
+}
+
+/// 可整体缩放的棋盘容器。
+///
+/// 棋盘宽度 = 可用宽度 × 配置缩放比例（[BoardConfig.boardScale]，默认 1.0
+/// 占满）。棋盘下边缘横向 1/3 处浮着一个黄色五角星把手，上下拖动可整体
+/// 缩放棋盘：向下放大、向上缩小；拖动结束后写入配置持久化。
+class _ScalableBoard extends StatefulWidget {
+  const _ScalableBoard({required this.child, this.showHandle = true});
+
+  /// 棋盘组件（[BoardWidget]），按缩放后的宽度约束显示。
+  final Widget child;
+
+  /// 是否显示五角星缩放把手（残局模式不显示，但仍按配置缩放）。
+  final bool showHandle;
+
+  @override
+  State<_ScalableBoard> createState() => _ScalableBoardState();
+}
+
+class _ScalableBoardState extends State<_ScalableBoard> {
+  /// 把手尺寸（像素）。
+  static const double _handleSize = 28;
+
+  /// 拖动灵敏度：拖动 300 像素对应缩放 1.0。
+  static const double _dragPixelsPerScale = 300;
+
+  /// 拖动过程中的临时缩放值；非拖动状态为 null（跟随配置）。
+  double? _draggingScale;
+
+  @override
+  Widget build(BuildContext context) {
+    // 监听配置：设置页重置配置或拖动结束写盘后同步最新缩放
+    return ListenableBuilder(
+      listenable: ConfigManager.instance,
+      builder: (context, _) {
+        final scale = _draggingScale ??
+            ConfigManager.instance.config.board.boardScale;
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final boardWidth = constraints.maxWidth * scale;
+            final boardHeight = BoardLayout.sizeForWidth(boardWidth).height;
+            return Stack(
+              children: [
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: boardWidth,
+                    height: boardHeight,
+                    child: widget.child,
+                  ),
+                ),
+                if (widget.showHandle)
+                  Positioned(
+                    // 棋盘下边缘横向 1/3 处，把手中心压在边缘线上
+                    left: (constraints.maxWidth - boardWidth) / 2 +
+                        boardWidth / 3 -
+                        _handleSize / 2,
+                    top: boardHeight - _handleSize / 2,
+                    width: _handleSize,
+                    height: _handleSize,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onVerticalDragUpdate: (d) {
+                        setState(() {
+                          final next = (_draggingScale ??
+                                  ConfigManager
+                                      .instance.config.board.boardScale) +
+                              d.delta.dy / _dragPixelsPerScale;
+                          _draggingScale = next.clamp(
+                              BoardConfig.kMinBoardScale,
+                              BoardConfig.kMaxBoardScale);
+                        });
+                      },
+                      onVerticalDragEnd: (_) {
+                        final v = _draggingScale;
+                        _draggingScale = null;
+                        if (v != null &&
+                            v !=
+                                ConfigManager
+                                    .instance.config.board.boardScale) {
+                          ConfigManager.instance.updateBoard((b) {
+                            b.boardScale = v;
+                            return b;
+                          });
+                        }
+                      },
+                      child: const Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // 深色描边底层，保证黄色五角星在浅色棋盘上可见
+                          Icon(Icons.star, size: _handleSize + 4,
+                              color: Color(0xFF7A5C1E)),
+                          Icon(Icons.star, size: _handleSize,
+                              color: Color(0xFFFFD54F)),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

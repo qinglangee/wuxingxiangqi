@@ -377,6 +377,12 @@ class BoardConfig {
   /// 阴影模糊最大值（像素）。
   static const double kMaxShadowBlur = 20.0;
 
+  /// 棋盘整体缩放最小值（相对可用宽度）。
+  static const double kMinBoardScale = 0.5;
+
+  /// 棋盘整体缩放最大值（1.0 = 占满可用宽度）。
+  static const double kMaxBoardScale = 1.0;
+
   BoardConfig({
     this.boardType = kTypeClassic,
     this.pieceType = kTypeClassic,
@@ -390,6 +396,7 @@ class BoardConfig {
     this.shadowOffsetXFactor = 0.15,
     this.shadowOffsetYFactor = 0.2,
     this.shadowBlur = 4.0,
+    this.boardScale = 1.0,
   });
 
   /// 棋盘显示类型：[kTypeClassic] 代码绘制；[kTypeImage] 图片，
@@ -430,6 +437,10 @@ class BoardConfig {
   /// 阴影模糊程度（blurRadius，像素）。
   double shadowBlur;
 
+  /// 棋盘整体缩放比例（相对可用宽度），默认 1.0 占满。
+  /// 打谱页棋盘上的五角星把手拖动调整，范围 [kMinBoardScale, kMaxBoardScale]。
+  double boardScale;
+
   /// 读取数值字段并 clamp 到 [min, max]，缺失或非数值时用 [def]。
   static double _clamp(Object? v, double min, double max, double def) {
     final d = (v as num?)?.toDouble() ?? def;
@@ -454,6 +465,8 @@ class BoardConfig {
             kMinShadowOffsetFactor, kMaxShadowOffsetFactor, 0.2),
         shadowBlur:
             _clamp(json['shadowBlur'], kMinShadowBlur, kMaxShadowBlur, 4.0),
+        boardScale:
+            _clamp(json['boardScale'], kMinBoardScale, kMaxBoardScale, 1.0),
       );
 
   Map<String, dynamic> toJson() => {
@@ -469,6 +482,7 @@ class BoardConfig {
         'shadowOffsetXFactor': shadowOffsetXFactor,
         'shadowOffsetYFactor': shadowOffsetYFactor,
         'shadowBlur': shadowBlur,
+        'boardScale': boardScale,
       };
 
   BoardConfig copyWith({
@@ -484,6 +498,7 @@ class BoardConfig {
     double? shadowOffsetXFactor,
     double? shadowOffsetYFactor,
     double? shadowBlur,
+    double? boardScale,
   }) =>
       BoardConfig(
         boardType: boardType ?? this.boardType,
@@ -498,6 +513,7 @@ class BoardConfig {
         shadowOffsetXFactor: shadowOffsetXFactor ?? this.shadowOffsetXFactor,
         shadowOffsetYFactor: shadowOffsetYFactor ?? this.shadowOffsetYFactor,
         shadowBlur: shadowBlur ?? this.shadowBlur,
+        boardScale: boardScale ?? this.boardScale,
       );
 }
 
