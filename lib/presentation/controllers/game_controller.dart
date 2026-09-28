@@ -312,14 +312,18 @@ class GameController extends ChangeNotifier {
   /// 从 [parent] 节点局面出发，把一条着法线（含递归分支）构建到棋谱树。
   ///
   /// [coords] 为 [NotationReplay.resolve] 预先解析校验过的坐标树，
-  /// 与 [line] 一一对应。分支在「本步走完后的节点」上递归挂载。
+  /// 与 [line] 一一对应。分两阶段：先构建整条主线（保证主线续着总是各
+  /// 节点的第 0 个孩子），再回到各步节点递归挂变着线，避免分支先于
+  /// 主线续着插入而抢占前进指针。
   void _buildLine(
     NotationNode parent,
     List<ParsedMove> line,
     List<ReplayMove> coords,
     String where,
   ) {
+    final created = <(NotationNode, ParsedMove, ReplayMove)>[];
     var node = parent;
+    // 阶段一：主线
     for (var i = 0; i < line.length; i++) {
       // 分支递归会推进内部状态，每步前恢复到本步的出发点局面
       _current = node;
@@ -336,16 +340,20 @@ class GameController extends ChangeNotifier {
       if (comment != null && comment.isNotEmpty) {
         child.move?.comment = comment;
       }
-      // 递归构建本步的各条变着线（分叉点 = 本步走完后的节点）
-      for (var k = 0; k < line[i].branches.length; k++) {
+      created.add((child, line[i], coord));
+      node = child;
+    }
+    // 阶段二：在各步走完后的节点上递归构建变着线
+    for (var i = 0; i < created.length; i++) {
+      final (child, parsed, coord) = created[i];
+      for (var k = 0; k < parsed.branches.length; k++) {
         _buildLine(
           child,
-          line[i].branches[k],
+          parsed.branches[k],
           coord.branches[k],
           '$where第 ${i + 1} 步变着 ${k + 1}',
         );
       }
-      node = child;
     }
   }
 

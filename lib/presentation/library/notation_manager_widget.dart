@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../core/config/config_manager.dart';
+import 'notation_merger.dart';
 import 'notation_repository.dart';
 
 /// 棋谱管理页面：独立页面形态的棋谱管理控件（可注册路由直接打开）。
@@ -513,6 +514,126 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
   }
 
   // ---------------------------------------------------------------------------
+  // 合谱
+  // ---------------------------------------------------------------------------
+
+  /// 合谱：展开选中项中的全部 pgn/xqf 棋谱 → 选项对话框（耗时提示/名称/
+  /// 格式/位置）→ 权限与同名确认 → 进度对话框中执行 → 结果汇总。
+  Future<void> _mergeSelected() async {
+    if (_selected.isEmpty) return;
+
+    // 展开目录、收集可合并文件（可能耗时，先弹个轻量进度）
+    final sources =
+        await NotationMerger.expandSources(_selected.toList());
+    if (!mounted) return;
+    if (sources.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('选中内容中没有可合并的 PGN/XQF 棋谱')),
+      );
+      return;
+    }
+
+    final options = await NotationMerger.showOptionsDialog(
+      context,
+      defaultDir: _currentPath,
+      fileCount: sources.length,
+    );
+    if (options == null || !mounted) return;
+
+    // 目标目录必须可写
+    final writable = await ensureDirectoryWritable(context, options.directory);
+    if (!writable) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('目标目录不可写'),
+          content: Text('没有向目标目录写入的权限：\n${options.directory}'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // 同名确认
+    if (await File(options.path).exists()) {
+      if (!mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('文件已存在'),
+          content: Text('「${options.fileName}.${options.ext}」已存在，'
+              '是否覆盖？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('覆盖'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+
+    if (!mounted) return;
+    final outcome = await showDialog<(NotationMergeResult?, Object?)>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _MergeProgressDialog(sources: sources, options: options),
+    );
+    if (outcome == null || !mounted) return;
+    final (result, error) = outcome;
+    if (error != null || result == null) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('合并失败'),
+          content: Text('$error'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    _exitMultiSelect();
+    await _reload();
+    if (!mounted) return;
+    final skipped = result.skipped;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('合谱完成'),
+        content: Text(
+          '已合并 ${result.mergedCount} 个棋谱：\n'
+          '${options.fileName}.${options.ext}\n'
+          '${skipped.isEmpty ? '' : '\n以下 ${skipped.length} 个文件被跳过：\n'
+              '${skipped.join('\n')}'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // UI 构建
   // ---------------------------------------------------------------------------
 
@@ -688,6 +809,13 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
                 onPressed: _selected.length == 1 ? _renameSelected : null,
                 icon: const Icon(Icons.edit, size: 18),
                 label: const Text('改名'),
+              ),
+            ),
+            Expanded(
+              child: TextButton.icon(
+                onPressed: _selected.isNotEmpty ? _mergeSelected : null,
+                icon: const Icon(Icons.merge, size: 18),
+                label: const Text('合谱'),
               ),
             ),
             Expanded(
@@ -887,6 +1015,79 @@ class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 合谱进度对话框
+// ---------------------------------------------------------------------------
+
+/// 合谱执行进度对话框：弹出后自动开始合并，实时显示「已处理 n/total」，
+/// 不可中途关闭；结束后 pop 出 (结果, 错误)。
+class _MergeProgressDialog extends StatefulWidget {
+  const _MergeProgressDialog({
+    required this.sources,
+    required this.options,
+  });
+
+  final List<String> sources;
+  final NotationMergeOptions options;
+
+  @override
+  State<_MergeProgressDialog> createState() => _MergeProgressDialogState();
+}
+
+class _MergeProgressDialogState extends State<_MergeProgressDialog> {
+  int _done = 0;
+  int get _total => widget.sources.length;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    try {
+      final result = await NotationMerger.merge(
+        sources: widget.sources,
+        options: widget.options,
+        onProgress: (done, total) {
+          if (mounted) setState(() => _done = done);
+        },
+      );
+      if (mounted) Navigator.pop(context, (result, null));
+    } catch (e) {
+      if (mounted) Navigator.pop(context, (null, e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(strokeWidth: 2),
+              const SizedBox(height: 16),
+              const Text(
+                '正在合并棋谱，请稍候…',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '已处理 $_done / $_total',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF8B6B4A)),
+              ),
+            ],
+          ),
         ),
       ),
     );
