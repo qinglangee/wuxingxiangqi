@@ -582,18 +582,15 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 交换父节点 children 列表中两项，同时让 [NotationNode.mainChildIndex]
-  /// 跟随原主续着移动（保持主线不变）。
+  /// 交换父节点 children 列表中两项。
+  ///
+  /// 交换后把 [NotationNode.mainChildIndex] 置为 0：排序后排在最前的
+  /// 续着即为主线，导出保存时也按此顺序输出，重新载入后顺序保持一致。
   void _swapChildren(NotationNode parent, int i, int j) {
     final tmp = parent.children[i];
     parent.children[i] = parent.children[j];
     parent.children[j] = tmp;
-    final main = parent.mainChildIndex;
-    if (main == i) {
-      parent.mainChildIndex = j;
-    } else if (main == j) {
-      parent.mainChildIndex = i;
-    }
+    parent.mainChildIndex = 0;
   }
 
   /// 棋谱树结构变更后的统一收尾：清提示/动画、广播局面变化、重启分析。
