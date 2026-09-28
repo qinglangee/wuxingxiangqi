@@ -187,7 +187,7 @@ class NotationMerger {
     if (fens.isEmpty) {
       throw NotationParseException('没有可合并的有效棋谱');
     }
-    const header = '# 五星象棋残局库（每行一个初始局面 FEN）';
+    const header = '';
     await File(options.path)
         .writeAsString('$header\n${fens.join('\n')}\n', flush: true);
     return NotationMergeResult(
