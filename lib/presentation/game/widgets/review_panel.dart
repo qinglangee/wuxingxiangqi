@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../../domain/engine/engine_info.dart';
@@ -938,7 +940,6 @@ class _CommentAreaState extends State<_CommentArea>
         final current = controller.currentNode;
         _maybeHighlight(current);
         // 注释属于「到达当前节点的那步棋」；根节点没有对应走法。
-        final hasMove = current.move != null;
         final comment = controller.currentComment;
 
         return Column(
@@ -957,9 +958,8 @@ class _CommentAreaState extends State<_CommentArea>
                 children: [
                   Expanded(
                     child: Text(
-                      hasMove
-                          ? '第 ${current.moveNumber} 回合注释'
-                          : '开局注释',
+                      _notationTitle(controller),
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -1023,6 +1023,13 @@ class _CommentAreaState extends State<_CommentArea>
         );
       },
     );
+  }
+
+  /// 注释区顶部标题：棋谱来自文件时显示文件名，否则显示「未保存」。
+  static String _notationTitle(GameController controller) {
+    final path = controller.sourceFilePath;
+    if (path == null || path.isEmpty) return '未保存';
+    return path.split(Platform.pathSeparator).last;
   }
 
   Future<void> _editComment(BuildContext context) async {
