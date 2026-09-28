@@ -38,7 +38,10 @@ enum GameScreenMode {
 /// 残局状态显示 AppBar + 棋盘 + _CanjuBar；分析与对弈状态显示
 /// _AiConfigRow + 棋盘 + ReviewPanel。
 class GameScreen extends StatelessWidget {
-  const GameScreen({super.key});
+  GameScreen({super.key});
+
+  /// 棋盘组件的全局键，用于在绝杀时定位特效到棋盘中心。
+  final boardKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +89,7 @@ class GameScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
               child: Center(
                 child: BoardWidget(
+                  key: boardKey,
                   board: state.board,
                   selected: state.selected,
                   hints: controller.selectedHints.toSet(),
@@ -110,7 +114,7 @@ class GameScreen extends StatelessWidget {
         ),
       ),
       // 监听结束态，触发弹窗
-      floatingActionButton: const _ResultWatcher(),
+      floatingActionButton: _ResultWatcher(boardKey: boardKey),
     );
   }
 
@@ -364,7 +368,10 @@ class _AiConfigRowState extends State<_AiConfigRow> {
 ///
 /// 自身不可见(返回 SizedBox.shrink)，仅用于副作用。
 class _ResultWatcher extends StatefulWidget {
-  const _ResultWatcher();
+  const _ResultWatcher({required this.boardKey});
+
+  /// 棋盘的 GlobalKey，用于把绝杀特效定位到棋盘中心。
+  final GlobalKey boardKey;
 
   @override
   State<_ResultWatcher> createState() => _ResultWatcherState();
@@ -384,8 +391,16 @@ class _ResultWatcherState extends State<_ResultWatcher> {
       if (controller.isOver) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          // 绝杀特效：屏幕中央播放 over.png 动画
-          EffectImagePlayer.show(context, 'assets/images/app/over.png');
+          // 绝杀特效：定位到棋盘中心播放 over.png 动画
+          final box =
+              widget.boardKey.currentContext?.findRenderObject() as RenderBox?;
+          final center = box?.localToGlobal(
+              Offset(box.size.width / 2, box.size.height / 2));
+          EffectImagePlayer.show(
+            context,
+            'assets/images/app/over.png',
+            boardCenter: center,
+          );
           FloatingToast.show(
             context,
             '对局结束：${controller.result}',

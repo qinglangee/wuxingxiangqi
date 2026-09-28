@@ -54,7 +54,7 @@ class App extends StatelessWidget {
                   },
                 ),
               ],
-              child: const GameScreen(),
+              child: GameScreen(),
             );
           }
 
@@ -87,7 +87,7 @@ class App extends StatelessWidget {
               }
               return gc;
             },
-            child: const GameScreen(),
+            child: GameScreen(),
           );
         },
         '/settings': (_) => const SettingsScreen(),

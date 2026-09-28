@@ -36,13 +36,21 @@ class EffectImagePlayer {
   ///
   /// 图片宽度为屏幕宽度的 70%→50%，高度按图片原始宽高比自适应。
   /// 播放结束后自动移除，无需调用方管理生命周期。
-  static void show(BuildContext context, String assetPath) {
+  ///
+  /// [boardCenter] 为特效的中心目标点（全局坐标）；不传则默认在屏幕
+  /// 正中。用于把特效精确对齐到棋盘中心等场景。
+  static void show(
+    BuildContext context,
+    String assetPath, {
+    Offset? boardCenter,
+  }) {
     final overlay = Overlay.maybeOf(context);
     if (overlay == null) return;
     late final OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => _EffectImageWidget(
         assetPath: assetPath,
+        boardCenter: boardCenter,
         onFinished: entry.remove,
       ),
     );
@@ -55,9 +63,13 @@ class _EffectImageWidget extends StatefulWidget {
   const _EffectImageWidget({
     required this.assetPath,
     required this.onFinished,
+    this.boardCenter,
   });
 
   final String assetPath;
+
+  /// 特效中心目标点（全局坐标）；为 null 时居中于屏幕。
+  final Offset? boardCenter;
 
   /// 动画播放完成后的回调（用于移除 OverlayEntry）。
   final VoidCallback onFinished;
@@ -131,13 +143,22 @@ class _EffectImageWidgetState extends State<_EffectImageWidget>
   @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.of(context).size.width;
+    final screenH = MediaQuery.of(context).size.height;
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, _) {
+        final center = widget.boardCenter;
+        final alignment = center == null
+            ? Alignment.center
+            : Alignment(
+                (center.dx / screenW) * 2 - 1,
+                (center.dy / screenH) * 2 - 1,
+              );
         return IgnorePointer(
           child: Opacity(
             opacity: _opacity(),
-            child: Center(
+            child: Align(
+              alignment: alignment,
               child: Transform.translate(
                 offset: Offset(_shakeDx(), 0),
                 child: Image.asset(
