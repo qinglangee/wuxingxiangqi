@@ -66,6 +66,32 @@ class _ReviewPanelState extends State<ReviewPanel>
     super.dispose();
   }
 
+  /// 弹出「棋谱注释」标签的操作说明。
+  void _showNotationHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('棋谱注释操作说明'),
+        content: const SingleChildScrollView(
+          child: Text(
+            '• 点击着法：跳转到该步局面。\n'
+            '• 长按着法：弹出操作菜单，可删除该着法（及其后所有着法和分支），'
+            '或管理其续着分支（上移/下移排序、删除分支）。\n'
+            '• 删除操作不可撤销，删除前会二次确认。\n'
+            '• 右侧注释区可编辑当前步的注释。',
+            style: TextStyle(fontSize: 13, height: 1.6),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -87,10 +113,30 @@ class _ReviewPanelState extends State<ReviewPanel>
               indicatorSize: TabBarIndicatorSize.label,
               labelStyle:
                   const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              tabs: const [
-                Tab(text: '棋谱注释'),
-                Tab(text: '引擎'),
-                Tab(text: '云库'),
+              tabs: [
+                Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('棋谱注释'),
+                      const SizedBox(width: 4),
+                      // 帮助图标：点击弹出操作说明；IconButton 自身的
+                      // 手势会优先于 Tab 的切换手势，不会误触发标签切换。
+                      IconButton(
+                        icon: const Icon(Icons.help_outline, size: 16),
+                        onPressed: _showNotationHelp,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 22,
+                          minHeight: 22,
+                        ),
+                        tooltip: '操作说明',
+                      ),
+                    ],
+                  ),
+                ),
+                const Tab(text: '引擎'),
+                const Tab(text: '云库'),
               ],
             ),
           ),
@@ -260,6 +306,7 @@ class _NotationTabState extends State<_NotationTab> {
                         isCurrent: identical(node, current),
                         isFuture: node.depth > current.depth,
                         onTap: () => controller.jumpTo(node),
+                        onLongPress: () => _showMoveOperations(node),
                       );
                     },
                   ),
@@ -291,6 +338,17 @@ class _NotationTabState extends State<_NotationTab> {
         curve: Curves.easeOut,
       );
     }
+  }
+
+  /// 长按着法后弹出操作对话框：删除着法 / 管理其分支。
+  void _showMoveOperations(NotationNode node) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _MoveOperationsDialog(
+        controller: controller,
+        node: node,
+      ),
+    );
   }
 }
 
@@ -360,12 +418,16 @@ class _MoveRow extends StatelessWidget {
     required this.isCurrent,
     required this.isFuture,
     required this.onTap,
+    this.onLongPress,
   });
 
   final NotationNode node;
   final bool isCurrent;
   final bool isFuture;
   final VoidCallback onTap;
+
+  /// 长按弹出着法操作菜单（删除着法 / 管理分支）。
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -390,6 +452,7 @@ class _MoveRow extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 3),
         decoration: BoxDecoration(color: bg),
@@ -449,6 +512,261 @@ class _MoveRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 着法操作对话框（长按着法弹出）
+// ---------------------------------------------------------------------------
+
+/// 长按着法后弹出的操作对话框。
+///
+/// - 「删除此着法」：删除该着法及其全部后代（主线续着与所有分支），
+///   删除前二次确认；
+/// - 若该着法有多于一条续着（即存在分支），列出全部续着，可上移/下移
+///   调整顺序，也可删除某条续着（含其后代），删除前二次确认。
+class _MoveOperationsDialog extends StatefulWidget {
+  const _MoveOperationsDialog({
+    required this.controller,
+    required this.node,
+  });
+
+  final GameController controller;
+
+  /// 被长按的着法节点。
+  final NotationNode node;
+
+  @override
+  State<_MoveOperationsDialog> createState() => _MoveOperationsDialogState();
+}
+
+class _MoveOperationsDialogState extends State<_MoveOperationsDialog> {
+  GameController get controller => widget.controller;
+  NotationNode get node => widget.node;
+
+  @override
+  Widget build(BuildContext context) {
+    final record = node.move!;
+    final children = node.children;
+    final hasBranches = children.length > 1;
+
+    return AlertDialog(
+      title: Text('第 ${node.moveNumber} 回合  ${record.notation}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 删除此着法
+            OutlinedButton.icon(
+              onPressed: _confirmDeleteMove,
+              icon: const Icon(Icons.delete_outline, color: Color(0xFFC62828)),
+              label: const Text(
+                '删除此着法',
+                style: TextStyle(color: Color(0xFFC62828)),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFC62828)),
+              ),
+            ),
+            if (children.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text(
+                    '续着（共 ${children.length} 条）',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF8B6B3D),
+                    ),
+                  ),
+                  if (hasBranches) ...[
+                    const SizedBox(width: 8),
+                    const Text(
+                      '可上下调整顺序或删除',
+                      style: TextStyle(fontSize: 11, color: Color(0xFFB0A48A)),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              for (var i = 0; i < children.length; i++)
+                _buildBranchRow(context, children[i], i),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBranchRow(BuildContext context, NotationNode child, int index) {
+    final isMain = index == node.mainChildIndex;
+    final rec = child.move!;
+    final color =
+        rec.side == Side.red ? AppTheme.redPiece : AppTheme.blackPiece;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isMain
+            ? AppTheme.boardLine.withValues(alpha: 0.08)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isMain
+              ? AppTheme.boardLine.withValues(alpha: 0.4)
+              : const Color(0xFFE0D2A8),
+          width: 0.6,
+        ),
+      ),
+      child: Row(
+        children: [
+          // 分支字母徽标
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppTheme.boardLine,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              branchLetter(index),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              rec.notation,
+              style: TextStyle(fontSize: 13, color: color),
+            ),
+          ),
+          if (isMain)
+            Container(
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: AppTheme.boardLine.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '主线',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: AppTheme.boardLine,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          // 上移
+          IconButton(
+            icon: const Icon(Icons.arrow_upward, size: 18),
+            onPressed: index == 0
+                ? null
+                : () {
+                    controller.moveBranchUp(node, index);
+                    setState(() {});
+                  },
+            tooltip: '上移',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          ),
+          // 下移
+          IconButton(
+            icon: const Icon(Icons.arrow_downward, size: 18),
+            onPressed: index == node.children.length - 1
+                ? null
+                : () {
+                    controller.moveBranchDown(node, index);
+                    setState(() {});
+                  },
+            tooltip: '下移',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          ),
+          // 删除该续着
+          IconButton(
+            icon: const Icon(Icons.delete_outline,
+                size: 18, color: Color(0xFFC62828)),
+            onPressed: () => _confirmDeleteBranch(index),
+            tooltip: '删除此续着',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 二次确认后删除当前着法及其全部后代。
+  Future<void> _confirmDeleteMove() async {
+    final ok = await _confirm(
+      context,
+      title: '删除着法',
+      content: '将删除「${node.move!.notation}」及其后续所有着法和分支，'
+          '此操作不可撤销。确认删除？',
+    );
+    if (!ok || !mounted) return;
+    controller.deleteMove(node);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// 二次确认后删除第 [index] 条续着及其全部后代。
+  Future<void> _confirmDeleteBranch(int index) async {
+    final child = node.children[index];
+    final ok = await _confirm(
+      context,
+      title: '删除续着',
+      content: '将删除续着「${child.move!.notation}」及其后续所有着法和分支，'
+          '此操作不可撤销。确认删除？',
+    );
+    if (!ok || !mounted) return;
+    controller.deleteBranch(node, index);
+    setState(() {});
+  }
+
+  /// 通用二次确认对话框，返回用户是否确认。
+  Future<bool> _confirm(
+    BuildContext context, {
+    required String title,
+    required String content,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC62828),
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 }
 

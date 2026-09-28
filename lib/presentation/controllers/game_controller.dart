@@ -502,6 +502,109 @@ class GameController extends ChangeNotifier {
     _jumpTo(_current.children[index]);
   }
 
+  // ---- 棋谱编辑：删除着法 / 分支排序 ----
+
+  /// 判断 [node] 是否为 [ancestor] 的后代（或自身）。
+  bool _isDescendant(NotationNode node, NotationNode ancestor) {
+    NotationNode? n = node;
+    while (n != null) {
+      if (identical(n, ancestor)) return true;
+      n = n.parent;
+    }
+    return false;
+  }
+
+  /// 从父节点的 children 列表中移除 [child]，并修正 mainChildIndex。
+  ///
+  /// 若 [child] 是当前节点或其祖先，先把当前节点跳回 [parent]。
+  /// 返回是否成功移除。
+  bool _removeChild(NotationNode parent, NotationNode child) {
+    final idx = parent.children.indexOf(child);
+    if (idx < 0) return false;
+    if (_isDescendant(_current, child)) {
+      _current = parent;
+      _restoreStateFromCurrent();
+    }
+    parent.children.removeAt(idx);
+    _fixMainChildIndex(parent, removedIndex: idx);
+    return true;
+  }
+
+  /// 修正父节点的 [NotationNode.mainChildIndex]：删除下标 [removedIndex]
+  /// 后，若主续着在被删项之后则下标减一；主续着被删则夹紧到有效范围。
+  void _fixMainChildIndex(NotationNode parent, {required int removedIndex}) {
+    if (parent.children.isEmpty) {
+      parent.mainChildIndex = 0;
+      return;
+    }
+    if (removedIndex < parent.mainChildIndex) {
+      parent.mainChildIndex--;
+    } else if (removedIndex == parent.mainChildIndex) {
+      parent.mainChildIndex =
+          parent.mainChildIndex.clamp(0, parent.children.length - 1);
+    }
+  }
+
+  /// 删除一着棋及其全部后代（主线续着与所有分支一起删除）。
+  ///
+  /// 根节点不可删。删除后若当前浏览节点落在被删子树中，自动回到
+  /// 该着法的父节点局面。返回是否实际执行了删除。
+  bool deleteMove(NotationNode node) {
+    if (node.isRoot) return false;
+    final parent = node.parent!;
+    if (!_removeChild(parent, node)) return false;
+    _afterTreeEdit();
+    return true;
+  }
+
+  /// 删除 [parent] 的第 [index] 条续着及其全部后代（分支或主线续着）。
+  ///
+  /// 返回是否实际执行了删除。
+  bool deleteBranch(NotationNode parent, int index) {
+    if (index < 0 || index >= parent.children.length) return false;
+    final child = parent.children[index];
+    if (!_removeChild(parent, child)) return false;
+    _afterTreeEdit();
+    return true;
+  }
+
+  /// 把 [parent] 的第 [index] 条续着上移一位（与前一条交换）。
+  void moveBranchUp(NotationNode parent, int index) {
+    if (index <= 0 || index >= parent.children.length) return;
+    _swapChildren(parent, index, index - 1);
+    notifyListeners();
+  }
+
+  /// 把 [parent] 的第 [index] 条续着下移一位（与后一条交换）。
+  void moveBranchDown(NotationNode parent, int index) {
+    if (index < 0 || index >= parent.children.length - 1) return;
+    _swapChildren(parent, index, index + 1);
+    notifyListeners();
+  }
+
+  /// 交换父节点 children 列表中两项，同时让 [NotationNode.mainChildIndex]
+  /// 跟随原主续着移动（保持主线不变）。
+  void _swapChildren(NotationNode parent, int i, int j) {
+    final tmp = parent.children[i];
+    parent.children[i] = parent.children[j];
+    parent.children[j] = tmp;
+    final main = parent.mainChildIndex;
+    if (main == i) {
+      parent.mainChildIndex = j;
+    } else if (main == j) {
+      parent.mainChildIndex = i;
+    }
+  }
+
+  /// 棋谱树结构变更后的统一收尾：清提示/动画、广播局面变化、重启分析。
+  void _afterTreeEdit() {
+    _hintMark = null;
+    _moveAnim = null;
+    boardChange.emit();
+    notifyListeners();
+    _restartAnalysisForNewPosition();
+  }
+
   /// 当前节点的注释文本（无则返回空字符串）。
   ///
   /// - 非根节点：注释属于「到达当前节点的那步棋」，保存于
