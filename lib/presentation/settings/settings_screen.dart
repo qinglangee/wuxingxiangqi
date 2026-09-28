@@ -145,6 +145,31 @@ class _UiSettingsWidget extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF4DC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE0C486)),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: Color(0xFF8B6B3D)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '说明：在任意一个按钮工具条中点击「显示文字」按钮单独设置'
+                      '文字是否显示时，会自动关闭统一管理，之后各工具条按各自的'
+                      '设置显示。',
+                      style:
+                          TextStyle(fontSize: 12.5, color: Color(0xFF6B4A28), height: 1.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             const Text(
               '浮动星星',
@@ -203,31 +228,6 @@ class _UiSettingsWidget extends StatelessWidget {
                     value: ui.showTabStar,
                     activeThumbColor: AppTheme.boardLine,
                     onChanged: cm.setShowTabStar,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF4DC),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE0C486)),
-              ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, size: 18, color: Color(0xFF8B6B3D)),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '说明：在任意一个按钮工具条中点击「显示文字」按钮单独设置'
-                      '文字是否显示时，会自动关闭统一管理，之后各工具条按各自的'
-                      '设置显示。',
-                      style:
-                          TextStyle(fontSize: 12.5, color: Color(0xFF6B4A28), height: 1.5),
-                    ),
                   ),
                 ],
               ),
