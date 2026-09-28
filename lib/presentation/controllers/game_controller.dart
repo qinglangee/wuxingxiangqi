@@ -261,8 +261,10 @@ class GameController extends ChangeNotifier {
   ///
   /// 流程：
   /// 1. 通过 [NotationReplay.resolve] 解析起始局面并校验每步着法
-  ///    （调用方通常已在跳转前验证过，[replay] 可直接传入复用）；
-  /// 2. 顺序回放坐标构建棋谱树；
+  ///    （含全部分支线；调用方通常已在跳转前验证过，[replay] 可直接
+  ///    传入复用）；
+  /// 2. 递归回放坐标构建棋谱树：主线挂为各节点的 children[0]，
+  ///    变着线挂为其分叉节点的后续 children（不改变主线前进指针）；
   /// 3. 完成后跳回根节点，显示棋谱初始状态。
   ///
   /// 解析或规则校验失败时抛 [NotationParseException]。
@@ -292,18 +294,11 @@ class GameController extends ChangeNotifier {
     // 导入棋谱 = 一局新游戏
     _ai.notifyNewGame();
 
-    for (var i = 0; i < data.moves.length; i++) {
-      final (from, to) = data.moves[i];
-      if (!_applyAndRecord(from, to)) {
-        // 理论上不会发生（resolve 已验证），这里做防御性兜底
-        throw NotationParseException(
-          '第 ${i + 1} 步着法不符合规则：${game.moves[i].moveText}',
-        );
-      }
-      final comment = game.moves[i].comment;
-      if (comment != null && comment.isNotEmpty) {
-        _current.move?.comment = comment;
-      }
+    // 主线 + 起始局面的变着线，递归构建整棵棋谱树
+    _buildLine(_root, game.moves, data.moves, '主线');
+    for (var i = 0; i < game.rootBranches.length; i++) {
+      _buildLine(_root, game.rootBranches[i], data.rootBranches[i],
+          '根变着 ${i + 1}');
     }
 
     // 回放到末尾后，跳回根节点显示初始状态
@@ -312,6 +307,46 @@ class GameController extends ChangeNotifier {
     boardChange.emit();
     notifyListeners();
     _restartAnalysisForNewPosition();
+  }
+
+  /// 从 [parent] 节点局面出发，把一条着法线（含递归分支）构建到棋谱树。
+  ///
+  /// [coords] 为 [NotationReplay.resolve] 预先解析校验过的坐标树，
+  /// 与 [line] 一一对应。分支在「本步走完后的节点」上递归挂载。
+  void _buildLine(
+    NotationNode parent,
+    List<ParsedMove> line,
+    List<ReplayMove> coords,
+    String where,
+  ) {
+    var node = parent;
+    for (var i = 0; i < line.length; i++) {
+      // 分支递归会推进内部状态，每步前恢复到本步的出发点局面
+      _current = node;
+      _restoreStateFromCurrent();
+      final coord = coords[i];
+      if (!_applyAndRecord(coord.from, coord.to, selectAsMain: false)) {
+        // 理论上不会发生（resolve 已验证），这里做防御性兜底
+        throw NotationParseException(
+          '$where第 ${i + 1} 步着法不符合规则：${line[i].moveText}',
+        );
+      }
+      final child = _current;
+      final comment = line[i].comment;
+      if (comment != null && comment.isNotEmpty) {
+        child.move?.comment = comment;
+      }
+      // 递归构建本步的各条变着线（分叉点 = 本步走完后的节点）
+      for (var k = 0; k < line[i].branches.length; k++) {
+        _buildLine(
+          child,
+          line[i].branches[k],
+          coord.branches[k],
+          '$where第 ${i + 1} 步变着 ${k + 1}',
+        );
+      }
+      node = child;
+    }
   }
 
   // ---- 棋谱前进 / 后退 / 跳转 ----
@@ -813,7 +848,8 @@ class GameController extends ChangeNotifier {
   ///
   /// 若当前节点已有续着（后退后另走），新走法作为分支加入，
   /// 且前进指针自动指向新分支。
-  bool _applyAndRecord(Position from, Position to, {bool animate = false}) {
+  bool _applyAndRecord(Position from, Position to,
+      {bool animate = false, bool selectAsMain = true}) {
     final before = _state.board.clone();
     final moving = before.pieceAt(from);
     if (moving == null) return false;
@@ -846,6 +882,8 @@ class GameController extends ChangeNotifier {
       board: _state.board.clone(),
       sideToMove: _state.currentSide,
       result: _state.result,
+      // 载入棋谱时传 false：先建主线后建分支，前进指针始终沿主线
+      selectAsMain: selectAsMain,
     );
     if (_state.isOver) _resultTick++;
     // 音效：终局 > 将军 > 吃子 > 普通走子

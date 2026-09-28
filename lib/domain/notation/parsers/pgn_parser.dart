@@ -12,8 +12,9 @@ import '../../models/piece.dart' show Side;
 /// - 头部标签对：`[Key "Value"]`，包括可选的 `[FEN "..."]` 起始局面；
 /// - 着法区默认使用**中文招法**（如「炮二平五」「马8进7」），
 ///   也兼容 ICCS/UCI 坐标着法（如 `e3e4`）；
-/// - 注释：`{...}`（保留到对应步）；
-/// - 变着 `(...)`：当前版本仅保留主线，变着内容忽略；
+/// - 注释：`{...}`（保留到对应步；着法区开头的注释为开局评注）；
+/// - 变着 `(...)`：按标准 RAV 语义解析——括号线**替代紧邻其前的那一着**，
+///   递归解析为 [ParsedMove.branches] / [ParsedGame.rootBranches]；
 /// - NAG 标记 `$1`、`!`、`?` 等：忽略；
 /// - 结果：`1-0` / `0-1` / `1/2-1/2` / `*`：忽略。
 class PgnParser implements NotationParser {
@@ -43,8 +44,9 @@ class PgnParser implements NotationParser {
     final fen = tags['fen'];
     // FEN 中若声明走子方，以 FEN 为准；否则红先
     final startingSide = _sideFromFen(fen) ?? Side.red;
-    final moves = _parseMovetext(movetext, startingSide);
-    if (moves.isEmpty) {
+    final cursor = _Cursor(movetext);
+    final main = _parseLine(cursor, startingSide, topLevel: true);
+    if (main.moves.isEmpty && main.headBranches.isEmpty) {
       throw NotationParseException(
         'PGN 棋谱没有有效的着法',
         cause: 'filename=$filename',
@@ -54,7 +56,9 @@ class PgnParser implements NotationParser {
       info: info,
       startingFen: fen,
       startingSide: startingSide,
-      moves: moves,
+      rootComment: cursor.rootComment,
+      rootBranches: main.headBranches,
+      moves: main.moves,
     );
   }
 
@@ -104,14 +108,18 @@ class PgnParser implements NotationParser {
       tokens.add('{${_sanitizeComment(rootComment)}}');
     }
 
-    // 起始局面的分支（替代首着的变着线）
-    for (final branch in game.rootBranches) {
-      tokens.add('(');
-      _appendLine(tokens, branch, game.startingSide, 1);
-      tokens.add(')');
+    if (game.moves.isEmpty) {
+      // 无主线只有根变着（纯局面 + 变着的罕见棋谱）：逐条输出
+      for (final branch in game.rootBranches) {
+        tokens.add('(');
+        _appendLine(tokens, branch, game.startingSide, 1);
+        tokens.add(')');
+      }
+    } else {
+      // 根变着（替代主线首着）按标准 RAV 写在首着之后，
+      // 由 [headBranches] 参数传给 _appendLine
+      _appendLine(tokens, game.moves, game.startingSide, 1, game.rootBranches);
     }
-
-    _appendLine(tokens, game.moves, game.startingSide, 1);
 
     final result = (game.info.result ?? '').trim();
     tokens.add(result.isEmpty ? '*' : result);
@@ -134,13 +142,20 @@ class PgnParser implements NotationParser {
   ///
   /// [startSide] 为该线首着的走子方，[startRound] 为首着所在回合号。
   /// 红着前输出 `N.`；线首（含括号内变着首着为黑方）输出 `N...`。
-  /// 每步走完后，其 [ParsedMove.branches] 以 `(…)` 形式紧随该步输出。
+  ///
+  /// 变着输出遵循标准 RAV 语义——`( … )` 替代**紧邻其前的那一着**：
+  /// 本应用 [ParsedMove.branches] 语义为「替代主线下一着」，因此
+  /// `line[i-1].branches` 写在 `line[i]` 记号之后；[headBranches] 为
+  /// 替代本线首着的变着（顶层即 [ParsedGame.rootBranches]）。
+  /// 线末着的 branches（替代不存在的下一着）写在着法区末尾，读入时
+  /// 会被挂为替代末着——「终局局面仍有变着」属罕见边界，接受轻微错位。
   void _appendLine(
     List<String> out,
     List<ParsedMove> line,
     Side startSide,
-    int startRound,
-  ) {
+    int startRound, [
+    List<List<ParsedMove>> headBranches = const [],
+  ]) {
     var round = startRound;
     for (var i = 0; i < line.length; i++) {
       final m = line[i];
@@ -163,14 +178,30 @@ class PgnParser implements NotationParser {
 
       out.add(m.notation ?? m.moveText);
 
-      // 本步走完后局面的变着（替代下一着），递归输出
-      for (final branch in m.branches) {
+      // 本着之后输出「替代本着的变着」（标准 RAV 语义）：
+      // 首着的替代变着来自 [headBranches]，其余来自上一着的 branches
+      // （branches 语义为替代其下一着）。
+      final variations = i == 0 ? headBranches : line[i - 1].branches;
+      for (final branch in variations) {
+        if (branch.isEmpty) continue;
         out.add('(');
-        _appendLine(out, branch, _flip(side), side == Side.red ? round : round + 1);
+        // 变着首着与本着同走子方、同回合号
+        _appendLine(out, branch, side, round);
         out.add(')');
       }
 
       if (side == Side.black) round++;
+    }
+
+    // 末着的 branches：替代「不存在的下一着」，标准 RAV 无安放位置，
+    // 只能写在线路末尾（见方法注释的边界说明）。
+    // 此时 round 已推进到下一着的回合号，变着首着与下一着同方同回合。
+    for (final branch in line.last.branches) {
+      if (branch.isEmpty) continue;
+      out.add('(');
+      final lastSide = line.last.side ?? startSide;
+      _appendLine(out, branch, _flip(lastSide), round);
+      out.add(')');
     }
   }
 
@@ -270,104 +301,143 @@ class PgnParser implements NotationParser {
 
   // ---- 着法区 --------------------------------------------------------------
 
-  /// 解析着法区，按回合结构提取主线着法与注释。
+  /// 递归解析一条着法线（主线或括号变着线）。
   ///
-  /// 回合约定：
-  /// - `N.`（数字 + 一个点）：第 N 回合开始，下一着为**红方**；
-  /// - `N...`（数字 + 三个点）：该回合从**黑方**着法开始（常见于
-  ///   FEN 指定黑方先行，或从某局面开始只记录黑方应答）；
-  /// - 一个回合通常为「红着 + 黑着」，但允许只有红着（如红方将死后
-  ///   终局，没有黑方应答）或只有黑着（`N...` 起始）；
-  /// - 下一个回合标记会**重置**预期走子方，因此不能仅靠"红黑交替"推断。
-  List<ParsedMove> _parseMovetext(String text, Side startingSide) {
+  /// 返回 (moves, headBranches)：moves 为本线着法序列，headBranches 为
+  /// 替代本线**首着**的变着列表（顶层即 [ParsedGame.rootBranches]）。
+  ///
+  /// 变着按标准 RAV 语义解析：`( … )` 替代**紧邻其前的那一着**，即
+  /// 挂到前一着的前一着 [ParsedMove.branches] 上（branches 语义为
+  /// 「替代下一着」）；前一着为本线首着时挂入 headBranches。
+  ///
+  /// [startSide] 为本线首着的走子方（变着线即被替代着的走子方）。
+  /// 遇到 `)` 时结束本线返回；顶层遇到不匹配的 `)` 直接跳过。
+  ({List<ParsedMove> moves, List<List<ParsedMove>> headBranches}) _parseLine(
+    _Cursor c,
+    Side startSide, {
+    bool topLevel = false,
+  }) {
     final moves = <ParsedMove>[];
-    final pendingComments = <String>[];
-    var parenDepth = 0;
-    var i = 0;
+    final headBranches = <List<ParsedMove>>[];
 
     // 当前回合标记声明的下一着走子方；null 表示尚未遇到回合标记，
-    // 此时按 FEN 起始轮次推断，之后红黑交替。
+    // 此时按起始走子方推断，之后红黑交替。
     Side? expected;
 
     String takeComment() {
-      if (pendingComments.isEmpty) return '';
-      final joined = pendingComments.join('\n\n');
-      pendingComments.clear();
+      if (c.pendingComments.isEmpty) return '';
+      final joined = c.pendingComments.join('\n\n');
+      c.pendingComments.clear();
       return joined;
     }
 
     void emitMove(String token) {
-      final side = expected ?? (moves.isEmpty ? startingSide : _flip(moves.last.side ?? startingSide));
-      final comment = takeComment();
+      final side = expected ??
+          (moves.isEmpty ? startSide : _flip(moves.last.side ?? startSide));
+      var comment = takeComment();
+      if (topLevel && moves.isEmpty && headBranches.isEmpty) {
+        // 顶层着法区开头（首着之前）的注释 = 开局评注
+        if (comment.isNotEmpty) c.rootComment = comment;
+        comment = '';
+      }
       moves.add(ParsedMove(
         moveText: token,
         side: side,
         comment: comment.isEmpty ? null : comment,
+        // 显式可变列表：后续遇到的变着会追加进来
+        branches: <List<ParsedMove>>[],
       ));
       // 同一回合内红→黑交替；遇到新回合标记时会被重置
       expected = _flip(side);
     }
 
-    while (i < text.length) {
-      final ch = text[i];
+    /// 线路结束时仍遗留的注释（线尾着法之后的 {…}）：挂到本线最后
+    /// 一着。兼容其它软件「注释写在着法之后表示对该着的评注」的习惯。
+    void flushTailComment() {
+      if (c.pendingComments.isEmpty || moves.isEmpty) return;
+      final tail = takeComment();
+      final last = moves.removeLast();
+      moves.add(ParsedMove(
+        moveText: last.moveText,
+        side: last.side,
+        comment: last.comment == null ? tail : '${last.comment}\n\n$tail',
+        branches: last.branches,
+        notation: last.notation,
+      ));
+    }
 
-      // 变着 (...)：按括号深度整体跳过（当前不解析为分支）
+    final text = c.text;
+    while (c.i < text.length) {
+      final ch = text[c.i];
+
+      // 变着 (...)：递归解析为「替代紧邻前一着」的分支线
       if (ch == '(') {
-        parenDepth++;
-        i++;
+        c.i++;
+        // 变着首着的走子方 = 被替代着（本线最后一着）的走子方；
+        // 本线还没有着法时，变着替代本线首着，走子方同首着
+        final replacedSide = moves.isEmpty
+            ? startSide
+            : (moves.last.side ?? startSide);
+        final sub = _parseLine(c, replacedSide);
+        // 挂载点：替代本线最后一着 → 挂到其前一着的 branches；
+        // 本线不足两着时挂入 headBranches（替代本线首着）。
+        // sub.headBranches 与本变着同级（都替代同一着），一并挂载。
+        final List<List<ParsedMove>> target =
+            moves.length >= 2 ? moves[moves.length - 2].branches : headBranches;
+        if (sub.moves.isNotEmpty) target.add(sub.moves);
+        target.addAll(sub.headBranches);
         continue;
       }
       if (ch == ')') {
-        if (parenDepth > 0) parenDepth--;
-        i++;
-        continue;
-      }
-      if (parenDepth > 0) {
-        i++;
-        continue;
+        c.i++;
+        if (!topLevel) {
+          flushTailComment();
+          return (moves: moves, headBranches: headBranches);
+        }
+        continue; // 顶层不匹配的右括号：跳过
       }
 
       // 注释 {...}：附加到下一个着法
       if (ch == '{') {
-        i++;
+        c.i++;
         final buf = StringBuffer();
-        while (i < text.length && text[i] != '}') {
-          buf.write(text[i]);
-          i++;
+        while (c.i < text.length && text[c.i] != '}') {
+          buf.write(text[c.i]);
+          c.i++;
         }
-        if (i < text.length) i++; // 跳过 '}'
+        if (c.i < text.length) c.i++; // 跳过 '}'
         final t = buf.toString().trim();
-        if (t.isNotEmpty) pendingComments.add(t);
+        if (t.isNotEmpty) c.pendingComments.add(t);
         continue;
       }
 
       // 行注释 ;...（部分 PGN 方言）
       if (ch == ';') {
-        while (i < text.length && text[i] != '\n') {
-          i++;
+        while (c.i < text.length && text[c.i] != '\n') {
+          c.i++;
         }
         continue;
       }
 
       // 空白
       if (_isWhitespace(ch.codeUnitAt(0))) {
-        i++;
+        c.i++;
         continue;
       }
 
       // 数字开头：结果标记 或 回合号
       if (_isDigit(ch.codeUnitAt(0))) {
-        final rest = text.substring(i);
+        final rest = text.substring(c.i);
         if (rest.startsWith('1/2-1/2') ||
             rest.startsWith('1-0') ||
             rest.startsWith('0-1')) {
-          while (i < text.length && !_isWhitespace(text.codeUnitAt(i))) {
-            i++;
+          while (c.i < text.length && !_isWhitespace(text.codeUnitAt(c.i))) {
+            c.i++;
           }
           continue;
         }
         // 回合标记：连续数字 + 一个或多个点
-        var j = i;
+        var j = c.i;
         while (j < text.length && _isDigit(text.codeUnitAt(j))) {
           j++;
         }
@@ -380,52 +450,53 @@ class PgnParser implements NotationParser {
           // 一个点 = 红方回合；三个点 = 黑方先行的回合
           expected = dots >= 3 ? Side.black : Side.red;
         }
-        i = j;
+        c.i = j;
         continue;
       }
 
       // 独立结果星号
       if (ch == '*') {
-        i++;
+        c.i++;
         continue;
       }
 
       // NAG：$12 形式
       if (ch == r'$') {
-        i++;
-        while (i < text.length && _isDigit(text.codeUnitAt(i))) {
-          i++;
+        c.i++;
+        while (c.i < text.length && _isDigit(text.codeUnitAt(c.i))) {
+          c.i++;
         }
         continue;
       }
 
       // UCI/ICCS 着法：[a-i] 数字 [a-i] 数字
       if (_isFileLetter(ch) &&
-          i + 3 < text.length &&
-          _isDigit(text.codeUnitAt(i + 1)) &&
-          _isFileLetter(text[i + 2]) &&
-          _isDigit(text.codeUnitAt(i + 3))) {
-        emitMove(text.substring(i, i + 4));
-        i += 4;
+          c.i + 3 < text.length &&
+          _isDigit(text.codeUnitAt(c.i + 1)) &&
+          _isFileLetter(text[c.i + 2]) &&
+          _isDigit(text.codeUnitAt(c.i + 3))) {
+        emitMove(text.substring(c.i, c.i + 4));
+        c.i += 4;
         continue;
       }
 
       // 中文招法：首字符为棋子名或前后消歧字，取连续 4 个字符
-      if (ChineseNotation.looksLikeChinese(ch) && i + 3 < text.length) {
-        final token = text.substring(i, i + 4);
+      if (ChineseNotation.looksLikeChinese(ch) && c.i + 3 < text.length) {
+        final token = text.substring(c.i, c.i + 4);
         if (ChineseNotation.isValidToken(token)) {
           emitMove(token);
-          i += 4;
+          c.i += 4;
 
           continue;
         }
       }
 
       // 其它字符（!、? 等 NAG 符号、标点）：跳过
-      i++;
+      c.i++;
     }
 
-    return moves;
+    flushTailComment();
+    return (moves: moves, headBranches: headBranches);
   }
 
   Side _flip(Side s) => s == Side.red ? Side.black : Side.red;
@@ -438,4 +509,18 @@ class PgnParser implements NotationParser {
     final c = ch.codeUnitAt(0);
     return c >= 0x61 && c <= 0x69; // a..i
   }
+}
+
+/// PGN 着法区扫描游标：在变着线递归解析间共享文本位置与待挂注释。
+class _Cursor {
+  _Cursor(this.text);
+
+  final String text;
+  int i = 0;
+
+  /// 已扫描到、尚未附着到着法的注释（附加到下一个着法）。
+  final List<String> pendingComments = [];
+
+  /// 顶层着法区开头（首着之前）的注释 = 开局评注。
+  String? rootComment;
 }

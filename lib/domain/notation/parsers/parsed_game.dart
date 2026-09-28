@@ -26,11 +26,12 @@ class ParsedGame {
   final Side startingSide;
 
   /// 起始局面的注释（开局评注），载入后挂在棋谱树根节点的局面注释上。
-  /// XQF 中第 0 步空着法承载的备注即此；PGN 当前不产生。
+  /// XQF 中第 0 步空着法承载的备注即此；PGN 中着法区开头的 `{…}` 即此。
   final String? rootComment;
 
-  /// 起始局面的变着：替代首着的若干条线（XQF 中首着即有多个分支时出现）。
-  /// 主线首着为 [moves] 的第一步。PGN 当前不产生此字段。
+  /// 起始局面的变着：替代首着的若干条线（XQF 中首着即有多个分支、
+  /// PGN 中首着之后紧跟的 RAV 变着时出现）。
+  /// 主线首着为 [moves] 的第一步。
   final List<List<ParsedMove>> rootBranches;
 
   /// 主线着法序列（按走子顺序）。
@@ -40,8 +41,7 @@ class ParsedGame {
   /// - UCI 坐标串，如 `'e3e4'`；
   /// - 中文招法，如 `'炮二平五'`（结合走子前盘面解析）。
   ///
-  /// 主线分支由各步的 [ParsedMove.branches] 携带（XQF 等格式可解析多分支，
-  /// PGN 当前只解析主线，branches 为空）。
+  /// 主线分支由各步的 [ParsedMove.branches] 携带（PGN/XQF 均解析）。
   final List<ParsedMove> moves;
 }
 
@@ -104,8 +104,8 @@ class ParsedMove {
   /// 从本步走完后的局面分叉出的变着线（不含主线）。
   ///
   /// 每条变着是一条着法序列（第一条即该变着的首着），序列中每步
-  /// 又可带自己的 [branches]，形成递归树。PGN 当前只解析主线，
-  /// 此字段为空；XQF 把整棵着法树拍扁为「主线 + 每步挂变着」。
+  /// 又可带自己的 [branches]，形成递归树。PGN/XQF 解析器均产生
+  /// 此字段。
   final List<List<ParsedMove>> branches;
 
   /// 该步的中文记谱文本（如 `'炮二平五'`），可选。
