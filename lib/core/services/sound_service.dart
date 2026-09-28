@@ -70,11 +70,18 @@ class SoundService {
   /// 走子错误提示音效（如背谱时走了与棋谱不一致的着法）。
   static void playError() => _play(_errorPath);
 
+  /// 串行化播放队列：前一次 stop+play 完成后才执行下一次，
+  /// 避免多个 play 并发访问同一缓存文件导致 Windows 文件锁冲突。
+  static Future<void> _playQueue = Future.value();
+
   static void _play(String path) {
-    // 无论当前状态（idle/playing/completed/paused）都先停掉，
-    // 确保下一次 play 立即生效且从头播放。
-    _player.stop().then((_) {
-      _player.play(AssetSource(path));
+    _playQueue = _playQueue.then((_) async {
+      // 无论当前状态（idle/playing/completed/paused）都先停掉，
+      // 确保下一次 play 立即生效且从头播放。
+      await _player.stop();
+      await _player.play(AssetSource(path));
     });
+    // 队列出错时不阻塞后续播放
+    _playQueue = _playQueue.catchError((_) {});
   }
 }
