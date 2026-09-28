@@ -768,21 +768,10 @@ class _OperationButton extends StatelessWidget {
               width: 0.8,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                open ? Icons.expand_less : Icons.expand_more,
-                size: 22,
-                color: AppTheme.boardLine,
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.apps,
-                size: 18,
-                color: AppTheme.boardLine.withValues(alpha: 0.8),
-              ),
-            ],
+          child: Icon(
+            open ? Icons.expand_less : Icons.expand_more,
+            size: 22,
+            color: AppTheme.boardLine,
           ),
         ),
       ),
