@@ -8,6 +8,7 @@ import '../../../core/config/config_manager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../controllers/game_controller.dart';
 import '../../library/game_saver.dart';
+import '../../memorize/memorize_screen.dart';
 import '../../shared/adjustable_button_bar.dart';
 import 'cloud_base_controller.dart';
 import 'cloud_base_panel.dart';
@@ -217,6 +218,21 @@ class _ReviewPanelState extends State<ReviewPanel>
                 icon: Icons.save,
                 label: '保存',
                 onTap: () => GameSaver.saveGame(context, controller),
+              ),
+              FreeButton(
+                id: '背谱',
+                icon: Icons.school,
+                label: '背谱',
+                onTap: () {
+                  // 没有着法（如纯残局初始局面）时无法背谱
+                  if (controller.mainLine.length <= 1) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('当前棋谱没有着法，无法背谱')),
+                    );
+                    return;
+                  }
+                  MemorizeScreen.open(context, controller.exportParsedGame());
+                },
               ),
               FreeButton(
                 id: '注释高亮',

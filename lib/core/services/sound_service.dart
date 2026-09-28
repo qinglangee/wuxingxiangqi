@@ -20,6 +20,7 @@ class SoundService {
   static const _winPath = '$_dir/win.mp3';
   static const _alarmPath = '$_dir/alarm.mp3';
   static const _chuaPath = '$_dir/chua.mp3';
+  static const _errorPath = '$_dir/error.mp3';
 
   static final AudioPlayer _player = AudioPlayer();
   static final AudioCache _cache = AudioCache(prefix: 'assets/');
@@ -41,6 +42,7 @@ class SoundService {
       _cache.load(_winPath),
       _cache.load(_alarmPath),
       _cache.load(_chuaPath),
+      _cache.load(_errorPath),
     ]);
   }
 
@@ -64,6 +66,9 @@ class SoundService {
 
   /// 切换分析状态音效。
   static void playChua() => _play(_chuaPath);
+
+  /// 走子错误提示音效（如背谱时走了与棋谱不一致的着法）。
+  static void playError() => _play(_errorPath);
 
   static void _play(String path) {
     // 无论当前状态（idle/playing/completed/paused）都先停掉，

@@ -510,6 +510,39 @@ class GameController extends ChangeNotifier {
     _jumpTo(_current.children[index]);
   }
 
+  /// 沿棋谱树上「既有的」子节点向前走一步（背谱/演练等模式使用）。
+  ///
+  /// 与 [_applyAndRecord] 的区别：不新建任何节点，[child] 必须是当前
+  /// 节点的直接孩子；切换当前节点并恢复其盘面快照，按需播放走子动画
+  /// 与音效（终局/将军/吃子/走子）。返回是否成功进入。
+  bool enterExistingChild(NotationNode child, {bool animate = true}) {
+    if (!identical(child.parent, _current) || _aiThinking) return false;
+    _hintMark = null;
+    _current = child;
+    _restoreStateFromCurrent();
+    if (animate) {
+      final rec = child.move;
+      if (rec != null) {
+        final piece = _state.board.pieceAt(rec.to);
+        if (piece != null) {
+          _moveAnim = MoveAnimEvent(
+            piece: piece,
+            from: rec.from,
+            to: rec.to,
+            forward: true,
+          );
+          _animEndTime = DateTime.now()
+              .add(kMoveAnimDuration)
+              .add(kMoveAnimFrameSlack);
+        }
+      }
+    }
+    _playMoveSound(child.move?.captured);
+    boardChange.emit();
+    notifyListeners();
+    return true;
+  }
+
   // ---- 棋谱编辑：删除着法 / 分支排序 ----
 
   /// 判断 [node] 是否为 [ancestor] 的后代（或自身）。

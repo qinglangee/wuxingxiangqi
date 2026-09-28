@@ -34,7 +34,7 @@ class EffectImagePlayer {
 
   /// 在 [context] 上播放特效图片 [assetPath]（如 `assets/images/app/over.png`）。
   ///
-  /// 图片宽度为屏幕宽度的 70%→50%，高度按图片原始宽高比自适应。
+  /// 图片宽度为屏幕宽度的 70%→30%，高度按图片原始宽高比自适应。
   /// 播放结束后自动移除，无需调用方管理生命周期。
   ///
   /// [boardCenter] 为特效的中心目标点（全局坐标）；不传则默认在屏幕
@@ -44,29 +44,99 @@ class EffectImagePlayer {
     String assetPath, {
     Offset? boardCenter,
   }) {
+    _insert(
+      context,
+      boardCenter: boardCenter,
+      content: Image.asset(
+        assetPath,
+        width: double.infinity,
+        fit: BoxFit.contain,
+      ),
+      widthFractionOfScreen: true,
+    );
+  }
+
+  /// 在 [context] 上播放一段特效文字消息（如「干得不错」「恭喜通关」）。
+  ///
+  /// 动画时序与 [show] 完全相同（70%→30% 缩放、抖动、停留、渐退），
+  /// 文字以大号粗体描边样式居中显示。[color] 为文字颜色。
+  static void showText(
+    BuildContext context,
+    String text, {
+    Color color = const Color(0xFFE6A817),
+    Offset? boardCenter,
+  }) {
+    _insert(
+      context,
+      boardCenter: boardCenter,
+      widthFractionOfScreen: false,
+      content: _EffectText(text: text, color: color),
+    );
+  }
+
+  static void _insert(
+    BuildContext context, {
+    required Widget content,
+    required bool widthFractionOfScreen,
+    Offset? boardCenter,
+  }) {
     final overlay = Overlay.maybeOf(context);
     if (overlay == null) return;
     late final OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => _EffectImageWidget(
-        assetPath: assetPath,
         boardCenter: boardCenter,
+        widthFractionOfScreen: widthFractionOfScreen,
         onFinished: entry.remove,
+        child: content,
       ),
     );
     overlay.insert(entry);
   }
 }
 
-/// 特效图片动画组件（由 [EffectImagePlayer.show] 内部使用）。
+/// 特效文字内容：大号粗体、带深色描边与阴影，保证在任意棋盘背景上清晰。
+class _EffectText extends StatelessWidget {
+  const _EffectText({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    const fontSize = 52.0;
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w900,
+        color: color,
+        letterSpacing: 4,
+        shadows: const [
+          Shadow(color: Color(0x99000000), blurRadius: 12, offset: Offset(0, 4)),
+        ],
+      ),
+    );
+  }
+}
+
+/// 特效内容动画组件（由 [EffectImagePlayer.show] / [EffectImagePlayer.showText]
+/// 内部使用）。
 class _EffectImageWidget extends StatefulWidget {
   const _EffectImageWidget({
-    required this.assetPath,
     required this.onFinished,
+    required this.child,
+    required this.widthFractionOfScreen,
     this.boardCenter,
   });
 
-  final String assetPath;
+  /// 要播放的内容（图片或文字）。
+  final Widget child;
+
+  /// 内容尺寸是否按屏幕宽度比例（true：图片 70%→30%；false：文字
+  /// 按自身固定大小，缩放通过 Transform 完成）。
+  final bool widthFractionOfScreen;
 
   /// 特效中心目标点（全局坐标）；为 null 时居中于屏幕。
   final Offset? boardCenter;
@@ -154,6 +224,18 @@ class _EffectImageWidgetState extends State<_EffectImageWidget>
                 (center.dx / screenW) * 2 - 1,
                 (center.dy / screenH) * 2 - 1,
               );
+        // 图片：宽度 70%→30%；文字：同宽度的 FittedBox 等比缩放，
+        // 使最终文字宽度约为屏幕宽度的 30%。
+        final scale = _widthFraction();
+        final content = widget.widthFractionOfScreen
+            ? SizedBox(width: screenW * scale, child: widget.child)
+            : SizedBox(
+                width: screenW * scale,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: widget.child,
+                ),
+              );
         return IgnorePointer(
           child: Opacity(
             opacity: _opacity(),
@@ -161,11 +243,7 @@ class _EffectImageWidgetState extends State<_EffectImageWidget>
               alignment: alignment,
               child: Transform.translate(
                 offset: Offset(_shakeDx(), 0),
-                child: Image.asset(
-                  widget.assetPath,
-                  width: screenW * _widthFraction(),
-                  fit: BoxFit.contain,
-                ),
+                child: content,
               ),
             ),
           ),
