@@ -379,6 +379,40 @@ class _ResultWatcher extends StatefulWidget {
 
 class _ResultWatcherState extends State<_ResultWatcher> {
   int _lastTick = 0;
+  int _lastWinTick = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // 监听「游戏结束」音效：每次播放 win.mp3 同步播放绝杀动画，
+    // 保证动画与音效在任何终局场景下都同时出现。
+    _lastWinTick = SoundService.winTick.value;
+    SoundService.winTick.addListener(_onWinTick);
+  }
+
+  @override
+  void dispose() {
+    SoundService.winTick.removeListener(_onWinTick);
+    super.dispose();
+  }
+
+  void _onWinTick() {
+    final tick = SoundService.winTick.value;
+    if (tick == _lastWinTick) return;
+    _lastWinTick = tick;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box =
+          widget.boardKey.currentContext?.findRenderObject() as RenderBox?;
+      final center = box?.localToGlobal(
+          Offset(box.size.width / 2, box.size.height / 2));
+      EffectImagePlayer.show(
+        context,
+        'assets/images/app/over.png',
+        boardCenter: center,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -391,16 +425,6 @@ class _ResultWatcherState extends State<_ResultWatcher> {
       if (controller.isOver) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          // 绝杀特效：定位到棋盘中心播放 over.png 动画
-          final box =
-              widget.boardKey.currentContext?.findRenderObject() as RenderBox?;
-          final center = box?.localToGlobal(
-              Offset(box.size.width / 2, box.size.height / 2));
-          EffectImagePlayer.show(
-            context,
-            'assets/images/app/over.png',
-            boardCenter: center,
-          );
           FloatingToast.show(
             context,
             '对局结束：${controller.result}',

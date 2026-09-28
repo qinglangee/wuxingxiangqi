@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// 通用特效图片播放器：把一张图片在屏幕中央播放一段特效动画后自动消失。
 ///
 /// 动画时序（总时长约 2650ms）：
-/// 1. 0~250ms：图片宽度从屏幕宽度的 70% 快速缩小到 50%（easeOut）；
-/// 2. 250~750ms：在 50% 宽度下左右抖动几下（振幅渐弱的正弦位移）；
+/// 1. 0~250ms：图片宽度从屏幕宽度的 70% 快速缩小到 30%（easeOut）；
+/// 2. 250~750ms：在 30% 宽度下左右抖动几下（振幅渐弱的正弦位移）；
 /// 3. 750~2250ms：停在屏幕中央展示 1.5 秒；
 /// 4. 2250~2650ms：渐退消失。
 ///
@@ -26,7 +26,7 @@ class EffectImagePlayer {
   static const double _startWidthFraction = 0.70;
 
   /// 图片最终宽度占屏幕宽度的比例。
-  static const double _endWidthFraction = 0.50;
+  static const double _endWidthFraction = 0.30;
 
   /// 抖动次数与最大振幅（像素）。
   static const int _shakeCount = 3;

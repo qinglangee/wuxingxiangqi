@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 
 /// 音效播放服务：走子 / 吃子 / 游戏结束的自定义音效。
 ///
@@ -23,6 +24,9 @@ class SoundService {
   static final AudioPlayer _player = AudioPlayer();
   static final AudioCache _cache = AudioCache(prefix: 'assets/');
   static bool _preloaded = false;
+
+  /// 每次播放「游戏结束」音效时自增，供 UI 监听以同步播放绝杀动画等。
+  static final ValueNotifier<int> winTick = ValueNotifier(0);
 
   /// 预加载三个音效到缓存并初始化播放器。
   static Future<void> preload() async {
@@ -50,7 +54,10 @@ class SoundService {
   static void playCheck() => _play(_checkPath);
 
   /// 游戏结束音效。
-  static void playWin() => _play(_winPath);
+  static void playWin() {
+    winTick.value++;
+    _play(_winPath);
+  }
 
   /// 取消选中提示音效。
   static void playAlarm() => _play(_alarmPath);
