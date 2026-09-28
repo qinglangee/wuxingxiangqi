@@ -5,6 +5,7 @@ import '../../core/canju/canju_progress.dart';
 import '../canju/canju_controller.dart';
 import '../canju/canju_selector_dialog.dart';
 import '../library/notation_manager_widget.dart';
+import '../shared/error_dialog.dart';
 import '../library/notation_repository.dart';
 
 /// 首页：中国象棋水墨风主菜单。
@@ -160,9 +161,7 @@ class HomeScreen extends StatelessWidget {
     final names = await CanjuLibraryLoader.listNames();
     if (names.isEmpty) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('assets/canju/ 目录下没有残局库')),
-      );
+      showErrorDialog(context, 'assets/canju/ 目录下没有残局库');
       return;
     }
 

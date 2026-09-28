@@ -13,6 +13,7 @@ import '../../review/analysis_panel.dart';
 import '../../review/review_analysis_controller.dart';
 import '../../review/session_games_dialog.dart';
 import '../../shared/adjustable_button_bar.dart';
+import '../../shared/error_dialog.dart';
 import 'cloud_base_controller.dart';
 import 'cloud_base_panel.dart';
 import 'engine_status_bar.dart';
@@ -111,11 +112,8 @@ class _ReviewPanelState extends State<ReviewPanel>
   Future<void> _loadSessionGame(int index) async {
     final err = await controller.loadSessionGame(index);
     if (err != null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err)),
-        );
-      }
+      // 加载失败：弹窗报错，需用户手动关闭，不自动消失
+      if (mounted) await showErrorDialog(context, err, title: '加载棋谱失败');
       return;
     }
     _reviewAnalysis.resetForNewGame();
@@ -296,9 +294,7 @@ class _ReviewPanelState extends State<ReviewPanel>
                 onTap: () {
                   // 没有着法（如纯残局初始局面）时无法背谱
                   if (controller.mainLine.length <= 1) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('当前棋谱没有着法，无法背谱')),
-                    );
+                    showErrorDialog(context, '当前棋谱没有着法，无法背谱');
                     return;
                   }
                   MemorizeScreen.open(context, controller.exportParsedGame());

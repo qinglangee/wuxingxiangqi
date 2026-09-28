@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/config/config_manager.dart';
 import '../../domain/engine/pikafish_engine.dart';
+import '../shared/error_dialog.dart';
 
 /// 引擎权重文件（pikafish.nnue）安装服务与引导对话框。
 ///
@@ -219,9 +220,10 @@ class EvalFileGuideDialog extends StatelessWidget {
       );
       navigator.pop(true);
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('权重文件安装失败：$e')),
-      );
+      // 失败：弹窗报错，需用户手动关闭，不自动消失
+      if (context.mounted) {
+        await showErrorDialog(context, '权重文件安装失败：$e');
+      }
     }
   }
 }

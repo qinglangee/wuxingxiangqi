@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../core/config/config_manager.dart';
+import '../shared/error_dialog.dart';
 import 'notation_merger.dart';
 import 'notation_repository.dart';
 
@@ -174,9 +175,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
   Future<void> _openFile(BuildContext context, String path) async {
     final ext = path.split('.').last.toLowerCase();
     if (!kNotationExtensions.contains(ext)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('不支持的文件类型，仅支持：pgn、xqf、cbf、txt'),
-      ));
+      showErrorDialog(context, '不支持的文件类型，仅支持：pgn、xqf、cbf、txt');
       return;
     }
     final external = widget.onOpenFile;
@@ -247,24 +246,21 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
         name.contains('\\') ||
         name == '.' ||
         name == '..') {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('目录名不合法，不能包含路径分隔符')));
+      showErrorDialog(context, '目录名不合法，不能包含路径分隔符');
       return;
     }
     final dest =
         '$_currentPath${Platform.pathSeparator}$name';
     if (await FileSystemEntity.type(dest) != FileSystemEntityType.notFound) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已存在同名文件或目录')));
+      showErrorDialog(context, '已存在同名文件或目录');
       return;
     }
     try {
       await Directory(dest).create();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('创建失败：$e')));
+      showErrorDialog(context, '创建失败：$e');
       return;
     }
     await _reload();
@@ -428,8 +424,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     final name = newName.trim();
     if (name.isEmpty || name == oldName) return;
     if (name.contains('/') || name.contains('\\')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('名称不能包含路径分隔符')));
+      showErrorDialog(context, '名称不能包含路径分隔符');
       return;
     }
     final dest =
@@ -437,8 +432,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     try {
       if (await FileSystemEntity.type(dest) != FileSystemEntityType.notFound) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('已存在同名项')));
+        showErrorDialog(context, '已存在同名项');
         return;
       }
       if (await FileSystemEntity.type(src) == FileSystemEntityType.directory) {
@@ -448,8 +442,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('重命名失败：$e')));
+      showErrorDialog(context, '重命名失败：$e');
       return;
     }
     _exitMultiSelect();
@@ -527,9 +520,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
         await NotationMerger.expandSources(_selected.toList());
     if (!mounted) return;
     if (sources.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('选中内容中没有可合并的 PGN/XQF 棋谱')),
-      );
+      showErrorDialog(context, '选中内容中没有可合并的 PGN/XQF 棋谱');
       return;
     }
 

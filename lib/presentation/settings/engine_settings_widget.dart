@@ -4,6 +4,7 @@ import '../../core/config/app_config.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/engine/pikafish_engine.dart';
+import '../shared/error_dialog.dart';
 import 'eval_file_dialog.dart';
 
 /// 引擎设置控件：性能（滑块）+ 棋规（下拉框）两部分。
@@ -294,9 +295,10 @@ class _EvalFileTile extends StatelessWidget {
         );
       }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('权重文件安装失败：$e')),
-      );
+      // 失败：弹窗报错，需用户手动关闭，不自动消失
+      if (context.mounted) {
+        await showErrorDialog(context, '权重文件安装失败：$e');
+      }
     }
   }
 }
