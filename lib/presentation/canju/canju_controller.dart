@@ -36,6 +36,8 @@ class CanjuController extends ChangeNotifier {
     required int initialIndex,
   })  : _currentIndex = initialIndex,
         _lastSeenResultTick = gameController.resultTick {
+    // 标记为残局模式：退出打谱页时不保存会话
+    gameController.isCanjuMode = true;
     // 本控制器在 MultiProvider 的 build 阶段被创建，此处若让
     // GameController.notifyListeners 会触发"build 期标记重建"异常，
     // 因此首次载入走静默路径：状态同步改好，首帧 build 直接读到残局

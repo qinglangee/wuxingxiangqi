@@ -115,6 +115,12 @@ class GameController extends ChangeNotifier {
   bool _boardFlipped = false;
   bool get boardFlipped => _boardFlipped;
 
+  /// 是否处于残局模式（残局模式退出时不保存会话）。
+  bool _isCanjuMode = false;
+
+  /// 标记为残局模式（由 [CanjuController] 构造时调用）。
+  set isCanjuMode(bool v) => _isCanjuMode = v;
+
   /// 引擎最近一次搜索信息快照（引擎面板展示）；无搜索时为 null。
   EngineSearchInfo? _engineInfo;
   EngineSearchInfo? get engineInfo => _engineInfo;
@@ -1337,7 +1343,10 @@ class GameController extends ChangeNotifier {
   }
 
   /// 把当前棋谱树与浏览位置保存到会话文件（fire-and-forget）。
+  ///
+  /// 残局模式下不保存，以便下次进入打谱页时恢复上次非残局的会话。
   void _saveSession() {
+    if (_isCanjuMode) return;
     try {
       final game = exportParsedGame();
       final pgnBytes = const PgnParser().write(game);
