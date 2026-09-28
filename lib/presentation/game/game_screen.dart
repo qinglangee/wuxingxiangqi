@@ -314,7 +314,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
     return AdjustableButtonBar(
       id: 'ai_config_bar',
       defaultPinnedIds: const {
-        '返回','重开', '红AI', '黑AI', '分析', '出招', '分支', '反转',
+        '返回', '重开', '红AI', '黑AI', '分析', '出招', '反转',
       },
       buttons: [
         FreeButton(

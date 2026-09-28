@@ -157,6 +157,7 @@ class _ReviewPanelState extends State<ReviewPanel>
           FloatingStarMenu(
             id: 'review_floating_star',
             buttons: navButtons,
+            defaultPinnedIds: const {'保存', '背谱', '复盘'},
             defaultAnchorKey: widget.boardAreaKey,
           ),
           // 复盘模块：显示 AnalysisPanel，隐藏普通三标签页
@@ -222,7 +223,7 @@ class _ReviewPanelState extends State<ReviewPanel>
           if (controller.atBranch) _BranchSelectorBar(controller: controller),
           AdjustableButtonBar(
             id: 'review_nav_bar',
-            defaultPinnedIds: const {'前进', '后退'},
+            defaultPinnedIds: const {'上一分支', '下一分支', '前进', '后退'},
             buttons: navButtons,
           ),
         ],
