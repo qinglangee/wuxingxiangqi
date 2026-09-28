@@ -5,6 +5,7 @@ import '../../core/canju/canju_progress.dart';
 import '../../core/config/config_manager.dart';
 import '../../domain/game/game_result.dart';
 import '../../domain/models/piece.dart';
+import '../../domain/notation/notation_node.dart';
 import '../controllers/game_controller.dart';
 
 /// 残局会话快照：作为路由参数传入 `/play`。
@@ -116,18 +117,21 @@ class CanjuController extends ChangeNotifier {
     _loadCurrent();
   }
 
-  /// 悔棋：回退到最近的应该红方行棋的节点（即撤销黑方最后一步）。
+  /// 悔棋：回退到最近的应该红方行棋的节点。
   ///
-  /// 残局模式下人类执红、AI 执黑，因此悔棋就是回到黑走之前。
+  /// 残局模式下人类执红、AI 执黑，悔棋即撤销「黑方最后一步及其之前
+  /// 的红方一步」，回到上一个轮到红方行棋的局面，让人可以换一种走法。
+  /// 从当前节点的父节点开始向上查找（而非当前节点本身），否则当当前
+  /// 局面正是黑方应着后到达的（红方行棋）时会原地不动、毫无反应。
   void undoToRedTurn() {
-    // 沿父链向上找，直到节点为根或该节点记录的走子是黑方走的
-    var node = gameController.currentNode;
-    while (!node.isRoot) {
+    NotationNode? node = gameController.currentNode.parent;
+    while (node != null && !node.isRoot) {
       final move = node.move;
       if (move != null && move.moving.side == Side.black) break;
-      node = node.parent!;
+      node = node.parent;
     }
-    gameController.jumpTo(node);
+    // node 为 null 仅当当前节点是根（无棋可悔）
+    if (node != null) gameController.jumpTo(node);
   }
 
   /// 提示：把当前局面发给引擎，按 [autoHint] 决定直接走子还是标记。
