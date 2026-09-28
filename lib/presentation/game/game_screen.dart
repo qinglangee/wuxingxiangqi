@@ -515,13 +515,17 @@ class _ScalableBoardState extends State<_ScalableBoard> {
     super.dispose();
   }
 
-  /// 按 [widget.showHandle] 插入或移除浮层把手。
+  /// 把手是否应显示：父组件开关 + 界面设置「缩放星」开关共同决定。
+  bool get _handleVisible =>
+      widget.showHandle && ConfigManager.instance.config.ui.showScaleStar;
+
+  /// 按把手可见性插入或移除浮层。
   void _syncHandle() {
     if (!mounted) return;
-    if (widget.showHandle && _handleEntry == null) {
+    if (_handleVisible && _handleEntry == null) {
       _handleEntry = OverlayEntry(builder: _buildHandle);
       Overlay.of(context).insert(_handleEntry!);
-    } else if (!widget.showHandle && _handleEntry != null) {
+    } else if (!_handleVisible && _handleEntry != null) {
       _handleEntry!.remove();
       _handleEntry = null;
     }
@@ -541,7 +545,16 @@ class _ScalableBoardState extends State<_ScalableBoard> {
   /// 把手默认禁用（灰色）：点击与拖动均无效，仅长按可切换为启用（黄色）。
   /// 启用后：点击在最大/最小缩放之间切换；上下拖动连续调整缩放。
   Widget _buildHandle(BuildContext context) {
-    final box = _boardAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    // 树重组期间 element 可能 inactive：currentContext 非空、mounted
+    // 也为 true，但 findRenderObject 仍抛异常，只能 try-catch 兜底
+    RenderBox? box;
+    try {
+      final areaCtx = _boardAreaKey.currentContext;
+      if (areaCtx == null || !areaCtx.mounted) return const SizedBox.shrink();
+      box = areaCtx.findRenderObject() as RenderBox?;
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
     if (box == null || !box.attached) return const SizedBox.shrink();
     final origin = box.localToGlobal(Offset.zero);
     final boardWidth = box.size.width;
@@ -625,6 +638,8 @@ class _ScalableBoardState extends State<_ScalableBoard> {
       listenable: ConfigManager.instance,
       builder: (context, _) {
         final scale = _scale;
+        // 「缩放星」显隐开关可能在设置页被切换，下一帧重新同步把手
+        WidgetsBinding.instance.addPostFrameCallback((_) => _syncHandle());
         return LayoutBuilder(
           builder: (context, constraints) {
             final boardWidth = constraints.maxWidth * scale;

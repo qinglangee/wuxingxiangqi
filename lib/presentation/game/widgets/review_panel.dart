@@ -17,6 +17,7 @@ import '../../review/session_games_dialog.dart';
 import '../../shared/adjustable_button_bar.dart';
 import '../../shared/error_dialog.dart';
 import '../../shared/floating_star_menu.dart';
+import '../../shared/floating_toggle_star.dart';
 import 'cloud_base_controller.dart';
 import 'cloud_base_panel.dart';
 import 'engine_status_bar.dart';
@@ -69,6 +70,9 @@ class _ReviewPanelState extends State<ReviewPanel>
 
   /// 是否显示复盘模块（true 时隐藏 review_panel 三标签页，显示复盘模块）。
   bool _showAnalysis = false;
+
+  /// 三个标签（棋谱注释/引擎/云库）是否显示；标签面板本身不受影响。
+  bool _tabsVisible = true;
 
   /// 「走到带注释的着法时注释框浅绿高亮」开关（默认开启）。
   ///
@@ -143,6 +147,10 @@ class _ReviewPanelState extends State<ReviewPanel>
   @override
   Widget build(BuildContext context) {
     final navButtons = _buildNavButtons();
+    // 监听配置：界面设置切换红星/绿星显隐时重建
+    return ListenableBuilder(
+      listenable: ConfigManager.instance,
+      builder: (context, _) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.85),
@@ -153,13 +161,24 @@ class _ReviewPanelState extends State<ReviewPanel>
       child: Column(
         children: [
           // 浮动红星：管理复盘导航条的全部按钮（不参与布局，
-          // 通过 Overlay 浮在所有组件上方）
-          FloatingStarMenu(
-            id: 'review_floating_star',
-            buttons: navButtons,
-            defaultPinnedIds: const {'保存', '背谱', '复盘'},
-            defaultAnchorKey: widget.boardAreaKey,
-          ),
+          // 通过 Overlay 浮在所有组件上方）；「菜单星」显隐由界面设置控制
+          if (ConfigManager.instance.config.ui.showMenuStar)
+            FloatingStarMenu(
+              id: 'review_floating_star',
+              buttons: navButtons,
+              defaultPinnedIds: const {'保存', '背谱', '复盘'},
+              defaultAnchorKey: widget.boardAreaKey,
+            ),
+          // 浮动绿星：切换三个标签（棋谱注释/引擎/云库）的显隐；
+          // 激活为绿色，非激活为灰绿色，面板本身不受影响；
+          // 「标签星」显隐由界面设置控制
+          if (ConfigManager.instance.config.ui.showTabStar)
+            FloatingToggleStar(
+              id: 'review_tab_toggle_star',
+              active: _tabsVisible,
+              onChanged: (v) => setState(() => _tabsVisible = v),
+              defaultAnchorKey: widget.boardAreaKey,
+            ),
           // 复盘模块：显示 AnalysisPanel，隐藏普通三标签页
           if (_showAnalysis)
             Expanded(
@@ -169,9 +188,11 @@ class _ReviewPanelState extends State<ReviewPanel>
               ),
             )
           else ...[
-            Material(
-              color: const Color(0xFFF5E6C8),
-              child: TabBar(
+            // 绿星控制：三个标签可整体隐藏，标签面板保持显示
+            if (_tabsVisible)
+              Material(
+                color: const Color(0xFFF5E6C8),
+                child: TabBar(
                 controller: _tab,
                 labelColor: AppTheme.boardLine,
                 unselectedLabelColor: const Color(0xFF8B6B3D),
@@ -228,7 +249,8 @@ class _ReviewPanelState extends State<ReviewPanel>
           ),
         ],
       ),
-    );
+      );
+    });
   }
 
   /// 复盘导航条的全部按钮（底部导航条与浮动红星共用同一份定义）。

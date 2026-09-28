@@ -128,6 +128,30 @@ class ConfigManager extends ChangeNotifier {
     });
   }
 
+  /// 设置是否显示黄色缩放星（棋盘大小把手）。
+  Future<void> setShowScaleStar(bool show) async {
+    await updateUi((ui) {
+      ui.showScaleStar = show;
+      return ui;
+    });
+  }
+
+  /// 设置是否显示红色菜单星。
+  Future<void> setShowMenuStar(bool show) async {
+    await updateUi((ui) {
+      ui.showMenuStar = show;
+      return ui;
+    });
+  }
+
+  /// 设置是否显示绿色标签星。
+  Future<void> setShowTabStar(bool show) async {
+    await updateUi((ui) {
+      ui.showTabStar = show;
+      return ui;
+    });
+  }
+
   /// 更新棋子 / 棋盘配置。
   Future<void> updateBoard(
       BoardConfig Function(BoardConfig current) updater) async {

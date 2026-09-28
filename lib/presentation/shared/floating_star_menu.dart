@@ -212,7 +212,10 @@ class _FloatingStarMenuState extends State<FloatingStarMenu> {
   Offset _defaultPos(Size screenSize) {
     final key = widget.defaultAnchorKey;
     if (key == null) return const Offset(0.92, 0.5);
-    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    // 树重组期间 element 可能处于 inactive 状态：此时 currentContext
+    // 非空、mounted 也为 true，但 findRenderObject 仍会抛
+    // "Cannot get renderObject of inactive element"，只能 try-catch 兜底
+    final box = _safeRenderBox(key);
     if (box == null || !box.attached) return const Offset(0.92, 0.5);
     final origin = box.localToGlobal(Offset.zero);
     final x = origin.dx +
@@ -220,6 +223,17 @@ class _FloatingStarMenuState extends State<FloatingStarMenu> {
     final y = origin.dy +
         box.size.height * widget.defaultAnchorFraction.dy;
     return Offset(x / screenSize.width, y / screenSize.height);
+  }
+
+  /// 安全取 GlobalKey 的 RenderBox：element inactive / 未挂载时返回 null。
+  static RenderBox? _safeRenderBox(GlobalKey key) {
+    try {
+      final ctx = key.currentContext;
+      if (ctx == null || !ctx.mounted) return null;
+      return ctx.findRenderObject() as RenderBox?;
+    } catch (_) {
+      return null;
+    }
   }
 
   List<FreeButton> get _pinnedButtons => _order

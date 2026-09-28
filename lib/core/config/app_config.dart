@@ -207,6 +207,9 @@ class UiConfig {
     this.boardBackground = 0xFFE8C988,
     this.unifiedButtonLabels = true,
     this.globalShowButtonLabels = true,
+    this.showScaleStar = true,
+    this.showMenuStar = true,
+    this.showTabStar = true,
     Map<String, ButtonBarConfig>? buttonBars,
   }) : buttonBars = buttonBars ?? <String, ButtonBarConfig>{};
 
@@ -234,6 +237,15 @@ class UiConfig {
   /// 统一管理开启时，所有按钮工具条是否显示文字。
   bool globalShowButtonLabels;
 
+  /// 是否显示黄色缩放星（棋盘下边缘，拖动调整棋盘大小）。
+  bool showScaleStar;
+
+  /// 是否显示红色菜单星（打谱页，环形功能按钮菜单）。
+  bool showMenuStar;
+
+  /// 是否显示绿色标签星（打谱页，切换三个标签的显隐）。
+  bool showTabStar;
+
   /// 各按钮工具条（按其 id 索引）的个性化配置：按钮顺序、常驻列表、
   /// 非统一管理时该工具条自身的文字显示开关。
   Map<String, ButtonBarConfig> buttonBars;
@@ -250,6 +262,9 @@ class UiConfig {
         unifiedButtonLabels: json['unifiedButtonLabels'] as bool? ?? true,
         globalShowButtonLabels:
             json['globalShowButtonLabels'] as bool? ?? true,
+        showScaleStar: json['showScaleStar'] as bool? ?? true,
+        showMenuStar: json['showMenuStar'] as bool? ?? true,
+        showTabStar: json['showTabStar'] as bool? ?? true,
         buttonBars: (json['buttonBars'] is Map)
             ? Map<String, dynamic>.from(json['buttonBars'] as Map).map(
                 (k, v) => MapEntry(
@@ -268,6 +283,9 @@ class UiConfig {
         'boardBackground': boardBackground,
         'unifiedButtonLabels': unifiedButtonLabels,
         'globalShowButtonLabels': globalShowButtonLabels,
+        'showScaleStar': showScaleStar,
+        'showMenuStar': showMenuStar,
+        'showTabStar': showTabStar,
         'buttonBars':
             buttonBars.map((k, v) => MapEntry(k, v.toJson())),
       };
@@ -280,6 +298,9 @@ class UiConfig {
     int? boardBackground,
     bool? unifiedButtonLabels,
     bool? globalShowButtonLabels,
+    bool? showScaleStar,
+    bool? showMenuStar,
+    bool? showTabStar,
     Map<String, ButtonBarConfig>? buttonBars,
   }) =>
       UiConfig(
@@ -292,6 +313,9 @@ class UiConfig {
             unifiedButtonLabels ?? this.unifiedButtonLabels,
         globalShowButtonLabels:
             globalShowButtonLabels ?? this.globalShowButtonLabels,
+        showScaleStar: showScaleStar ?? this.showScaleStar,
+        showMenuStar: showMenuStar ?? this.showMenuStar,
+        showTabStar: showTabStar ?? this.showTabStar,
         buttonBars: buttonBars ?? this.buttonBars,
       );
 }

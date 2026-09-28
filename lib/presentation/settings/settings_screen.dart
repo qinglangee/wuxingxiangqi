@@ -145,6 +145,68 @@ class _UiSettingsWidget extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            const Text(
+              '浮动星星',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF5A3A1A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDF6E3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFC9B68C)),
+              ),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text(
+                      '缩放星（黄色）',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
+                    ),
+                    subtitle: const Text(
+                      '棋盘下边缘的五角星，上下拖动可整体缩放棋盘',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF8B6B4A)),
+                    ),
+                    value: ui.showScaleStar,
+                    activeThumbColor: AppTheme.boardLine,
+                    onChanged: cm.setShowScaleStar,
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  SwitchListTile(
+                    title: const Text(
+                      '菜单星（红色）',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
+                    ),
+                    subtitle: const Text(
+                      '打谱页的五角星菜单，点击环形展开常驻按钮',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF8B6B4A)),
+                    ),
+                    value: ui.showMenuStar,
+                    activeThumbColor: AppTheme.boardLine,
+                    onChanged: cm.setShowMenuStar,
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  SwitchListTile(
+                    title: const Text(
+                      '标签星（绿色）',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
+                    ),
+                    subtitle: const Text(
+                      '打谱页的五角星开关，点击切换三个标签页的显隐',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF8B6B4A)),
+                    ),
+                    value: ui.showTabStar,
+                    activeThumbColor: AppTheme.boardLine,
+                    onChanged: cm.setShowTabStar,
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(12),
