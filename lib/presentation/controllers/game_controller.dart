@@ -961,6 +961,34 @@ class GameController extends ChangeNotifier {
     if (!_engine.tryMove(from, to)) return false;
 
     _hintMark = null; // 走子后清除提示标记
+
+    // 若当前节点已存在相同起终点的续着分支，则复用已有节点，不重复添加。
+    // 这样用户走出与某分支相同的着法时，直接进入该分支的既有局面，
+    // 棋谱树不会出现重复节点。
+    final existing = _current.children.where((c) {
+      final m = c.move;
+      return m != null && m.from == from && m.to == to;
+    }).firstOrNull;
+    if (existing != null) {
+      if (selectAsMain) {
+        _current.mainChildIndex = _current.children.indexOf(existing);
+      }
+      _current = existing;
+      _restoreStateFromCurrent();
+      if (animate) {
+        _moveAnim = MoveAnimEvent(
+          piece: moving, from: from, to: to, forward: true,
+        );
+        _animEndTime = DateTime.now()
+            .add(kMoveAnimDuration)
+            .add(kMoveAnimFrameSlack);
+      }
+      // 复用已有节点：终局计数不重复增加（该节点早已记录过结果）
+      _playMoveSound(captured);
+      boardChange.emit();
+      return true;
+    }
+
     if (animate) {
       // 单步走子动画：棋子从起点滑向终点（仅用户走子时播放，
       // AI 走子与批量回放不播）
@@ -986,7 +1014,15 @@ class GameController extends ChangeNotifier {
       selectAsMain: selectAsMain,
     );
     if (_state.isOver) _resultTick++;
-    // 音效：终局 > 将军 > 吃子 > 普通走子
+    _playMoveSound(captured);
+    // 走子完成 = 走棋方改变（loadParsedGame 批量回放时的连续通知
+    // 由订阅方的 FEN 门控与防抖自然合并）
+    boardChange.emit();
+    return true;
+  }
+
+  /// 根据走子结果播放对应音效：终局 > 将军 > 吃子 > 普通走子。
+  void _playMoveSound(Piece? captured) {
     if (_state.isOver) {
       SoundService.playWin();
     } else if (_engine.isInCheck(_state.currentSide)) {
@@ -997,10 +1033,6 @@ class GameController extends ChangeNotifier {
     } else {
       SoundService.playMove();
     }
-    // 走子完成 = 走棋方改变（loadParsedGame 批量回放时的连续通知
-    // 由订阅方的 FEN 门控与防抖自然合并）
-    boardChange.emit();
-    return true;
   }
 
   /// 一步棋真正走完后的统一自动处理（人类走子、AI 走子、胜线自动应手
