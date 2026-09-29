@@ -130,7 +130,9 @@ class CanjuController extends ChangeNotifier {
     while (node != null && !node.isRoot) {
       final move = node.move;
       if (move != null && move.moving.side == Side.black) break;
+      var temp = node;
       node = node.parent;
+      gameController.deleteMove(temp);
     }
     // node 为 null 仅当当前节点是根（无棋可悔）
     if (node != null) gameController.jumpTo(node);
