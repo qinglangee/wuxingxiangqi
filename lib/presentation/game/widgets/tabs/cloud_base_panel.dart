@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_theme.dart';
-import 'cloud_base_controller.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../cloud_base_controller.dart';
 
 /// 云库面板：按评分排序的候选着法列表。
 ///
