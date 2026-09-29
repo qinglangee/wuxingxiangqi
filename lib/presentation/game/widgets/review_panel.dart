@@ -12,6 +12,7 @@ import '../../shared/adjustable_button_bar.dart';
 import '../../shared/error_dialog.dart';
 import '../../shared/floating_star_menu.dart';
 import '../../shared/floating_toggle_star.dart';
+import 'board_setup_screen.dart';
 import 'cloud_base_controller.dart';
 import 'tabs/cloud_base_panel.dart';
 import 'tabs/notation_tab.dart';
@@ -368,6 +369,17 @@ class _ReviewPanelState extends State<ReviewPanel>
                 // 选择后弹窗与按钮栏抽屉都关闭，棋盘直接显示局面
                 closesDrawer: true,
                 onTap: () => controller.enterPlayMode(),
+              ),
+              FreeButton(
+                id: '摆局',
+                icon: Icons.grid_on,
+                label: '摆局',
+                // 打开全屏摆局页；完成后以 FEN 初始化打谱页
+                closesDrawer: true,
+                onTap: () async {
+                  final fen = await BoardSetupScreen.open(context, controller);
+                  if (fen != null && fen.isNotEmpty) controller.loadFen(fen);
+                },
               ),
             ];
   }

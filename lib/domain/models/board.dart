@@ -35,6 +35,14 @@ class Board {
     return captured;
   }
 
+  /// 移除指定坐标的棋子，返回被移除的棋子(该处无子返回 null)。
+  Piece? removeAt(Position p) {
+    if (!p.isValid) return null;
+    final removed = _cells[p.row][p.col];
+    _cells[p.row][p.col] = null;
+    return removed;
+  }
+
   /// 拷贝当前棋盘(深拷贝)。
   Board clone() {
     final b = Board();

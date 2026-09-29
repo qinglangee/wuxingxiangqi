@@ -227,7 +227,7 @@ class _EvalFileTile extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            ready ? path! : '引擎运行需要 pikafish.nnue 权重文件',
+            ready ? path! : '引擎运行需要 pikafish.nnue 权重文件(目前只支持20260131的版本)',
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 11.5, color: Color(0xFF8B6B4A)),
