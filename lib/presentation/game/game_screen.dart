@@ -447,11 +447,11 @@ class _ResultWatcherState extends State<_ResultWatcher> {
       if (controller.isOver) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          FloatingToast.show(
-            context,
-            '对局结束：${controller.result}',
-            icon: Icons.flag_outlined,
-          );
+          // FloatingToast.show(
+          //   context,
+          //   '对局结束：${controller.result}',
+          //   icon: Icons.flag_outlined,
+          // );
         });
       }
     }
