@@ -393,7 +393,7 @@ class _OtherSettingsWidget extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.boardLine,
                 side: const BorderSide(color: AppTheme.boardLine),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 32),
               ),
             ),
             const SizedBox(height: 10),
@@ -450,10 +450,10 @@ class _OtherSettingsWidget extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.boardLine,
                 side: const BorderSide(color: AppTheme.boardLine),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 32),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 30),
             // 删除全部配置：清空 wuxingxiangqi 目录并重置内存配置
             FilledButton.icon(
               onPressed: () async {
