@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../core/assets/asset_catalog.dart';
@@ -12,6 +14,7 @@ class BoardCalibrationScreen extends StatefulWidget {
     super.key,
     required this.boardFileName,
     required this.boardDisplayName,
+    this.boardFilePath,
   });
 
   /// 棋盘图片文件名（assets/images/boards/ 下），同时是配置键。
@@ -19,6 +22,13 @@ class BoardCalibrationScreen extends StatefulWidget {
 
   /// 页面标题中显示的棋盘名称。
   final String boardDisplayName;
+
+  /// 数据目录棋盘图片的绝对路径；非空时用 Image.file 加载，
+  /// 并以该路径作为对齐配置键。
+  final String? boardFilePath;
+
+  /// 对齐配置键：优先使用 [boardFilePath]，否则使用 [boardFileName]。
+  String get calibrationKey => boardFilePath ?? boardFileName;
 
   @override
   State<BoardCalibrationScreen> createState() => _BoardCalibrationScreenState();
@@ -90,10 +100,25 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
                         children: [
                           // 1. 棋盘图片：与打谱页面一致地铺满
                           Positioned.fill(
-                            child: Image.asset(
-                              AssetCatalog.boardAsset(widget.boardFileName),
-                              fit: BoxFit.fill,
-                              errorBuilder: (_, _, _) => const ColoredBox(
+                            child: widget.boardFilePath != null
+                                ? Image.file(
+                                    File(widget.boardFilePath!),
+                                    fit: BoxFit.fill,
+                                    errorBuilder: (_, _, _) =>
+                                        const ColoredBox(
+                                        color: Color(0xFFE8C988),
+                                        child: Center(
+                                          child: Icon(Icons.broken_image,
+                                              size: 40,
+                                              color: Color(0xFF8B6B3D)),
+                                        ),
+                                      ),
+                                  )
+                                : Image.asset(
+                                    AssetCatalog.boardAsset(
+                                        widget.boardFileName),
+                                    fit: BoxFit.fill,
+                                    errorBuilder: (_, _, _) => const ColoredBox(
                                 color: Color(0xFFE8C988),
                                 child: Center(
                                   child: Icon(Icons.broken_image,
@@ -140,7 +165,7 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
   /// 否则使用默认网格。
   void _ensureInitialized(Size size) {
     if (_grid != null && _canvas == size) return;
-    final saved = BoardCalibrationStore.instance.get(widget.boardFileName);
+    final saved = BoardCalibrationStore.instance.get(widget.calibrationKey);
     if (saved != null) {
       _grid = Rect.fromLTRB(
         saved.left * size.width,
@@ -212,7 +237,7 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
     final size = _canvas;
     if (grid == null || size.isEmpty) return;
     BoardCalibrationStore.instance.save(
-      widget.boardFileName,
+      widget.calibrationKey,
       BoardCalibration(
         left: grid.left / size.width,
         top: grid.top / size.height,
@@ -226,7 +251,7 @@ class _BoardCalibrationScreenState extends State<BoardCalibrationScreen> {
     setState(() {
       _grid = BoardLayout.defaultGridRect(_canvas);
     });
-    await BoardCalibrationStore.instance.reset(widget.boardFileName);
+    await BoardCalibrationStore.instance.reset(widget.calibrationKey);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('已恢复默认对齐')),

@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart' show AssetManifest, rootBundle;
+import 'package:path/path.dart' as p;
 
 import '../../domain/models/piece.dart';
 
@@ -57,6 +60,24 @@ class AssetCatalog {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// 从应用数据目录 `images/board/` 下加载用户自定义棋盘图片。
+  ///
+  /// 返回图片文件的绝对路径列表（按文件名排序）。
+  /// 若目录不存在或无图片则返回空列表。
+  static Future<List<String>> loadDataBoards(String dataDirPath) async {
+    final dir = Directory(p.join(dataDirPath, 'images', 'board'));
+    if (!await dir.exists()) return const [];
+    final files = <String>[];
+    await for (final entity in dir.list()) {
+      if (entity is File && _isImage(entity.path)) {
+        files.add(entity.path);
+      }
+    }
+    files.sort((a, b) =>
+        p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()));
+    return files;
   }
 
   /// 从打包资源清单中列出所有棋子套系目录名。

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/assets/asset_catalog.dart';
@@ -187,10 +189,16 @@ class _BoardWidgetState extends State<BoardWidget>
                       transform: flipped
                           ? (Matrix4.identity()..rotateZ(3.1415926535897932))
                           : Matrix4.identity(),
-                      child: Image.asset(
-                        AssetCatalog.boardAsset(boardCfg.boardStyle),
-                        fit: BoxFit.fill,
-                      ),
+                      child: (boardCfg.customBoardPath != null &&
+                              boardCfg.customBoardPath!.isNotEmpty)
+                          ? Image.file(
+                              File(boardCfg.customBoardPath!),
+                              fit: BoxFit.fill,
+                            )
+                          : Image.asset(
+                              AssetCatalog.boardAsset(boardCfg.boardStyle),
+                              fit: BoxFit.fill,
+                            ),
                     ),
                   )
                 else

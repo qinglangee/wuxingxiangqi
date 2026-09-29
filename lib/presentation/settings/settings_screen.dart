@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/assets/asset_catalog.dart';
 import '../../core/config/app_config.dart';
@@ -529,7 +532,22 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
   late final Future<List<String>> _boards = AssetCatalog.loadBoards();
   late final Future<List<String>> _pieceSets = AssetCatalog.loadPieceSets();
 
+  // 数据目录棋盘图片（可删除），刷新时重新加载
+  List<String> _dataBoards = const [];
+
+  Future<void> _reloadDataBoards() async {
+    final dataDir = await ConfigManager.instance.dataDirPath;
+    final boards = await AssetCatalog.loadDataBoards(dataDir);
+    if (mounted) setState(() => _dataBoards = boards);
+  }
+
   BoardConfig get _cfg => ConfigManager.instance.config.board;
+
+  @override
+  void initState() {
+    super.initState();
+    _reloadDataBoards();
+  }
 
   @override
   void dispose() {
@@ -547,9 +565,39 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
         c.boardType = BoardConfig.kTypeImage;
         c.boardStyle = fileName;
       }
+      c.customBoardPath = null; // 内置资源棋盘始终清除自定义路径
       return c;
     });
     if (mounted) setState(() {});
+  }
+
+  /// 选择数据目录中的自定义棋盘图片。
+  Future<void> _pickDataBoard(String filePath) async {
+    final name = p.basename(filePath);
+    await ConfigManager.instance.updateBoard((c) {
+      c.boardType = BoardConfig.kTypeImage;
+      c.boardStyle = name;
+      c.customBoardPath = filePath;
+      return c;
+    });
+    if (mounted) setState(() {});
+  }
+
+  /// 删除数据目录中的自定义棋盘图片。
+  Future<void> _deleteDataBoard(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (await file.exists()) await file.delete();
+      // 若删除的是当前选中的棋盘，回退到经典绘制
+      if (_cfg.customBoardPath == filePath) {
+        await _pickBoard(null);
+      }
+      // 清除该棋盘的对齐数据
+      BoardCalibrationStore.instance.reset(filePath);
+      await _reloadDataBoards();
+    } catch (_) {
+      // 静默失败
+    }
   }
 
   /// 选择棋子套系：null 表示经典代码绘制。
@@ -600,8 +648,9 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
     );
   }
 
-  /// 棋盘选择网格：第一项经典绘制（默认），之后为所有棋盘图片。
-  /// 每个图片棋盘左上角带「适配」按钮，可对图片格子位置做手动对齐。
+  /// 棋盘选择网格：第一项经典绘制（默认），之后为内置资源棋盘图片，
+  /// 最后为数据目录（wuxingxiangqi/images/board/）下的自定义棋盘图片。
+  /// 自定义棋盘额外带删除按钮。
   Widget _buildBoardGrid() {
     final useImage = _cfg.boardType == BoardConfig.kTypeImage;
     return ListenableBuilder(
@@ -612,7 +661,9 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
           if (snap.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator(strokeWidth: 2));
           }
-          final files = snap.data ?? const <String>[];
+          final assetBoards = snap.data ?? const <String>[];
+          final dataBoards = _dataBoards;
+          final total = assetBoards.length + dataBoards.length + 1;
           return GridView.builder(
             padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -621,7 +672,7 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
               crossAxisSpacing: 10,
               childAspectRatio: 0.72,
             ),
-            itemCount: files.length + 1,
+            itemCount: total,
             itemBuilder: (context, i) {
               if (i == 0) {
                 return _OptionTile(
@@ -632,17 +683,58 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
                       size: 40, color: Color(0xFF8B6B3D)),
                 );
               }
-              final name = files[i - 1];
-              final calibrated = BoardCalibrationStore.instance.has(name);
+              // 内置资源棋盘
+              if (i <= assetBoards.length) {
+                final name = assetBoards[i - 1];
+                final calibrated = BoardCalibrationStore.instance.has(name);
+                return _OptionTile(
+                  selected: useImage &&
+                      _cfg.customBoardPath == null &&
+                      _cfg.boardStyle == name,
+                  label: _prettyName(name),
+                  onTap: () => _pickBoard(name),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Image.asset(
+                          AssetCatalog.boardAsset(name),
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.broken_image,
+                            size: 36,
+                            color: Color(0xFFB0A48A),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        child: _CalibrateButton(
+                          calibrated: calibrated,
+                          onPressed: () => _openCalibration(name),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              // 数据目录自定义棋盘
+              final idx = i - assetBoards.length - 1;
+              final filePath = dataBoards[idx];
+              final name = p.basename(filePath);
+              final calibrated =
+                  BoardCalibrationStore.instance.has(filePath);
+              final selected =
+                  useImage && _cfg.customBoardPath == filePath;
               return _OptionTile(
-                selected: useImage && _cfg.boardStyle == name,
+                selected: selected,
                 label: _prettyName(name),
-                onTap: () => _pickBoard(name),
+                onTap: () => _pickDataBoard(filePath),
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: Image.asset(
-                        AssetCatalog.boardAsset(name),
+                      child: Image.file(
+                        File(filePath),
                         fit: BoxFit.contain,
                         errorBuilder: (_, _, _) => const Icon(
                           Icons.broken_image,
@@ -651,13 +743,22 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
                         ),
                       ),
                     ),
-                    // 适配按钮：打开棋盘对齐页面；已适配时高亮并带勾
+                    // 适配按钮
                     Positioned(
                       left: 0,
                       top: 0,
                       child: _CalibrateButton(
                         calibrated: calibrated,
-                        onPressed: () => _openCalibration(name),
+                        onPressed: () =>
+                            _openCalibration(name, filePath: filePath),
+                      ),
+                    ),
+                    // 删除按钮
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: _DeleteBoardButton(
+                        onPressed: () => _deleteDataBoard(filePath),
                       ),
                     ),
                   ],
@@ -670,12 +771,13 @@ class _PieceBoardSettingsState extends State<_PieceBoardSettings>
     );
   }
 
-  void _openCalibration(String boardFileName) {
+  void _openCalibration(String boardFileName, {String? filePath}) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BoardCalibrationScreen(
           boardFileName: boardFileName,
           boardDisplayName: _prettyName(boardFileName),
+          boardFilePath: filePath,
         ),
       ),
     );
@@ -961,6 +1063,29 @@ class _CalibrateButton extends StatelessWidget {
             size: 30,
             color: calibrated ? Colors.white : const Color(0xFF8B5A2B),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 自定义棋盘图片的删除按钮：右上角红色小圆形。
+class _DeleteBoardButton extends StatelessWidget {
+  const _DeleteBoardButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.red.shade700,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: const Padding(
+          padding: EdgeInsets.all(5),
+          child: Icon(Icons.close, size: 16, color: Colors.white),
         ),
       ),
     );
