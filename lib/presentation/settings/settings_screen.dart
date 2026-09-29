@@ -402,7 +402,7 @@ class _OtherSettingsWidget extends StatelessWidget {
                 final ok = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('删除全部配置'),
+                        title: const Text('删除应用数据'),
                         content: const Text('将删除应用数据目录'
                             '（wuxingxiangqi）下的全部文件，包括引擎权重、'
                             '棋谱存档、残局进度、界面与引擎配置等。此操作不可恢复。'
@@ -428,7 +428,7 @@ class _OtherSettingsWidget extends StatelessWidget {
                   await ConfigManager.instance.deleteAllConfig();
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已删除全部配置文件')),
+                      const SnackBar(content: Text('已删除应用数据')),
                     );
                   }
                 } catch (e) {
@@ -438,7 +438,7 @@ class _OtherSettingsWidget extends StatelessWidget {
                 }
               },
               icon: const Icon(Icons.delete_forever),
-              label: const Text('删除全部配置'),
+              label: const Text('删除应用数据'),
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.red.shade700,
                 foregroundColor: Colors.white,

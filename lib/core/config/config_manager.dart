@@ -259,6 +259,8 @@ class ConfigManager extends ChangeNotifier {
     final dirPath = srcDir.path;
     await for (final entity in srcDir.list(recursive: true)) {
       if (entity is! File) continue;
+      // 过滤引擎权重文件，体积大无需备份
+      if (entity.path.endsWith('.nnue')) continue;
       final relPath = p.relative(entity.path, from: dirPath);
       final bytes = await entity.readAsBytes();
       archive.addFile(ArchiveFile.bytes(relPath, bytes));
