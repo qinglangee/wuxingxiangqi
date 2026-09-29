@@ -131,16 +131,22 @@ class _NotationTabState extends State<NotationTab> {
 ///
 /// 一条水平长条，按分支数等分宽度，每段显示一个分支序号字母
 /// （A-Z，超过 26 个继续用小写 a-z）。点击字母即选择对应分支并跳转。
+/// 分支数不超过 10 时等分整条宽度；超过 10 个时改为可左右滑动，
+/// 各字母保持固定间距。
 class BranchSelectorBar extends StatelessWidget {
   const BranchSelectorBar({super.key, required this.controller});
 
   final GameController controller;
+
+  /// 滑动模式下相邻字母圆点的固定间距。
+  static const double _dotSpacing = 6;
 
   @override
   Widget build(BuildContext context) {
     final options = controller.branchOptions;
     if (options.isEmpty) return const SizedBox.shrink();
 
+    final scrollable = options.length > 10;
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFEFE0B8),
@@ -152,34 +158,50 @@ class BranchSelectorBar extends StatelessWidget {
       // 固定高度：只够放下一个数字小圆点
       height: 32,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          for (var i = 0; i < options.length; i++)
-            Expanded(
-              child: Center(
-                child: InkWell(
-                  onTap: () => controller.selectBranch(i),
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: AppTheme.boardLine,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      branchLetter(i),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+      child: scrollable
+          ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < options.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: i == 0 ? 0 : _dotSpacing,
                       ),
+                      child: _buildDot(i),
                     ),
-                  ),
-                ),
+                ],
               ),
+            )
+          : Row(
+              children: [
+                for (var i = 0; i < options.length; i++)
+                  Expanded(child: Center(child: _buildDot(i))),
+              ],
             ),
-        ],
+    );
+  }
+
+  /// 单个分支字母圆点。
+  Widget _buildDot(int i) {
+    return InkWell(
+      onTap: () => controller.selectBranch(i),
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: AppTheme.boardLine,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          branchLetter(i),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
