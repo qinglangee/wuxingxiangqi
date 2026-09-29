@@ -419,24 +419,46 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
     );
   }
 
-  /// 内置资源棋子预览。
+  /// 内置资源棋子预览。红方同时支持 w 和 r 前缀。
   Widget _piecePreviewAsset(String setName, Side side) {
     return Image.asset(
       AssetCatalog.pieceAsset(setName, side, PieceType.general),
       width: 32,
       height: 32,
-      errorBuilder: (_, _, _) => const Icon(
-        Icons.broken_image,
-        size: 28,
-        color: Color(0xFFB0A48A),
-      ),
+      errorBuilder: (_, _, _) {
+        if (side == Side.red) {
+          return Image.asset(
+            AssetCatalog.pieceAsset(setName, side, PieceType.general,
+                useR: true),
+            width: 32,
+            height: 32,
+            errorBuilder: (_, _, _) => const Icon(
+              Icons.broken_image,
+              size: 28,
+              color: Color(0xFFB0A48A),
+            ),
+          );
+        }
+        return const Icon(
+          Icons.broken_image,
+          size: 28,
+          color: Color(0xFFB0A48A),
+        );
+      },
     );
   }
 
-  /// 数据目录棋子预览。
+  /// 数据目录棋子预览。红方同时支持 w 和 r 前缀，优先尝试存在的文件。
   Widget _piecePreviewFile(String dirPath, Side side) {
+    var path =
+        AssetCatalog.pieceFileAsset(dirPath, side, PieceType.general);
+    if (side == Side.red) {
+      final rPath = AssetCatalog.pieceFileAsset(dirPath, side,
+          PieceType.general, useR: true);
+      if (File(rPath).existsSync()) path = rPath;
+    }
     return Image.file(
-      File(AssetCatalog.pieceFileAsset(dirPath, side, PieceType.general)),
+      File(path),
       width: 32,
       height: 32,
       errorBuilder: (_, _, _) => const Icon(

@@ -62,6 +62,7 @@ class PieceWidget extends StatelessWidget {
   }
 
   /// 图片棋子：套系图片裁圆显示，选中时加高亮描边。
+  /// 红方图片同时支持 w 和 r 前缀，w 缺失时尝试 r。
   Widget _buildImagePiece(String setName) {
     final path = AssetCatalog.pieceAsset(setName, piece.side, piece.type);
     return SizedBox(
@@ -79,18 +80,36 @@ class PieceWidget extends StatelessWidget {
           child: Image.asset(
             path,
             fit: BoxFit.cover,
-            // 图片缺失（套系不完整等）时回退为经典绘制，避免红屏
-            errorBuilder: (_, _, _) => _buildClassicPiece(),
+            // 图片缺失时回退为经典绘制，避免红屏
+            // 红方额外尝试 r 前缀
+            errorBuilder: (_, _, _) {
+              if (piece.side == Side.red) {
+                return Image.asset(
+                  AssetCatalog.pieceAsset(setName, piece.side, piece.type,
+                      useR: true),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => _buildClassicPiece(),
+                );
+              }
+              return _buildClassicPiece();
+            },
           ),
         ),
       ),
     );
   }
 
-  /// 图片棋子（数据目录版本）：从文件路径加载，逻辑与内置版一致。
+  /// 图片棋子（数据目录版本）：从文件路径加载。
+  /// 红方图片同时支持 w 和 r 前缀，优先尝试存在的文件。
   Widget _buildImagePieceFile(String dirPath) {
-    final path =
+    var path =
         AssetCatalog.pieceFileAsset(dirPath, piece.side, piece.type);
+    // 红方：若 r 前缀文件存在则优先使用
+    if (piece.side == Side.red) {
+      final rPath = AssetCatalog.pieceFileAsset(dirPath, piece.side,
+          piece.type, useR: true);
+      if (File(rPath).existsSync()) path = rPath;
+    }
     return SizedBox(
       width: size,
       height: size,

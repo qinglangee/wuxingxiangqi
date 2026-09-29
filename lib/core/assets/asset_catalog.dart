@@ -37,17 +37,21 @@ class AssetCatalog {
   };
 
   /// 套系内某棋子的资源路径。
-  static String pieceAsset(String setName, Side side, PieceType type) =>
+  ///
+  /// 红方同时支持 w 和 r 前缀；[useR] 为 true 时红方使用 r 前缀。
+  static String pieceAsset(String setName, Side side, PieceType type,
+          {bool useR = false}) =>
       '$piecesDir$setName/'
-      '${side == Side.red ? 'w' : 'b'}${_typeLetters[type]}.png';
+      '${side == Side.red ? (useR ? 'r' : 'w') : 'b'}${_typeLetters[type]}.png';
 
   /// 自定义套系目录中某棋子的文件路径。
   ///
   /// [dirPath] 为套系目录的绝对路径，文件命名规则与内置资源一致。
+  /// 红方同时支持 w 和 r 前缀；[useR] 为 true 时红方使用 r 前缀。
   static String pieceFileAsset(
-          String dirPath, Side side, PieceType type) =>
+          String dirPath, Side side, PieceType type, {bool useR = false}) =>
       p.join(dirPath,
-          '${side == Side.red ? 'w' : 'b'}${_typeLetters[type]}.png');
+          '${side == Side.red ? (useR ? 'r' : 'w') : 'b'}${_typeLetters[type]}.png');
 
   /// 棋盘文件名 → 完整资源路径。
   static String boardAsset(String fileName) => '$boardsDir$fileName';
