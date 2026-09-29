@@ -41,6 +41,14 @@ class AssetCatalog {
       '$piecesDir$setName/'
       '${side == Side.red ? 'w' : 'b'}${_typeLetters[type]}.png';
 
+  /// 自定义套系目录中某棋子的文件路径。
+  ///
+  /// [dirPath] 为套系目录的绝对路径，文件命名规则与内置资源一致。
+  static String pieceFileAsset(
+          String dirPath, Side side, PieceType type) =>
+      p.join(dirPath,
+          '${side == Side.red ? 'w' : 'b'}${_typeLetters[type]}.png');
+
   /// 棋盘文件名 → 完整资源路径。
   static String boardAsset(String fileName) => '$boardsDir$fileName';
 
@@ -99,6 +107,31 @@ class AssetCatalog {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// 从应用数据目录 `images/pieces/` 下加载用户自定义棋子套系。
+  ///
+  /// 扫描子目录（每个子目录为一套棋子），仅保留含至少一张棋子图片
+  /// 的目录。返回套系目录的绝对路径列表（按目录名排序）。
+  static Future<List<String>> loadDataPieceSets(String dataDirPath) async {
+    final dir = Directory(p.join(dataDirPath, 'images', 'pieces'));
+    if (!await dir.exists()) return const [];
+    final sets = <String>[];
+    await for (final entity in dir.list()) {
+      if (entity is! Directory) continue;
+      // 确认目录中至少有一张棋子图片
+      var hasImage = false;
+      await for (final f in entity.list()) {
+        if (f is File && _isImage(f.path)) {
+          hasImage = true;
+          break;
+        }
+      }
+      if (hasImage) sets.add(entity.path);
+    }
+    sets.sort((a, b) =>
+        p.basename(a).toLowerCase().compareTo(p.basename(b).toLowerCase()));
+    return sets;
   }
 
   /// 名称含 "default" 的排第一，其余按名称（忽略大小写）排序。

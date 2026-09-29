@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/assets/asset_catalog.dart';
@@ -28,6 +30,10 @@ class PieceWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final bc = ConfigManager.instance.config.board;
     if (bc.pieceType == BoardConfig.kTypeImage && bc.pieceStyle.isNotEmpty) {
+      // 数据目录自定义套系优先用 customPiecePath
+      if (bc.customPiecePath != null && bc.customPiecePath!.isNotEmpty) {
+        return _buildImagePieceFile(bc.customPiecePath!);
+      }
       return _buildImagePiece(bc.pieceStyle);
     }
     return _buildClassicPiece();
@@ -74,6 +80,32 @@ class PieceWidget extends StatelessWidget {
             path,
             fit: BoxFit.cover,
             // 图片缺失（套系不完整等）时回退为经典绘制，避免红屏
+            errorBuilder: (_, _, _) => _buildClassicPiece(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 图片棋子（数据目录版本）：从文件路径加载，逻辑与内置版一致。
+  Widget _buildImagePieceFile(String dirPath) {
+    final path =
+        AssetCatalog.pieceFileAsset(dirPath, piece.side, piece.type);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: selected
+              ? Border.all(color: AppTheme.selectedHighlight, width: 3)
+              : null,
+          boxShadow: _pieceShadows(),
+        ),
+        child: ClipOval(
+          child: Image.file(
+            File(path),
+            fit: BoxFit.cover,
             errorBuilder: (_, _, _) => _buildClassicPiece(),
           ),
         ),

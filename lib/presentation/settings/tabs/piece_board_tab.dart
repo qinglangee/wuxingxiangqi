@@ -32,11 +32,19 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
 
   // 数据目录棋盘图片（可删除），刷新时重新加载
   List<String> _dataBoards = const [];
+  // 数据目录棋子套系目录路径（可删除），刷新时重新加载
+  List<String> _dataPieceSets = const [];
 
   Future<void> _reloadDataBoards() async {
     final dataDir = await ConfigManager.instance.dataDirPath;
     final boards = await AssetCatalog.loadDataBoards(dataDir);
     if (mounted) setState(() => _dataBoards = boards);
+  }
+
+  Future<void> _reloadDataPieceSets() async {
+    final dataDir = await ConfigManager.instance.dataDirPath;
+    final sets = await AssetCatalog.loadDataPieceSets(dataDir);
+    if (mounted) setState(() => _dataPieceSets = sets);
   }
 
   BoardConfig get _cfg => ConfigManager.instance.config.board;
@@ -45,6 +53,7 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
   void initState() {
     super.initState();
     _reloadDataBoards();
+    _reloadDataPieceSets();
   }
 
   @override
@@ -108,9 +117,36 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
         c.pieceType = BoardConfig.kTypeImage;
         c.pieceStyle = setName;
       }
+      c.customPiecePath = null; // 内置资源套系清除自定义路径
       return c;
     });
     if (mounted) setState(() {});
+  }
+
+  /// 选择数据目录中的自定义棋子套系。
+  Future<void> _pickDataPieceSet(String dirPath) async {
+    final name = p.basename(dirPath);
+    await ConfigManager.instance.updateBoard((c) {
+      c.pieceType = BoardConfig.kTypeImage;
+      c.pieceStyle = name;
+      c.customPiecePath = dirPath;
+      return c;
+    });
+    if (mounted) setState(() {});
+  }
+
+  /// 删除数据目录中的自定义棋子套系目录。
+  Future<void> _deleteDataPieceSet(String dirPath) async {
+    try {
+      final dir = Directory(dirPath);
+      if (await dir.exists()) await dir.delete(recursive: true);
+      if (_cfg.customPiecePath == dirPath) {
+        await _pickPieceSet(null);
+      }
+      await _reloadDataPieceSets();
+    } catch (_) {
+      // 静默失败
+    }
   }
 
   @override
@@ -282,7 +318,9 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
   }
 
   /// 棋子选择网格：顶部为棋子大小与阴影设置区，其下第一项为经典绘制
-  /// （默认），之后为所有棋子套系。每个套系用红帅 + 黑将两张图片预览。
+  /// （默认），之后为内置资源棋子套系，最后为数据目录
+  /// （wuxingxiangqi/images/pieces/）下的自定义套系。
+  /// 自定义套系额外带删除按钮（右下角）。
   Widget _buildPieceGrid() {
     final useImage = _cfg.pieceType == BoardConfig.kTypeImage;
     return FutureBuilder<List<String>>(
@@ -291,7 +329,9 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
         if (snap.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator(strokeWidth: 2));
         }
-        final sets = snap.data ?? const <String>[];
+        final assetSets = snap.data ?? const <String>[];
+        final dataSets = _dataPieceSets;
+        final total = assetSets.length + dataSets.length + 1;
         return CustomScrollView(
           slivers: [
             // 顶部：棋子大小与阴影设置
@@ -307,7 +347,7 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                   childAspectRatio: 0.72,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  childCount: sets.length + 1,
+                  childCount: total,
                   (context, i) {
                     if (i == 0) {
                       return _OptionTile(
@@ -318,17 +358,54 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                             size: 40, color: Color(0xFF8B6B3D)),
                       );
                     }
-                    final name = sets[i - 1];
+                    // 内置资源套系
+                    if (i <= assetSets.length) {
+                      final name = assetSets[i - 1];
+                      return _OptionTile(
+                        selected: useImage &&
+                            _cfg.customPiecePath == null &&
+                            _cfg.pieceStyle == name,
+                        label: name,
+                        onTap: () => _pickPieceSet(name),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _piecePreviewAsset(name, Side.red),
+                            const SizedBox(width: 4),
+                            _piecePreviewAsset(name, Side.black),
+                          ],
+                        ),
+                      );
+                    }
+                    // 数据目录自定义套系
+                    final idx = i - assetSets.length - 1;
+                    final dirPath = dataSets[idx];
+                    final name = p.basename(dirPath);
+                    final selected =
+                        useImage && _cfg.customPiecePath == dirPath;
                     return _OptionTile(
-                      selected: useImage && _cfg.pieceStyle == name,
+                      selected: selected,
                       label: name,
-                      onTap: () => _pickPieceSet(name),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      onTap: () => _pickDataPieceSet(dirPath),
+                      child: Stack(
                         children: [
-                          _piecePreview(name, Side.red),
-                          const SizedBox(width: 4),
-                          _piecePreview(name, Side.black),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _piecePreviewFile(dirPath, Side.red),
+                              const SizedBox(width: 4),
+                              _piecePreviewFile(dirPath, Side.black),
+                            ],
+                          ),
+                          // 删除按钮：右下角
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: _DeleteBoardButton(
+                              onPressed: () =>
+                                  _deleteDataPieceSet(dirPath),
+                            ),
+                          ),
                         ],
                       ),
                     );
@@ -342,9 +419,24 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
     );
   }
 
-  Widget _piecePreview(String setName, Side side) {
+  /// 内置资源棋子预览。
+  Widget _piecePreviewAsset(String setName, Side side) {
     return Image.asset(
       AssetCatalog.pieceAsset(setName, side, PieceType.general),
+      width: 32,
+      height: 32,
+      errorBuilder: (_, _, _) => const Icon(
+        Icons.broken_image,
+        size: 28,
+        color: Color(0xFFB0A48A),
+      ),
+    );
+  }
+
+  /// 数据目录棋子预览。
+  Widget _piecePreviewFile(String dirPath, Side side) {
+    return Image.file(
+      File(AssetCatalog.pieceFileAsset(dirPath, side, PieceType.general)),
       width: 32,
       height: 32,
       errorBuilder: (_, _, _) => const Icon(
