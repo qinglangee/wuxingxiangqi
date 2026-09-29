@@ -107,9 +107,7 @@ class OtherSettingsTab extends StatelessWidget {
                 try {
                   final path = await ConfigManager.instance.backupData();
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('备份完成：$path')),
-                    );
+                    showInfoDialog(context, '备份完成：$path');
                   }
                 } catch (e) {
                   if (context.mounted) {
