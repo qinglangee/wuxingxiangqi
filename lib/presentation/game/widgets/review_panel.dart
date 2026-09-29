@@ -162,7 +162,7 @@ class _ReviewPanelState extends State<ReviewPanel>
             FloatingStarMenu(
               id: 'review_floating_star',
               buttons: navButtons,
-              defaultPinnedIds: const {'保存', '背谱', '复盘'},
+              defaultPinnedIds: const {'保存', '背谱', '复盘', '对弈', '摆局'},
               defaultAnchorKey: widget.boardAreaKey,
             ),
           // 浮动绿星：三态循环——0 全部显示（深绿）、1 隐藏标签（浅绿）、
