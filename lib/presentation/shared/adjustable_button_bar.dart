@@ -233,7 +233,10 @@ class _AdjustableButtonBarState extends State<AdjustableButtonBar> {
       showLabel: b.showLabel,
       iconColor: b.iconColor,
       flipIcon: b.flipIcon,
-      onCheckedChanged: b.onCheckedChanged,
+      onCheckedChanged: (bool v){
+        if (_drawerOpen) _closeDrawer();
+        b.onCheckedChanged?.call(v);
+      },
       onTap: () {
         if (_drawerOpen) _closeDrawer();
         b.onTap?.call();

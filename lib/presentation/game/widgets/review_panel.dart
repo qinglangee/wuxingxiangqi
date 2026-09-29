@@ -354,6 +354,7 @@ class _ReviewPanelState extends State<ReviewPanel>
                 id: '复盘',
                 icon: Icons.insights,
                 label: '复盘',
+                closesDrawer: true,
                 checked: _showAnalysis,
                 onCheckedChanged: (v) => setState(() => _showAnalysis = v),
               ),
