@@ -196,6 +196,17 @@ class ConfigManager extends ChangeNotifier {
     await save();
   }
 
+  /// 仅重置 UI 相关配置为默认值并保存。
+  ///
+  /// 清除 [UiConfig] 中的全部字段（按钮工具条统一管理、全局文字开关、
+  /// 三类浮动星星显隐、所有按钮条个性化配置 buttonBars），使其恢复
+  /// 默认值。引擎、棋盘、残局库等其它配置不受影响。
+  Future<void> resetUiToDefaults() async {
+    _config = _config.copyWith(ui: UiConfig());
+    notifyListeners();
+    await save();
+  }
+
   Future<File> _file() async {
     final dir = Directory(await dataDirPath);
     // 确保默认数据目录存在

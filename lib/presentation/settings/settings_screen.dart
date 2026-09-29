@@ -232,6 +232,20 @@ class _UiSettingsWidget extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            // 恢复默认按钮：清除全部 UI 相关配置
+            FilledButton.icon(
+              onPressed: () async {
+                await cm.resetUiToDefaults();
+              },
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('恢复默认'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF8B6B3D),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
           ],
         );
       },
