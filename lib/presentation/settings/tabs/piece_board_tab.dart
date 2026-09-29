@@ -278,6 +278,11 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                     onPressed: _importBoard,
                     icon: const Icon(Icons.add_photo_alternate, size: 20),
                     label: const Text('导入棋盘(请先改好图片名，同名会覆盖现有棋盘)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.boardLine,
+                      side: const BorderSide(color: AppTheme.boardLine),
+                      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 22),
+                    ),
                   ),
                 ),
               ),
@@ -433,6 +438,11 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                     onPressed: _importPieceSet,
                     icon: const Icon(Icons.create_new_folder, size: 20),
                     label: const Text('导入棋子(请先改好目录名， 同名目录会覆盖现有棋子)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.boardLine,
+                      side: const BorderSide(color: AppTheme.boardLine),
+                      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 22),
+                    ),
                   ),
                 ),
               ),
