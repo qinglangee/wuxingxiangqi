@@ -185,6 +185,7 @@ class _BoardWidgetState extends State<BoardWidget>
                   cellW: cellWidth,
                   cellH: cellHeight,
                   flipped: flipped,
+                  insetStart: true,
                 );
                 if (idx != null) {
                   widget.onBranchTap!(idx);
@@ -293,6 +294,8 @@ class _BoardWidgetState extends State<BoardWidget>
                       cellH: cellHeight,
                       flipped: flipped,
                       arrows: widget.branchMarkers,
+                      // 连线起点缩进一个棋子半径，不盖住起点棋子
+                      insetStart: true,
                     ),
                   ),
                 // 5. 分析箭头层：PV1 前两步，红方红箭头、黑方黑箭头

@@ -44,6 +44,7 @@ class MoveArrowPainter extends CustomPainter {
     required this.cellH,
     required this.arrows,
     this.flipped = false,
+    this.insetStart = false,
   });
 
   final EdgeInsets padding;
@@ -53,6 +54,10 @@ class MoveArrowPainter extends CustomPainter {
 
   /// 棋盘是否翻转（红黑上下互换）。
   final bool flipped;
+
+  /// 连线起点是否从真正起点沿走法方向缩进一个棋子半径：
+  /// 分支箭头标记开启，避免线起始部分盖在起点棋子上。
+  final bool insetStart;
 
   /// 多条并列箭头（分支标记等）使用的调色板，按序循环取色。
   static const List<Color> palette = [
@@ -102,7 +107,14 @@ class MoveArrowPainter extends CustomPainter {
       final ux = len > 0 ? dx / len : 0.0;
       final uy = len > 0 ? dy / len : 0.0;
 
-      // 半透明连线（终点稍微缩进，留出箭头位置）
+      // 半透明连线（起点缩进一个棋子半径避免盖住起点棋子，终点稍微
+      // 缩进留出箭头位置）
+      final lineStart = insetStart
+          ? Offset(
+              fromCenter.dx + ux * halfPiece,
+              fromCenter.dy + uy * halfPiece,
+            )
+          : fromCenter;
       final lineEnd = Offset(
         toCenter.dx - ux * arrowLen * 0.5,
         toCenter.dy - uy * arrowLen * 0.5,
@@ -111,7 +123,7 @@ class MoveArrowPainter extends CustomPainter {
         ..color = color.withValues(alpha: 0.55)
         ..strokeWidth = cellW * 0.10
         ..strokeCap = StrokeCap.round;
-      canvas.drawLine(fromCenter, lineEnd, linePaint);
+      canvas.drawLine(lineStart, lineEnd, linePaint);
 
       // 终点箭头（三角形，尖端在 toCenter 处，指向走法方向）
       final tip = toCenter;
@@ -188,6 +200,7 @@ class MoveArrowPainter extends CustomPainter {
     required double cellW,
     required double cellH,
     required bool flipped,
+    bool insetStart = false,
   }) {
     if (arrows.isEmpty) return null;
     final dotRadius = cellW * 0.18;
@@ -251,12 +264,15 @@ class MoveArrowPainter extends CustomPainter {
         return i;
       }
 
-      // 3. 半透明连线（终点缩进半个箭头长度）
+      // 3. 半透明连线（起点缩进与绘制保持一致，终点缩进半个箭头长度）
+      final lineFrom = insetStart
+          ? Offset(from.dx + ux * halfPiece, from.dy + uy * halfPiece)
+          : from;
       final lineEnd = Offset(
         to.dx - ux * arrowLen * 0.5,
         to.dy - uy * arrowLen * 0.5,
       );
-      if (_distanceToSegment(point, from, lineEnd) <= lineHit) return i;
+      if (_distanceToSegment(point, lineFrom, lineEnd) <= lineHit) return i;
     }
     return null;
   }
@@ -294,5 +310,6 @@ class MoveArrowPainter extends CustomPainter {
       oldDelegate.cellW != cellW ||
       oldDelegate.cellH != cellH ||
       oldDelegate.flipped != flipped ||
+      oldDelegate.insetStart != insetStart ||
       oldDelegate.arrows != arrows;
 }
