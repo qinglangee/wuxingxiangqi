@@ -258,7 +258,7 @@ class _MoveRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (node.children.length > 1)
+            if (node.parent!.children.length > 1)
               // 分支标记：圆角背景上显示「分支总数 + 当前分支序号字母」
               Container(
                 margin: const EdgeInsets.only(left: 4),
