@@ -457,7 +457,7 @@ class GameController extends ChangeNotifier {
     _restartAnalysisForNewPosition();
   }
 
-  // ---- 会话棋谱列表（复盘导航条 上一局/下一局/选棋） ----
+  // ---- 会话棋谱列表（复盘导航条 上一局/下一局/选谱） ----
 
   /// 当前会话的棋谱列表：从首页打开棋谱文件时，取同目录下的全部棋谱
   /// 文件（名称升序）。空列表表示无会话列表（新对局/会话恢复/残局）。
@@ -479,7 +479,7 @@ class GameController extends ChangeNotifier {
         currentIndex >= 0 && currentIndex < paths.length ? currentIndex : -1;
   }
 
-  /// 载入会话列表中下标 [index] 的棋谱（上一局/下一局/选棋共用）。
+  /// 载入会话列表中下标 [index] 的棋谱（上一局/下一局/选谱共用）。
   ///
   /// 成功返回 null；失败（读取/解析/校验出错）返回错误信息供 UI 提示，
   /// 此时保留当前棋谱不变。

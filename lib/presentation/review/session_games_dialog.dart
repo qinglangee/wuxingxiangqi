@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// 会话棋谱选择弹窗（复盘导航条「选棋」按钮）：列出当前会话的棋谱
+/// 会话棋谱选择弹窗（复盘导航条「选谱」按钮）：列出当前会话的棋谱
 /// 文件（打开棋谱时同目录下的全部棋谱，名称升序），当前局高亮。
 ///
 /// 点击条目后通过 [Navigator.pop] 返回所选下标（0-based），取消返回 null。

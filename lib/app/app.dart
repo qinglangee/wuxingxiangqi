@@ -95,7 +95,7 @@ class App extends StatelessWidget {
                 } catch (e) {
                   debugPrint('载入棋谱失败: $e');
                 }
-                // 会话棋谱列表：供复盘导航条「上一局/下一局/选棋」切换
+                // 会话棋谱列表：供复盘导航条「上一局/下一局/选谱」切换
                 if (sessionGames != null) {
                   gc.setSessionGames(sessionGames, sessionGameIndex);
                 }

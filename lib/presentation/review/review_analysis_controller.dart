@@ -196,7 +196,7 @@ class ReviewAnalysisController extends ChangeNotifier {
 
   /// 换局后重置：中止进行中的分析并清空旧棋谱的分析数据。
   ///
-  /// 供「上一局/下一局/选棋」切换棋谱后调用——旧棋谱的评分曲线与
+  /// 供「上一局/下一局/选谱」切换棋谱后调用——旧棋谱的评分曲线与
   /// 失误列表对新棋谱已失效，需要重新分析。
   void resetForNewGame() {
     if (_analyzing) {

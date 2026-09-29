@@ -47,7 +47,7 @@ Future<void> openNotationFile(BuildContext context, String path) async {
     // 解析与回放均成功：把棋谱、已验证坐标与来源文件路径一起传给打谱页
     // （来源路径用于保存时「覆盖原文件」）
     // 同时把同目录下的全部棋谱文件作为当前会话的棋谱列表传入，
-    // 供复盘导航条「上一局/下一局/选棋」切换。
+    // 供复盘导航条「上一局/下一局/选谱」切换。
     Navigator.of(context).pushNamed(
       '/play',
       arguments: (parsed, replay, path, sessionGames, sessionGameIndex),
@@ -73,7 +73,7 @@ Future<void> openNotationFile(BuildContext context, String path) async {
 /// 作为当前会话的棋谱列表。
 ///
 /// 目录读取失败时退化为仅含当前文件；当前文件因故不在列表中时补入，
-/// 保证「选棋」总能回到当前局。
+/// 保证「选谱」总能回到当前局。
 Future<List<String>> _listSessionGames(String path) async {
   try {
     final dir = File(path).parent;

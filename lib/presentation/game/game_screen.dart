@@ -264,9 +264,9 @@ class _CanjuBar extends StatelessWidget {
           onTap: () => _pickLibrary(context),
         ),
         FreeButton(
-          id: '选棋',
+          id: '选谱',
           icon: Icons.grid_view,
-          label: '选棋',
+          label: '选谱',
           closesDrawer: true,
           onTap: () => _pickLevel(context),
         ),
@@ -289,7 +289,7 @@ class _CanjuBar extends StatelessWidget {
     }
   }
 
-  /// 打开选棋弹窗，选择后跳转到对应局。
+  /// 打开选谱弹窗，选择后跳转到对应局。
   Future<void> _pickLevel(BuildContext context) async {
     final rec = controller.store.recordOf(controller.library.name);
     final chosen = await CanjuLevelDialog.show(
@@ -336,6 +336,7 @@ class _AiConfigRowState extends State<_AiConfigRow> {
           id: '重开',
           icon: Icons.refresh,
           label: '重开',
+          closesDrawer: true,
           onTap: ctrl.restart,
         ),
         FreeButton(

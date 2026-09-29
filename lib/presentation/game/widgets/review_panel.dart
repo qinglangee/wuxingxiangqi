@@ -127,7 +127,7 @@ class _ReviewPanelState extends State<ReviewPanel>
     _reviewAnalysis.resetForNewGame();
   }
 
-  /// 打开「选棋」弹窗，从会话棋谱列表中选择并载入对应棋谱。
+  /// 打开「选谱」弹窗，从会话棋谱列表中选择并载入对应棋谱。
   Future<void> _pickSessionGame() async {
     final chosen = await SessionGamesDialog.show(
       context,
@@ -317,9 +317,9 @@ class _ReviewPanelState extends State<ReviewPanel>
                 onTap: () => _loadSessionGame(controller.sessionGameIndex + 1),
               ),
               FreeButton(
-                id: '选棋',
+                id: '选谱',
                 icon: Icons.grid_view,
-                label: '选棋',
+                label: '选谱',
                 enabled: controller.sessionGames.isNotEmpty,
                 // 选择后弹窗与按钮栏抽屉都关闭，棋盘直接显示局面
                 closesDrawer: true,
