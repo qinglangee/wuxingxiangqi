@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../core/config/app_config.dart';
-import '../../core/config/config_manager.dart';
-import '../../core/theme/app_theme.dart';
-import '../../domain/engine/pikafish_engine.dart';
-import '../shared/error_dialog.dart';
-import 'eval_file_dialog.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/config/config_manager.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../domain/engine/pikafish_engine.dart';
+import '../../shared/error_dialog.dart';
+import '../eval_file_dialog.dart';
 
 /// 引擎设置控件：性能（滑块）+ 棋规（下拉框）两部分。
 ///

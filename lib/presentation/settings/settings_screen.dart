@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'engine_settings_widget.dart';
+import 'tabs/engine_settings_widget.dart';
 import 'tabs/other_settings_tab.dart';
 import 'tabs/piece_board_tab.dart';
 import 'tabs/ui_settings_tab.dart';

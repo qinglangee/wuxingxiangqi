@@ -277,7 +277,7 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                   child: TextButton.icon(
                     onPressed: _importBoard,
                     icon: const Icon(Icons.add_photo_alternate, size: 20),
-                    label: const Text('导入棋盘'),
+                    label: const Text('导入棋盘(请先改好图片名，同名会覆盖现有棋盘)'),
                   ),
                 ),
               ),
@@ -432,7 +432,7 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                   child: TextButton.icon(
                     onPressed: _importPieceSet,
                     icon: const Icon(Icons.create_new_folder, size: 20),
-                    label: const Text('导入棋子'),
+                    label: const Text('导入棋子(请先改好目录名， 同名目录会覆盖现有棋子)'),
                   ),
                 ),
               ),
