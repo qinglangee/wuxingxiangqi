@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -149,6 +150,74 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
     }
   }
 
+  /// 导入棋盘图片：选择图片文件，复制到数据目录 images/board/ 下。
+  Future<void> _importBoard() async {
+    final picked = await FilePicker.pickFiles(
+      dialogTitle: '选择棋盘图片',
+      type: FileType.image,
+    );
+    if (picked.isEmpty) return;
+    final srcPath = picked.single.path;
+    if (srcPath == null) return;
+    try {
+      final dataDir = await ConfigManager.instance.dataDirPath;
+      final destDir = Directory(p.join(dataDir, 'images', 'board'));
+      if (!await destDir.exists()) {
+        await destDir.create(recursive: true);
+      }
+      final destPath = p.join(destDir.path, p.basename(srcPath));
+      await File(srcPath).copy(destPath);
+      await _reloadDataBoards();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('棋盘已导入')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导入失败')),
+        );
+      }
+    }
+  }
+
+  /// 导入棋子套系：选择目录，复制到数据目录 images/pieces/ 下。
+  Future<void> _importPieceSet() async {
+    final srcDirPath = await FilePicker.getDirectoryPath(
+      dialogTitle: '选择棋子套系目录',
+    );
+    if (srcDirPath == null) return;
+    try {
+      final dataDir = await ConfigManager.instance.dataDirPath;
+      final destDirPath = p.join(
+          dataDir, 'images', 'pieces', p.basename(srcDirPath));
+      final destDir = Directory(destDirPath);
+      if (!await destDir.exists()) {
+        await destDir.create(recursive: true);
+      }
+      // 复制目录下所有文件
+      final srcDir = Directory(srcDirPath);
+      await for (final entity in srcDir.list()) {
+        if (entity is File) {
+          await entity.copy(p.join(destDirPath, p.basename(entity.path)));
+        }
+      }
+      await _reloadDataPieceSets();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('棋子套系已导入')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导入失败')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -198,7 +267,22 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
           final assetBoards = snap.data ?? const <String>[];
           final dataBoards = _dataBoards;
           final total = assetBoards.length + dataBoards.length + 1;
-          return GridView.builder(
+          return Column(
+            children: [
+              // 导入棋盘按钮
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _importBoard,
+                    icon: const Icon(Icons.add_photo_alternate, size: 20),
+                    label: const Text('导入棋盘'),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
             padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
@@ -299,6 +383,9 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                 ),
               );
             },
+          ),
+              ),
+            ],
           );
         },
       ),
@@ -336,6 +423,20 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
           slivers: [
             // 顶部：棋子大小与阴影设置
             const SliverToBoxAdapter(child: _PieceAdjustSettings()),
+            // 导入棋子按钮
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _importPieceSet,
+                    icon: const Icon(Icons.create_new_folder, size: 20),
+                    label: const Text('导入棋子'),
+                  ),
+                ),
+              ),
+            ),
             // 棋子套系选择网格
             SliverPadding(
               padding: const EdgeInsets.all(12),
