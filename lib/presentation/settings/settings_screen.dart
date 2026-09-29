@@ -236,6 +236,27 @@ class _UiSettingsWidget extends StatelessWidget {
             // 恢复默认按钮：清除全部 UI 相关配置
             FilledButton.icon(
               onPressed: () async {
+                final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('恢复默认'),
+                        content: const Text('确定要将所有界面设置恢复为默认值吗？\n'
+                            '按钮工具条顺序、常驻列表、文字开关、浮动星星等'
+                            '全部 UI 配置将被清除。'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: const Text('确定'),
+                          ),
+                        ],
+                      ),
+                    ) ??
+                    false;
+                if (!ok) return;
                 await cm.resetUiToDefaults();
               },
               icon: const Icon(Icons.restart_alt),
