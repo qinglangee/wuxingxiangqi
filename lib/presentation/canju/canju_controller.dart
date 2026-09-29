@@ -198,6 +198,10 @@ class CanjuController extends ChangeNotifier {
         notifyListeners();
       });
     }
+
+    // 不是红胜的，不自动跳下一局
+    if(result.status != GameResultStatus.redWins) return;
+
     // 终局自动跳下一局（延时给结果展示与音效留一点时间）
     if (_autoNext &&
         result.status != GameResultStatus.ongoing &&
