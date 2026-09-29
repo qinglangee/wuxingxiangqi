@@ -478,7 +478,7 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                             _cfg.pieceStyle == name,
                         label: name,
                         onTap: () => _pickPieceSet(name),
-                        child: Row(
+                        child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             _piecePreviewAsset(name, Side.red),
@@ -500,7 +500,7 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                       onTap: () => _pickDataPieceSet(dirPath),
                       child: Stack(
                         children: [
-                          Row(
+                          Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               _piecePreviewFile(dirPath, Side.red),
@@ -534,18 +534,18 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
   Widget _piecePreviewAsset(String setName, Side side) {
     return Image.asset(
       AssetCatalog.pieceAsset(setName, side, PieceType.general),
-      width: 32,
-      height: 32,
+      width: 50,
+      height: 50,
       errorBuilder: (_, _, _) {
         if (side == Side.red) {
           return Image.asset(
             AssetCatalog.pieceAsset(setName, side, PieceType.general,
                 useR: true),
-            width: 32,
-            height: 32,
+            width: 50,
+            height: 50,
             errorBuilder: (_, _, _) => const Icon(
               Icons.broken_image,
-              size: 28,
+              size: 45,
               color: Color(0xFFB0A48A),
             ),
           );
@@ -570,11 +570,11 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
     }
     return Image.file(
       File(path),
-      width: 32,
-      height: 32,
+      width: 50,
+      height: 50,
       errorBuilder: (_, _, _) => const Icon(
         Icons.broken_image,
-        size: 28,
+        size: 45,
         color: Color(0xFFB0A48A),
       ),
     );
