@@ -65,8 +65,9 @@ class _ReviewPanelState extends State<ReviewPanel>
   /// 是否显示复盘模块（true 时隐藏 review_panel 三标签页，显示复盘模块）。
   bool _showAnalysis = false;
 
-  /// 三个标签（棋谱注释/引擎/云库）是否显示；标签面板本身不受影响。
-  bool _tabsVisible = true;
+  /// 绿星三态：0=标签与面板都显示；1=隐藏标签（面板保留）；
+  /// 2=标签与面板都隐藏。
+  int _tabStarState = 0;
 
   /// 「走到带注释的着法时注释框浅绿高亮」开关（默认开启）。
   ///
@@ -163,14 +164,13 @@ class _ReviewPanelState extends State<ReviewPanel>
               defaultPinnedIds: const {'保存', '背谱', '复盘'},
               defaultAnchorKey: widget.boardAreaKey,
             ),
-          // 浮动绿星：切换三个标签（棋谱注释/引擎/云库）的显隐；
-          // 激活为绿色，非激活为灰绿色，面板本身不受影响；
-          // 「标签星」显隐由界面设置控制
+          // 浮动绿星：三态循环——0 全部显示（深绿）、1 隐藏标签（浅绿）、
+          // 2 隐藏标签与面板（灰绿）；「标签星」显隐由界面设置控制
           if (ConfigManager.instance.config.ui.showTabStar)
             FloatingToggleStar(
               id: 'review_tab_toggle_star',
-              active: _tabsVisible,
-              onChanged: (v) => setState(() => _tabsVisible = v),
+              state: _tabStarState,
+              onChanged: (v) => setState(() => _tabStarState = v),
               defaultAnchorKey: widget.boardAreaKey,
             ),
           // 复盘模块：显示 AnalysisPanel，隐藏普通三标签页
@@ -182,8 +182,8 @@ class _ReviewPanelState extends State<ReviewPanel>
               ),
             )
           else ...[
-            // 绿星控制：三个标签可整体隐藏，标签面板保持显示
-            if (_tabsVisible)
+            // 绿星三态：0 全部显示；1 隐藏标签（面板保留）；2 全部隐藏
+            if (_tabStarState == 0)
               Material(
                 color: const Color(0xFFF5E6C8),
                 child: TabBar(
@@ -219,19 +219,20 @@ class _ReviewPanelState extends State<ReviewPanel>
                 ],
               ),
             ),
-            Expanded(
-              child: TabBarView(
-                controller: _tab,
-                children: [
-                  NotationTab(
-                    controller: controller,
-                    highlightEnabled: _commentHighlight,
-                  ),
-                  EngineTab(controller: controller),
-                  CloudBasePanel(controller: _cloud),
-                ],
+            if (_tabStarState <= 1)
+              Expanded(
+                child: TabBarView(
+                  controller: _tab,
+                  children: [
+                    NotationTab(
+                      controller: controller,
+                      highlightEnabled: _commentHighlight,
+                    ),
+                    EngineTab(controller: controller),
+                    CloudBasePanel(controller: _cloud),
+                  ],
+                ),
               ),
-            ),
           ],
           // 底部导航条：任意标签页都可用，控制棋谱前进/后退
           // 仅当当前节点为分支点时，在导航条上方显示分支选择条

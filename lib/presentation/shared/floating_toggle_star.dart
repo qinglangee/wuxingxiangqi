@@ -3,23 +3,26 @@ import 'package:flutter/material.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/config_manager.dart';
 
-/// 浮动切换星：一个可拖动、始终浮于其它组件上方的五角星开关。
+/// 浮动切换星：一个可拖动、始终浮于其它组件上方的五角星多态开关。
 ///
 /// - 本体不参与页面布局（build 返回 [SizedBox.shrink]），通过
 ///   [OverlayEntry] 显示在所有组件之上；可用于任意页面。
 /// - 拖动可停留在屏幕任意位置（不会拖出屏幕边界），位置按 [id] 持久化。
-/// - 点击切换 [active] 状态并回调 [onChanged]；星星颜色随状态在
-///   [activeColor] / [inactiveColor] 之间切换。
+/// - 点击在 0..N-1 共 N 个状态间循环切换并回调 [onChanged]；
+///   星星颜色随状态取 [colors] 中对应项。
 /// - 未保存过位置时，默认显示在 [defaultAnchorKey] 锚点区域的
 ///   [defaultAnchorFraction] + [defaultAnchorOffset] 处（如棋盘下方偏左）。
 class FloatingToggleStar extends StatefulWidget {
   const FloatingToggleStar({
     super.key,
     required this.id,
-    required this.active,
+    required this.state,
     required this.onChanged,
-    this.activeColor = const Color(0xFF2E7D32),
-    this.inactiveColor = const Color(0xFF9EAE8E),
+    this.colors = const [
+      Color(0xFF1B5E20), // 深绿
+      Color(0xFF66BB6A), // 浅绿
+      Color(0xFF9EAE8E), // 灰绿
+    ],
     this.defaultAnchorKey,
     this.defaultAnchorFraction = const Offset(0.05, 1.0),
     this.defaultAnchorOffset = const Offset(0, 20),
@@ -28,17 +31,14 @@ class FloatingToggleStar extends StatefulWidget {
   /// 实例稳定标识，用于持久化星位置。
   final String id;
 
-  /// 当前是否处于激活态（激活显示 [activeColor]，否则 [inactiveColor]）。
-  final bool active;
+  /// 当前状态（0..colors.length-1），星星颜色取 [colors][state]。
+  final int state;
 
-  /// 点击后以新状态回调。
-  final ValueChanged<bool> onChanged;
+  /// 点击后以新状态回调（在状态数内循环）。
+  final ValueChanged<int> onChanged;
 
-  /// 激活态颜色。
-  final Color activeColor;
-
-  /// 非激活态颜色。
-  final Color inactiveColor;
+  /// 各状态对应的颜色（至少一项）。
+  final List<Color> colors;
 
   /// 默认位置的锚点区域（如棋盘）。为 null 时默认屏幕左下角附近。
   final GlobalKey? defaultAnchorKey;
@@ -83,7 +83,7 @@ class _FloatingToggleStarState extends State<FloatingToggleStar> {
   @override
   void didUpdateWidget(covariant FloatingToggleStar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.active != widget.active) _refreshOverlay();
+    if (oldWidget.state != widget.state) _refreshOverlay();
   }
 
   @override
@@ -165,7 +165,9 @@ class _FloatingToggleStarState extends State<FloatingToggleStar> {
           Offset(pos.dx * size.width, pos.dy * size.height),
           size,
         );
-        final color = widget.active ? widget.activeColor : widget.inactiveColor;
+        final color = widget.colors.isEmpty
+            ? const Color(0xFF2E7D32)
+            : widget.colors[widget.state % widget.colors.length];
         return Stack(
           children: [
             Positioned(
@@ -189,7 +191,9 @@ class _FloatingToggleStarState extends State<FloatingToggleStar> {
                 },
                 onPanEnd: (_) => _persist(),
                 onTap: () {
-                  widget.onChanged(!widget.active);
+                  final count =
+                      widget.colors.isEmpty ? 1 : widget.colors.length;
+                  widget.onChanged((widget.state + 1) % count);
                   _refreshOverlay();
                 },
                 child: Stack(
