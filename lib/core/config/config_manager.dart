@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'app_config.dart';
@@ -232,4 +234,49 @@ class ConfigManager extends ChangeNotifier {
   /// 配置文件所在目录的绝对路径（即应用默认数据目录）。
   Future<String> get configDirPath async =>
       File(await configFilePath).parent.path;
+
+  /// 删除应用数据目录（`wuxingxiangqi`）下的全部文件，并重置内存配置
+  /// 为默认值。引擎权重、棋谱存档、残局进度、会话等全部被清除。
+  Future<void> deleteAllConfig() async {
+    final dir = Directory(await dataDirPath);
+    if (await dir.exists()) {
+      await dir.delete(recursive: true);
+    }
+    _config = AppConfig();
+    notifyListeners();
+  }
+
+  /// 将应用数据目录（`wuxingxiangqi`）打包为 zip 并保存到系统下载目录。
+  ///
+  /// 返回保存的 zip 文件路径。若数据目录不存在或为空则抛出异常。
+  Future<String> backupData() async {
+    final srcDir = Directory(await dataDirPath);
+    if (!await srcDir.exists()) {
+      throw Exception('应用数据目录不存在');
+    }
+    // 构建压缩包
+    final archive = Archive();
+    final dirPath = srcDir.path;
+    await for (final entity in srcDir.list(recursive: true)) {
+      if (entity is! File) continue;
+      final relPath = p.relative(entity.path, from: dirPath);
+      final bytes = await entity.readAsBytes();
+      archive.addFile(ArchiveFile.bytes(relPath, bytes));
+    }
+    if (archive.isEmpty) {
+      throw Exception('应用数据目录为空，无需备份');
+    }
+    final zipBytes = ZipEncoder().encode(archive);
+    // 保存到系统下载目录
+    final downloadsDir = await getDownloadsDirectory();
+    if (downloadsDir == null) {
+      throw Exception('无法获取系统下载目录');
+    }
+    final stamp = DateTime.now().toString().substring(0, 19).replaceAll(
+        RegExp(r'[: ]'), '-');
+    final zipFile = File(
+        '${downloadsDir.path}${Platform.pathSeparator}wuxingxiangqi_$stamp.zip');
+    await zipFile.writeAsBytes(zipBytes);
+    return zipFile.path;
+  }
 }

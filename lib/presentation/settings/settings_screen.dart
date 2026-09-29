@@ -6,6 +6,7 @@ import '../../core/config/board_calibration_store.dart';
 import '../../core/config/config_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/models/piece.dart';
+import '../shared/error_dialog.dart';
 import 'board_calibration_screen.dart';
 import 'engine_settings_widget.dart';
 
@@ -338,6 +339,110 @@ class _OtherSettingsWidget extends StatelessWidget {
                         fontSize: 12, color: Color(0xFF8B6B4A)),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              '数据管理',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF5A3A1A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // 备份数据：打包 wuxingxiangqi 目录到下载目录
+            OutlinedButton.icon(
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('备份数据'),
+                        content: const Text('将应用数据目录（wuxingxiangqi）'
+                            '打包为 zip 并保存到系统下载目录。是否继续？'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: const Text('确定'),
+                          ),
+                        ],
+                      ),
+                    ) ??
+                    false;
+                if (!ok) return;
+                try {
+                  final path = await ConfigManager.instance.backupData();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('备份完成：$path')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showErrorDialog(context, '备份失败：$e');
+                  }
+                }
+              },
+              icon: const Icon(Icons.backup_outlined),
+              label: const Text('备份数据'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.boardLine,
+                side: const BorderSide(color: AppTheme.boardLine),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // 删除全部配置：清空 wuxingxiangqi 目录并重置内存配置
+            FilledButton.icon(
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('删除全部配置'),
+                        content: const Text('将删除应用数据目录'
+                            '（wuxingxiangqi）下的全部文件，包括引擎权重、'
+                            '棋谱存档、残局进度、界面与引擎配置等。此操作不可恢复。'
+                            '\n\n是否确定删除？'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.red,
+                            ),
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: const Text('删除'),
+                          ),
+                        ],
+                      ),
+                    ) ??
+                    false;
+                if (!ok) return;
+                try {
+                  await ConfigManager.instance.deleteAllConfig();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已删除全部配置文件')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showErrorDialog(context, '删除失败：$e');
+                  }
+                }
+              },
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('删除全部配置'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
           ],
