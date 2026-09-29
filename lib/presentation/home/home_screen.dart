@@ -113,7 +113,8 @@ class HomeScreen extends StatelessWidget {
 
   /// 点击「棋谱」：弹出全屏浮动窗口，内嵌棋谱管理控件浏览应用数据
   /// 目录 `wuxingxiangqi/books` 下的棋谱。「外部仓库」按钮先关闭浮动
-  /// 窗口，再走旧版外部目录流程（[openExternalRepository]）。
+  /// 窗口，再以同一套棋谱管理页面打开已配置的外部仓库目录
+  /// （[openExternalRepository]，未配置时引导选择目录）。
   void _openNotationManager(BuildContext context) {
     showGeneralDialog(
       context: context,

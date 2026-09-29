@@ -9,17 +9,37 @@ import 'notation_repository.dart';
 
 /// 棋谱管理页面：独立页面形态的棋谱管理控件（可注册路由直接打开）。
 class NotationManagerScreen extends StatelessWidget {
-  const NotationManagerScreen({super.key, this.initialDirectory});
+  const NotationManagerScreen({
+    super.key,
+    this.initialDirectory,
+    this.rootDirectory,
+    this.rootLabel,
+    this.title = '棋谱管理',
+  });
 
-  /// 起始浏览目录；为空时打开应用数据目录下的默认 books 目录。
+  /// 起始浏览目录；为空时打开根目录。
   final String? initialDirectory;
+
+  /// 浏览根目录；为空时打开应用数据目录下的默认 books 目录。
+  /// 用于以同一页面浏览外部棋谱仓库。
+  final String? rootDirectory;
+
+  /// 根目录在路径栏中的显示名称（默认 books；外部仓库传目录名）。
+  final String? rootLabel;
+
+  /// 页面标题。
+  final String title;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('棋谱管理')),
+      appBar: AppBar(title: Text(title)),
       body: SafeArea(
-        child: NotationManagerWidget(initialDirectory: initialDirectory),
+        child: NotationManagerWidget(
+          initialDirectory: initialDirectory,
+          rootDirectory: rootDirectory,
+          rootLabel: rootLabel,
+        ),
       ),
     );
   }
@@ -32,20 +52,31 @@ class NotationManagerScreen extends StatelessWidget {
 /// - 长按任意条目进入多选模式，可对文件与目录执行移动、改名、删除；
 ///   移动时弹出目标目录选择器，目标不能是被移动项自身或其子目录，
 ///   且目标目录必须可写（Android 上必要时引导授权）；
-/// - [onExternalRepository] 非空时显示「外部仓库」按钮，走旧版外部
-///   目录流程（系统文件选择器）。
+/// - [onExternalRepository] 非空时显示「外部仓库」按钮（首页浮动窗口
+///   中用于切换到配置的外部仓库，由 [openExternalRepository] 处理）。
+/// - [rootDirectory] 非空时本控件直接浏览该外部目录，内置 books 与外部
+///   仓库共用同一套浏览/多选/改名/移动/删除界面。
 /// - [onOpenFile] 非空时点击棋谱文件交给外部处理（如先关闭所在浮动
 ///   窗口再打开打谱页）；为 null 时控件自行打开打谱页。
 class NotationManagerWidget extends StatefulWidget {
   const NotationManagerWidget({
     super.key,
     this.initialDirectory,
+    this.rootDirectory,
+    this.rootLabel,
     this.onExternalRepository,
     this.onOpenFile,
   });
 
-  /// 起始浏览目录；为空时打开应用数据目录下的默认 books 目录。
+  /// 起始浏览目录；为空时打开根目录。
   final String? initialDirectory;
+
+  /// 浏览根目录；为空时使用应用数据目录下的默认 books 目录。
+  /// 传入外部仓库路径时，本控件即用于浏览该外部仓库。
+  final String? rootDirectory;
+
+  /// 根目录在路径栏中的显示名称（默认 books；外部仓库传目录名）。
+  final String? rootLabel;
 
   /// 「外部仓库」按钮回调；为 null 时不显示该按钮。
   final VoidCallback? onExternalRepository;
@@ -83,17 +114,26 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     _bootstrap();
   }
 
-  /// 初始化：确保 books 目录存在并进入起始目录。
+  /// 初始化：确定浏览根目录（默认 books，外部仓库则用指定路径），
+  /// 默认 books 目录不存在时自动创建；外部根目录要求已存在。
   Future<void> _bootstrap() async {
     try {
-      final dataDir = await ConfigManager.instance.dataDirPath;
-      final books = Directory(
-          '$dataDir${Platform.pathSeparator}books');
-      if (!await books.exists()) {
-        await books.create(recursive: true);
+      final external = widget.rootDirectory;
+      if (external != null && external.isNotEmpty) {
+        if (!await Directory(external).exists()) {
+          throw StateError('目录不存在：$external');
+        }
+        _rootPath = external;
+      } else {
+        final dataDir = await ConfigManager.instance.dataDirPath;
+        final books = Directory(
+            '$dataDir${Platform.pathSeparator}books');
+        if (!await books.exists()) {
+          await books.create(recursive: true);
+        }
+        _rootPath = books.path;
       }
-      _rootPath = books.path;
-      _currentPath = widget.initialDirectory ?? books.path;
+      _currentPath = widget.initialDirectory ?? _rootPath!;
       await _reload();
     } catch (e) {
       if (!mounted) return;
@@ -138,13 +178,25 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
   static String _nameOf(FileSystemEntity e) =>
       e.path.split(Platform.pathSeparator).last;
 
-  /// 顶部工具行展示用的当前路径（books 为根的相对显示）。
+  /// 根目录显示名称（外部仓库显示其目录名）。
+  String get _rootLabel {
+    final custom = widget.rootLabel;
+    if (custom != null && custom.isNotEmpty) return custom;
+    final root = _rootPath;
+    if (root == null) return 'books';
+    return root.split(Platform.pathSeparator).last;
+  }
+
+  /// 顶部工具行展示用的当前路径（以根目录名称为起点的相对显示）。
   String get _displayPath {
     final root = _rootPath!;
-    if (_currentPath == root) return 'books';
+    if (_currentPath == root ||
+        !_currentPath.startsWith(root + Platform.pathSeparator)) {
+      return _rootLabel;
+    }
     final sep = Platform.pathSeparator;
     final rel = _currentPath.substring(root.length + sep.length);
-    return 'books / ${rel.replaceAll(sep, ' / ')}';
+    return '$_rootLabel / ${rel.replaceAll(sep, ' / ')}';
   }
 
   bool get _canGoUp => _rootPath != null && _currentPath != _rootPath;
@@ -314,6 +366,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
       context: context,
       builder: (_) => _DirectoryPickerDialog(
         rootPath: _rootPath!,
+        rootLabel: _rootLabel,
         forbidden: sources,
       ),
     );
@@ -836,9 +889,11 @@ class _DirectoryPickerDialog extends StatefulWidget {
   const _DirectoryPickerDialog({
     required this.rootPath,
     required this.forbidden,
+    this.rootLabel = 'books',
   });
 
   final String rootPath;
+  final String rootLabel;
   final List<String> forbidden;
 
   @override
@@ -885,10 +940,10 @@ class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
 
   String get _displayPath {
     final root = widget.rootPath;
-    if (_current == root) return 'books';
+    if (_current == root) return widget.rootLabel;
     final sep = Platform.pathSeparator;
     final rel = _current.substring(root.length + sep.length);
-    return 'books / ${rel.replaceAll(sep, ' / ')}';
+    return '${widget.rootLabel} / ${rel.replaceAll(sep, ' / ')}';
   }
 
   /// 当前浏览目录是否可作为移动目标。

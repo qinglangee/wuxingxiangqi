@@ -109,9 +109,18 @@ class App extends StatelessWidget {
           );
         },
         '/settings': (_) => const SettingsScreen(),
-        // 棋谱管理页面：参数为起始目录（可省略，默认 books 目录）
+        // 棋谱管理页面：参数为 String 时表示起始目录（默认 books 根）；
+        // 参数为 (String root, String? label) 记录时以 root 为浏览根目录
+        // （用于外部棋谱仓库）。
         '/notation-manager': (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments;
+          if (args is (String, String?)) {
+            return NotationManagerScreen(
+              rootDirectory: args.$1,
+              rootLabel: args.$2,
+              title: args.$2 != null ? '外部仓库 · ${args.$2}' : '棋谱管理',
+            );
+          }
           return NotationManagerScreen(
             initialDirectory: args is String ? args : null,
           );

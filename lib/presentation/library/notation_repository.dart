@@ -9,6 +9,7 @@ import '../../domain/notation/parsers/notation_exception.dart';
 import '../../domain/notation/parsers/notation_loader.dart';
 import '../../domain/notation/parsers/notation_replay.dart';
 import '../../domain/notation/parsers/parsed_game.dart';
+import 'notation_manager_widget.dart';
 
 /// 支持的棋谱文件扩展名。
 const List<String> kNotationExtensions = ['pgn', 'xqf', 'cbf', 'txt'];
@@ -169,14 +170,14 @@ Future<bool> ensureDirectoryWritable(
   return ConfigManager.isDirectoryWritable(dir);
 }
 
-/// 打开外部棋谱仓库（「外部仓库」按钮与旧版首页棋谱流程）：
+/// 打开外部棋谱仓库（首页浮动窗口中的「外部仓库」按钮）：
 /// 1. 读取配置中的 [LibraryConfig.notationLibraryPath]；
-/// 2. 已配置且目录可写入 → 用系统文件选择器从该目录起手选择棋谱文件；
+/// 2. 已配置且目录可写入 → 直接用棋谱管理页面打开该目录（与内置 books
+///    同一套浏览/多选/改名/删除界面）；
 /// 3. 未配置或目录失效 → 提示并引导用户选择目录，验证可写后保存配置，
-///    再继续打开文件选择器。
-/// 4. 选中文件后交 [openNotationFile] 解析并跳转打谱页。
+///    再打开棋谱管理页面。
 ///
-/// 调用前应先关闭浮动窗口（若有），避免打谱页被遮挡。
+/// 调用前应先关闭浮动窗口（若有），避免管理页面被遮挡。
 Future<void> openExternalRepository(BuildContext context) async {
   final mgr = ConfigManager.instance;
   var path = mgr.config.library.notationLibraryPath;
@@ -225,48 +226,18 @@ Future<void> openExternalRepository(BuildContext context) async {
     path = picked;
   }
 
-  // 已配置：打开文件选择器，让用户在仓库目录中选择棋谱或进入子目录。
-  // Android 的 SAF 选择器按 MIME 过滤，pgn/xqf/cbf 属非标准扩展名映射
-  // 不到 MIME 类型，文件会变成"不可选"（点击无反应），因此 Android 上
-  // 选任意文件、由应用自行校验扩展名；桌面端仍用系统过滤。
-  final isAndroid = Platform.isAndroid;
-  final file = await FilePicker.pickFiles(
-    dialogTitle: '选择棋谱文件',
-    initialDirectory: path,
-    type: isAndroid ? FileType.any : FileType.custom,
-    allowedExtensions: isAndroid ? null : kNotationExtensions,
-  );
-  if (file.isEmpty) return;
-  final pickedPath = file.single.path;
-  if (pickedPath == null || pickedPath.isEmpty) return;
-
-  // Android 上自行校验扩展名
-  if (isAndroid) {
-    final ext = pickedPath.split('.').last.toLowerCase();
-    if (!kNotationExtensions.contains(ext)) {
-      if (!context.mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('不支持的文件类型'),
-          content: Text(
-            '请选择以下类型的棋谱文件：\n${kNotationExtensions.join('、')}\n\n'
-            '所选文件：${pickedPath.split(Platform.pathSeparator).last}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('知道了'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-  }
-
+  // 已配置：用棋谱管理页面打开外部仓库（与内置 books 同一套界面）
   if (!context.mounted) return;
-  await openNotationFile(context, pickedPath);
+  final label = path.split(Platform.pathSeparator).last;
+  await Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => NotationManagerScreen(
+        rootDirectory: path,
+        rootLabel: label,
+        title: '外部仓库 · $label',
+      ),
+    ),
+  );
 }
 
 /// 弹出对话框提示用户先选择棋谱仓库目录。
