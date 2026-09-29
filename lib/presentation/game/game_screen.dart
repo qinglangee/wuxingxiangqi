@@ -115,6 +115,7 @@ class GameScreen extends StatelessWidget {
                   hints: controller.selectedHints.toSet(),
                   onTap: controller.onTap,
                   branchMarkers: _buildBranchMarkers(controller),
+                  onBranchTap: controller.selectBranch,
                   analysisArrows: _buildAnalysisArrows(controller),
                   lastMove: _lastMoveOf(controller),
                   hintArrow: controller.hintMark,

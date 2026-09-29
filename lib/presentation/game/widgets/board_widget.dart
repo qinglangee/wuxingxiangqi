@@ -30,6 +30,7 @@ class BoardWidget extends StatefulWidget {
     required this.hints,
     required this.onTap,
     this.branchMarkers = const [],
+    this.onBranchTap,
     this.analysisArrows = const [],
     this.lastMove,
     this.hintArrow,
@@ -45,6 +46,10 @@ class BoardWidget extends StatefulWidget {
 
   /// 分支标记：到达分支点时，可视化各候选分支的走法（带序号箭头）。
   final List<MoveArrow> branchMarkers;
+
+  /// 点击分支箭头（连线/箭头/序号圆点）时回调，入参为分支下标；
+  /// 命中箭头时不再触发普通的格子点击。
+  final ValueChanged<int>? onBranchTap;
 
   /// 无限分析时 PV1 前两步的指示箭头（红/黑着色，无序号）。
   final List<MoveArrow> analysisArrows;
@@ -168,9 +173,27 @@ class _BoardWidgetState extends State<BoardWidget>
           height: boardHeight,
           child: GestureDetector(
             onTapDown: (details) {
+              final local = details.localPosition;
+              // 优先检测分支箭头：点击连线/三角箭头/序号圆点直接选分支，
+              // 命中则不再按格子走子点选处理
+              if (widget.branchMarkers.isNotEmpty &&
+                  widget.onBranchTap != null) {
+                final idx = MoveArrowPainter.hitTestArrow(
+                  point: local,
+                  arrows: widget.branchMarkers,
+                  padding: padding,
+                  cellW: cellWidth,
+                  cellH: cellHeight,
+                  flipped: flipped,
+                );
+                if (idx != null) {
+                  widget.onBranchTap!(idx);
+                  return;
+                }
+              }
               final pos = CoordinateUtils.fromPixel(
-                x: details.localPosition.dx,
-                y: details.localPosition.dy,
+                x: local.dx,
+                y: local.dy,
                 cellWidth: cellWidth,
                 cellHeight: cellHeight,
                 padding: padding,

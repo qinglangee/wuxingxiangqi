@@ -176,6 +176,118 @@ class MoveArrowPainter extends CustomPainter {
     );
   }
 
+  /// 命中测试：判断点击点 [point] 是否落在某支箭头上（序号圆点、三角
+  /// 箭头或连线），返回命中箭头在 [arrows] 中的下标；都未命中返回 null。
+  ///
+  /// 按绘制顺序逆序检测，保证重叠时最上层的箭头优先。触摸热区比实际
+  /// 绘制图形略大（圆点/连线较细，方便手指点击）。
+  static int? hitTestArrow({
+    required Offset point,
+    required List<MoveArrow> arrows,
+    required EdgeInsets padding,
+    required double cellW,
+    required double cellH,
+    required bool flipped,
+  }) {
+    if (arrows.isEmpty) return null;
+    final dotRadius = cellW * 0.18;
+    // 半个棋子宽度（piece size = cellW * 0.85）
+    final halfPiece = cellW * 0.425;
+    // 箭头尺寸
+    final arrowLen = cellW * 0.28;
+    // 触摸热区：圆点与箭头尖端取不小于棋子半径三分之一的舒适范围
+    final dotHit = math.max(dotRadius + 2, cellW * 0.27);
+    final headHit = cellW * 0.24;
+    final lineHit = math.max(cellW * 0.10 / 2, cellW * 0.15);
+
+    Offset centerOf(Position p) => CoordinateUtils.toPixel(
+          col: p.col,
+          row: p.row,
+          cellWidth: cellW,
+          cellHeight: cellH,
+          padding: padding,
+          flipped: flipped,
+        );
+
+    for (var i = arrows.length - 1; i >= 0; i--) {
+      final a = arrows[i];
+      final from = centerOf(a.from);
+      final to = centerOf(a.to);
+      final dx = to.dx - from.dx;
+      final dy = to.dy - from.dy;
+      final len = math.sqrt(dx * dx + dy * dy);
+      if (len == 0) continue;
+      final ux = dx / len;
+      final uy = dy / len;
+      // 与方向垂直的向量
+      final px = -uy;
+      final py = ux;
+
+      // 1. 序号圆点（终点之外半个棋子宽度处）
+      if (a.label != null) {
+        final dotCenter = Offset(
+          to.dx - ux * halfPiece,
+          to.dy - uy * halfPiece,
+        );
+        if ((point - dotCenter).distance <= dotHit) return i;
+      }
+
+      // 2. 终点三角箭头：尖端圆形热区 + 三角形内部
+      final tip = to;
+      final baseCenter = Offset(
+        to.dx - ux * arrowLen,
+        to.dy - uy * arrowLen,
+      );
+      final base1 = Offset(
+        baseCenter.dx + px * arrowLen * 0.5,
+        baseCenter.dy + py * arrowLen * 0.5,
+      );
+      final base2 = Offset(
+        baseCenter.dx - px * arrowLen * 0.5,
+        baseCenter.dy - py * arrowLen * 0.5,
+      );
+      if ((point - tip).distance <= headHit ||
+          _pointInTriangle(point, tip, base1, base2)) {
+        return i;
+      }
+
+      // 3. 半透明连线（终点缩进半个箭头长度）
+      final lineEnd = Offset(
+        to.dx - ux * arrowLen * 0.5,
+        to.dy - uy * arrowLen * 0.5,
+      );
+      if (_distanceToSegment(point, from, lineEnd) <= lineHit) return i;
+    }
+    return null;
+  }
+
+  /// 点到线段 [a]-[b] 的最短距离。
+  static double _distanceToSegment(Offset p, Offset a, Offset b) {
+    final abx = b.dx - a.dx;
+    final aby = b.dy - a.dy;
+    final apx = p.dx - a.dx;
+    final apy = p.dy - a.dy;
+    final ab2 = abx * abx + aby * aby;
+    var t = ab2 == 0 ? 0.0 : (apx * abx + apy * aby) / ab2;
+    t = t.clamp(0.0, 1.0);
+    final closest = Offset(a.dx + abx * t, a.dy + aby * t);
+    return (p - closest).distance;
+  }
+
+  /// 点 [p] 是否在三角形 (v1, v2, v3) 内部（含边界）。
+  static bool _pointInTriangle(
+      Offset p, Offset v1, Offset v2, Offset v3) {
+    double sign(Offset a, Offset b, Offset c) =>
+        (a.dx - c.dx) * (b.dy - c.dy) -
+        (b.dx - c.dx) * (a.dy - c.dy);
+    final d1 = sign(p, v1, v2);
+    final d2 = sign(p, v2, v3);
+    final d3 = sign(p, v3, v1);
+    final hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+    final hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+    return !(hasNeg && hasPos);
+  }
+
   @override
   bool shouldRepaint(covariant MoveArrowPainter oldDelegate) =>
       oldDelegate.padding != padding ||
