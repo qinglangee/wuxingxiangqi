@@ -365,6 +365,14 @@ class _ReviewPanelState extends State<ReviewPanel>
                 onCheckedChanged: (v) =>
                     setState(() => _commentHighlight = v),
               ),
+              FreeButton(
+                id: '对弈',
+                icon: Icons.sports_esports,
+                label: '对弈',
+                // 选择后弹窗与按钮栏抽屉都关闭，棋盘直接显示局面
+                closesDrawer: true,
+                onTap: () => controller.enterPlayMode(),
+              ),
             ];
   }
 }

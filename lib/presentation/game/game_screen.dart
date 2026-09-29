@@ -5,6 +5,7 @@ import '../../domain/models/piece.dart';
 import '../../domain/models/position.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/config_manager.dart';
+import '../../core/theme/app_theme.dart';
 import '../canju/canju_controller.dart';
 import '../canju/canju_level_dialog.dart';
 import '../canju/canju_selector_dialog.dart';
@@ -17,6 +18,7 @@ import '../shared/floating_toast.dart';
 import '../shared/effect_image_player.dart';
 import 'widgets/board_widget.dart';
 import 'widgets/move_arrow_painter.dart';
+import 'widgets/opponent_dialog.dart';
 import 'widgets/review_panel.dart';
 
 /// 打谱页主状态。
@@ -56,7 +58,8 @@ class GameScreen extends StatelessWidget {
     final state = controller.state;
     // 残局模式下注入了 CanjuController；分析/对弈模式下未注入，这里取不到。
     final canju = _tryWatchCanju(context);
-    // 对弈暂未单独入口，非残局一律按分析状态处理
+    // 对弈模式：由 GameController.playMode 控制，隐藏全部工具条与面板
+    final isPlay = controller.playMode;
     final mode =
         canju != null && !canju.analysisMode ? GameScreenMode.canju : GameScreenMode.analysis;
     final isCanju = mode == GameScreenMode.canju;
@@ -87,15 +90,19 @@ class GameScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            if (!isCanju)
+            // 对弈模式顶部：对手头像框（点击可更换对手）
+            if (isPlay) _PlayOpponentBar(controller: controller),
+            // 非残局非对弈：顶部 AI 配置条
+            if (!isCanju && !isPlay)
               _AiConfigRow(
                 controller: controller,
               ),
             // 上半部分：棋盘（整体可缩放，五角星把手上下拖动调整大小）
+            // 对弈模式下隐藏缩放把手
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
               child: _ScalableBoard(
-                showHandle: !isCanju,
+                showHandle: !isCanju && !isPlay,
                 boardAreaKey: boardAreaKey,
                 child: BoardWidget(
                   key: boardKey,
@@ -114,8 +121,10 @@ class GameScreen extends StatelessWidget {
             ),
             // 残局切换条（上一局/下一局），位于棋盘下方
             if (isCanju) _CanjuBar(controller: canju!),
+            // 对弈模式控制区：悔棋按钮 + 执子方选择/退出
+            if (isPlay) _PlayControls(controller: controller),
             // 下半部分：三标签打谱面板（占据棋盘外剩余的全部空间）
-            if (!isCanju)
+            if (!isCanju && !isPlay)
               Expanded(
                 child: ReviewPanel(
                   controller: controller,
@@ -446,6 +455,196 @@ class _ResultWatcherState extends State<_ResultWatcher> {
       }
     }
     return const SizedBox.shrink();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 对弈模式：对手头像框 + 控制区（悔棋 / 执子方选择 / 退出）
+// ---------------------------------------------------------------------------
+
+/// 对弈模式顶部：电脑对手头像框。
+///
+/// 显示对手名称与首字头像，点击打开对手选择窗口。
+/// AI 思考中时头像旁显示加载指示器。
+class _PlayOpponentBar extends StatelessWidget {
+  const _PlayOpponentBar({required this.controller});
+
+  final GameController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final name = controller.playOpponent;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: const Color(0xFFEFE0B8),
+          child: Row(
+            children: [
+              // 对手头像：点击打开对手选择窗口
+              GestureDetector(
+                onTap: () async {
+                  final chosen = await OpponentDialog.show(
+                    context,
+                    current: name,
+                  );
+                  if (chosen != null) controller.setPlayOpponent(chosen);
+                },
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: AppTheme.boardLine,
+                      child: Text(
+                        name.isNotEmpty ? name.substring(0, 1) : '?',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.boardLine,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // AI 思考中指示器
+              if (controller.aiThinking)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              const Spacer(),
+              // 退出对弈按钮
+              IconButton(
+                icon: const Icon(Icons.exit_to_app, color: Color(0xFF8B6B3D)),
+                tooltip: '退出对弈',
+                onPressed: () => controller.exitPlayMode(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 对弈模式底部控制区：悔棋按钮 + 执子方选择（或对局中提示）。
+class _PlayControls extends StatelessWidget {
+  const _PlayControls({required this.controller});
+
+  final GameController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final started = controller.playStarted;
+        final userSide = controller.playUserSide;
+        // 悔棋仅在用户行棋且有棋可悔时可用
+        final canUndo = started &&
+            !controller.isOver &&
+            !controller.aiThinking &&
+            userSide == controller.currentSide &&
+            controller.canGoBack;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: const BoxDecoration(
+            color: Color(0xFFEFE0B8),
+            border: Border(
+              top: BorderSide(color: Color(0xFFC9B68C), width: 0.8),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 悔棋按钮：仅在用户行棋时可用
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: canUndo ? controller.playUndo : null,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('悔棋'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.boardLine,
+                    side: const BorderSide(color: AppTheme.boardLine),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // 执子方选择：未开始时显示「执红」「执黑」按钮；
+              // 已开始时显示当前执子方与行棋提示
+              if (!started)
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => controller.startPlay(Side.red),
+                        icon: const Icon(Icons.circle, color: Colors.white),
+                        label: const Text('执红先行'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.redPiece,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => controller.startPlay(Side.black),
+                        icon: const Icon(Icons.circle, color: Colors.white),
+                        label: const Text('执黑后行'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.blackPiece,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      userSide == Side.red ? Icons.circle : Icons.circle,
+                      color: userSide == Side.red
+                          ? AppTheme.redPiece
+                          : AppTheme.blackPiece,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      controller.isOver
+                          ? '对局结束：${controller.result}'
+                          : '您执${userSide == Side.red ? '红' : '黑'}  ·  '
+                              '${controller.currentSide == userSide ? '轮到您行棋' : '电脑思考中…'}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.boardLine,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

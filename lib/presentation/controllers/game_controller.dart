@@ -118,6 +118,27 @@ class GameController extends ChangeNotifier {
   bool _boardFlipped = false;
   bool get boardFlipped => _boardFlipped;
 
+  // ---- 对弈模式 ----
+
+  /// 是否处于对弈模式：隐藏全部工具条与 review_panel，只显示棋盘、
+  /// 对手头像、悔棋按钮与执子方选择。
+  bool _playMode = false;
+  bool get playMode => _playMode;
+
+  /// 当前选择的电脑对手名称（第一版：阮星弈 / 李世才 / 五星）。
+  String _playOpponent = '阮星弈';
+  String get playOpponent => _playOpponent;
+
+  /// 用户选择的执子方；null 表示尚未选择（对局未开始）。
+  Side? _playUserSide;
+  Side? get playUserSide => _playUserSide;
+
+  /// 对弈是否已开始（用户已选择执子方）。
+  bool get playStarted => _playUserSide != null;
+
+  /// 对弈模式下引擎思考深度。
+  static const int kPlayDepth = 7;
+
   /// 是否处于残局模式（残局模式退出时不保存会话）。
   bool _isCanjuMode = false;
 
@@ -1069,6 +1090,76 @@ class GameController extends ChangeNotifier {
     toggleBoardFlip();
   }
 
+  // ---- 对弈模式 ----
+
+  /// 进入对弈模式：重置为标准开局，关闭分析，等待用户选择执子方。
+  void enterPlayMode() {
+    _playMode = true;
+    _playUserSide = null;
+    // 进入对弈模式前清除 AI 标记，避免 restart 后某一方自动走子；
+    // 待用户选择执子方后由 startPlay 重新设定 AI 方。
+    _redIsAi = false;
+    _blackIsAi = false;
+    // 对弈模式不使用分析与胜线传播，确保纯净的人机对弈
+    if (_analysisOn) {
+      _analysisOn = false;
+      _ai.stopAnalysis();
+    }
+    _bannedMoves.clear();
+    restart();
+  }
+
+  /// 退出对弈模式，恢复正常打谱界面。
+  void exitPlayMode() {
+    if (!_playMode) return;
+    _playMode = false;
+    _playUserSide = null;
+    // 清除 AI 标记，避免退出后某一方仍被设为电脑
+    _redIsAi = false;
+    _blackIsAi = false;
+    notifyListeners();
+  }
+
+  /// 设置对弈对手名称。
+  void setPlayOpponent(String name) {
+    _playOpponent = name;
+    notifyListeners();
+  }
+
+  /// 用户选择执子方后开始对弈：执红则黑方为电脑、执黑则红方为电脑，
+  /// 若电脑执红（先行）则立即触发 AI 走子。
+  /// 同时自动翻转棋盘，使用户执子方始终位于棋盘下方。
+  void startPlay(Side userSide) {
+    _playUserSide = userSide;
+    _redIsAi = userSide == Side.black;
+    _blackIsAi = userSide == Side.red;
+    // 执黑时翻转棋盘，让用户的棋子位于下方
+    _boardFlipped = userSide == Side.black;
+    notifyListeners();
+    _maybeTriggerAiMove();
+  }
+
+  /// 对弈模式悔棋：仅在用户行棋时可用。
+  ///
+  /// 删除当前一步棋（不保留节点、不产生分支）。由于用户行棋时最后
+  /// 一步是电脑应手，悔棋需同时撤销电脑应手与用户上一步走子，回到
+  /// 用户走子前的局面，由用户重新行棋。
+  void playUndo() {
+    if (!_playMode || !playStarted) return;
+    if (isOver || _aiThinking) return;
+    // 仅在用户行棋时允许悔棋
+    if (_playUserSide != currentSide) return;
+    final node = _current;
+    if (node.isRoot) return;
+    final userMove = node.parent;
+    // 删除电脑应手（当前节点）
+    deleteMove(node);
+    // 再删除用户上一步走子，回到用户走子前
+    if (userMove != null && !userMove.isRoot) {
+      deleteMove(userMove);
+    }
+  }
+
   /// 从外部（如云库面板点击着法）尝试在当前局面走 from → to。
   ///
   /// 与人类点击走子等价：合法性校验、写入棋谱树、触发后续
@@ -1282,8 +1373,12 @@ class GameController extends ChangeNotifier {
     try {
       final aiSide = currentSide;
       final position = _enginePosition();
-      final result =
-          await _ai.bestMove(position, moveTimeMs: 500);
+      // 对弈模式下限制引擎思考深度为 7
+      final result = await _ai.bestMove(
+        position,
+        moveTimeMs: 500,
+        depth: _playMode ? kPlayDepth : null,
+      );
       final uci = result.move;
       if (uci == '(none)' || uci.isEmpty) {
         // 引擎未给出走法，停止本次自动走子，避免空转循环
