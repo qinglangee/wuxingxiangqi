@@ -281,4 +281,26 @@ class ConfigManager extends ChangeNotifier {
     await zipFile.writeAsBytes(zipBytes);
     return zipFile.path;
   }
+
+  /// 从 zip 备份文件恢复数据，解压到应用数据目录并覆盖同名文件。
+  ///
+  /// 解压完成后重新加载配置到内存。
+  Future<void> restoreBackup(String zipPath) async {
+    final bytes = await File(zipPath).readAsBytes();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final destDir = Directory(await dataDirPath);
+    if (!await destDir.exists()) {
+      await destDir.create(recursive: true);
+    }
+    for (final file in archive) {
+      if (!file.isFile) continue;
+      final destPath = p.join(destDir.path, file.name);
+      final outFile = File(destPath);
+      await outFile.parent.create(recursive: true);
+      await outFile.writeAsBytes(file.content as List<int>);
+    }
+    // 重新加载配置
+    await load();
+    notifyListeners();
+  }
 }

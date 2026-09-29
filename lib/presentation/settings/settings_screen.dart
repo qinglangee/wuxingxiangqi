@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../core/assets/asset_catalog.dart';
 import '../../core/config/app_config.dart';
@@ -358,7 +359,7 @@ class _OtherSettingsWidget extends StatelessWidget {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('备份数据'),
-                        content: const Text('将应用数据目录（wuxingxiangqi）'
+                        content: const Text('将应用数据目录'
                             '打包为 zip 并保存到系统下载目录。是否继续？'),
                         actions: [
                           TextButton(
@@ -396,6 +397,63 @@ class _OtherSettingsWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
+            // 恢复备份：从 zip 解压覆盖到应用数据目录
+            OutlinedButton.icon(
+              onPressed: () async {
+                // 选择 zip 文件
+                final picked = await FilePicker.pickFiles(
+                  dialogTitle: '选择备份文件',
+                  type: FileType.custom,
+                  allowedExtensions: const ['zip'],
+                );
+                if (picked.isEmpty) return;
+                final zipPath = picked.single.path;
+                if (zipPath == null) return;
+                if (!context.mounted) return;
+                // 确认覆盖
+                final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('恢复备份'),
+                        content: const Text('恢复操作将覆盖应用数据目录'
+                            '中的同名文件。当前的数据'
+                            '将被替换。\n\n是否确定恢复？'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: const Text('确定'),
+                          ),
+                        ],
+                      ),
+                    ) ??
+                    false;
+                if (!ok) return;
+                try {
+                  await ConfigManager.instance.restoreBackup(zipPath);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('备份已恢复')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showErrorDialog(context, '恢复失败：$e');
+                  }
+                }
+              },
+              icon: const Icon(Icons.restore),
+              label: const Text('恢复备份'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.boardLine,
+                side: const BorderSide(color: AppTheme.boardLine),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 10),
             // 删除全部配置：清空 wuxingxiangqi 目录并重置内存配置
             FilledButton.icon(
               onPressed: () async {
@@ -404,7 +462,7 @@ class _OtherSettingsWidget extends StatelessWidget {
                       builder: (ctx) => AlertDialog(
                         title: const Text('删除应用数据'),
                         content: const Text('将删除应用数据目录'
-                            '（wuxingxiangqi）下的全部文件，包括引擎权重、'
+                            '下的全部文件，包括引擎权重、'
                             '棋谱存档、残局进度、界面与引擎配置等。此操作不可恢复。'
                             '\n\n是否确定删除？'),
                         actions: [
