@@ -103,6 +103,11 @@ class GameScreen extends StatelessWidget {
               child: _ScalableBoard(
                 showHandle: !isCanju && !isPlay,
                 boardAreaKey: boardAreaKey,
+                // 打谱页棋盘滑动：上滑前进一步，下滑后退一步
+                onSwipeUp:
+                    (!isCanju && !isPlay) ? controller.goForward : null,
+                onSwipeDown:
+                    (!isCanju && !isPlay) ? controller.goBack : null,
                 child: BoardWidget(
                   key: boardKey,
                   board: state.board,
@@ -659,6 +664,8 @@ class _ScalableBoard extends StatefulWidget {
     required this.child,
     required this.boardAreaKey,
     this.showHandle = true,
+    this.onSwipeUp,
+    this.onSwipeDown,
   });
 
   /// 棋盘组件（[BoardWidget]），按缩放后的宽度约束显示。
@@ -670,6 +677,12 @@ class _ScalableBoard extends StatefulWidget {
 
   /// 是否显示五角星缩放把手（残局模式不显示，但仍按配置缩放）。
   final bool showHandle;
+
+  /// 向上滑动回调（棋谱前进一步）。
+  final VoidCallback? onSwipeUp;
+
+  /// 向下滑动回调（棋谱后退一步）。
+  final VoidCallback? onSwipeDown;
 
   @override
   State<_ScalableBoard> createState() => _ScalableBoardState();
@@ -690,6 +703,12 @@ class _ScalableBoardState extends State<_ScalableBoard> {
 
   /// 拖动过程中的临时缩放值；非拖动状态为 null（跟随配置）。
   double? _draggingScale;
+
+  /// 滑动检测：累积的竖直拖动距离（像素）。
+  double _swipeDy = 0;
+
+  /// 竖直滑动判定阈值：至少滑动 40 像素才触发。
+  static const double _swipeThreshold = 40;
 
   double get _scale =>
       _draggingScale ?? ConfigManager.instance.config.board.boardScale;
@@ -851,7 +870,27 @@ class _ScalableBoardState extends State<_ScalableBoard> {
                 key: _boardAreaKey,
                 width: boardWidth,
                 height: boardHeight,
-                child: widget.child,
+                // 滑动检测：上滑前进一步，下滑后退一步；
+                // 仅当外部提供了回调时才启用（打谱页启用，残局/对弈不启用）。
+                child: (widget.onSwipeUp != null || widget.onSwipeDown != null)
+                    ? GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onVerticalDragStart: (_) => _swipeDy = 0,
+                        onVerticalDragUpdate: (d) => _swipeDy += d.delta.dy,
+                        onVerticalDragEnd: (_) {
+                          if (_swipeDy <= -_swipeThreshold &&
+                              widget.onSwipeUp != null) {
+                            widget.onSwipeUp!();
+                          } else if (_swipeDy >= _swipeThreshold &&
+                              widget.onSwipeDown != null) {
+                            widget.onSwipeDown!();
+                          }
+                          _swipeDy = 0;
+                        },
+                        onVerticalDragCancel: () => _swipeDy = 0,
+                        child: widget.child,
+                      )
+                    : widget.child,
               ),
             );
           },
