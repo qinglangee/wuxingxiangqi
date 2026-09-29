@@ -49,7 +49,7 @@ class OtherSettingsTab extends StatelessWidget {
                   const SizedBox(height: 6),
                   if (dir != null)
                     SelectableText(
-                      dir,
+                      "wuxingxiangqi",//dir,
                       style: const TextStyle(
                         fontSize: 13.5,
                         color: Color(0xFF3A2410),
