@@ -86,7 +86,15 @@ class GameScreen extends StatelessWidget {
               ],
             )
           : null,
-      body: SafeArea(
+      body: Container(
+        // 打谱页背景图
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/bg/default.jpeg'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: SafeArea(
         child: Column(
           children: [
             // 对弈模式顶部：对手头像框（点击可更换对手）
@@ -137,6 +145,7 @@ class GameScreen extends StatelessWidget {
                 ),
               ),
           ],
+        ),
         ),
       ),
       // 监听结束态，触发弹窗
