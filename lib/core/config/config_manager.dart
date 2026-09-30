@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -248,7 +249,9 @@ class ConfigManager extends ChangeNotifier {
 
   /// 将应用数据目录（`wuxingxiangqi`）打包为 zip 并保存到系统下载目录。
   ///
-  /// 返回保存的 zip 文件路径。若数据目录不存在或为空则抛出异常。
+  /// Android 平台通过 MediaStore.Downloads 写入（无需权限），返回
+  /// "Download/<文件名>" 形式的相对路径；其它平台直接写入系统下载目录，
+  /// 返回完整路径。若数据目录不存在或为空则抛出异常。
   Future<String> backupData() async {
     final srcDir = Directory(await dataDirPath);
     if (!await srcDir.exists()) {
@@ -269,15 +272,43 @@ class ConfigManager extends ChangeNotifier {
       throw Exception('应用数据目录为空，无需备份');
     }
     final zipBytes = ZipEncoder().encode(archive);
-    // 保存到系统下载目录
+    final stamp = DateTime.now().toString().substring(0, 19).replaceAll(
+        RegExp(r'[: ]'), '-');
+    final fileName = 'wuxingxiangqi_$stamp.zip';
+
+    if (Platform.isAndroid) {
+      // Android 10+：通过 MediaStore.Downloads 写入公共下载目录，
+      // 无需 WRITE_EXTERNAL_STORAGE 权限。文件名冲突时系统自动追加序号。
+      // Android 9 及以下不支持 MediaStore.Downloads，回退到直接写
+      // /storage/emulated/0/Download（需要 WRITE_EXTERNAL_STORAGE 权限）。
+      try {
+        const channel = MethodChannel('com.xmalloc.wuxingxiangqi/appdirs');
+        final relPath = await channel.invokeMethod<String>('writeToDownloads', {
+          'fileName': fileName,
+          'bytes': zipBytes,
+        });
+        if (relPath == null) throw Exception('写入下载目录失败');
+        return relPath;
+      } on PlatformException {
+        // MediaStore.Downloads 不可用（Android 9 及以下），走传统路径
+        final downloadsDir = Directory('/storage/emulated/0/Download');
+        if (!await downloadsDir.exists()) {
+          throw Exception('无法获取系统下载目录');
+        }
+        final zipFile = File(
+            '${downloadsDir.path}${Platform.pathSeparator}$fileName');
+        await zipFile.writeAsBytes(zipBytes);
+        return zipFile.path;
+      }
+    }
+
+    // 其它平台：直接写入系统下载目录
     final downloadsDir = await getDownloadsDirectory();
     if (downloadsDir == null) {
       throw Exception('无法获取系统下载目录');
     }
-    final stamp = DateTime.now().toString().substring(0, 19).replaceAll(
-        RegExp(r'[: ]'), '-');
     final zipFile = File(
-        '${downloadsDir.path}${Platform.pathSeparator}wuxingxiangqi_$stamp.zip');
+        '${downloadsDir.path}${Platform.pathSeparator}$fileName');
     await zipFile.writeAsBytes(zipBytes);
     return zipFile.path;
   }
