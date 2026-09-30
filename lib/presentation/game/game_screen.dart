@@ -5,6 +5,7 @@ import '../../domain/models/piece.dart';
 import '../../domain/models/position.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/config_manager.dart';
+import '../../core/constants/board_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../canju/canju_controller.dart';
 import '../canju/canju_level_dialog.dart';
@@ -32,15 +33,17 @@ enum GameScreenMode {
   canju,
 }
 
-/// 主页面：拼装棋盘 + 结束弹窗。
+/// 主页面：拼装棋盘 + 结束弹窗，自适应横竖屏布局。
 ///
 /// 页面组件按状态分组：
 /// - 残局专用：AppBar（含返回与残局标题）、_CanjuBar（上一局/下一局）；
 /// - 分析专用：_AiConfigRow（AI 开关/重开/返回）、ReviewPanel
 ///   （棋谱注释 / 引擎 / 云库三标签）。
 ///
-/// 残局状态显示 AppBar + 棋盘 + _CanjuBar；分析与对弈状态显示
-/// _AiConfigRow + 棋盘 + ReviewPanel。
+/// 自适应布局（[LayoutBuilder] 判定）：
+/// - 竖屏（高 ≥ 宽）：保持上下布局——顶部条 + 棋盘 + 底部条 + 打谱面板；
+/// - 横屏（宽 > 高）：棋盘独占左侧尽量放大，其余组件按原顺序放右侧，
+///   形成左右主要布局。
 class GameScreen extends StatelessWidget {
   GameScreen({super.key});
 
@@ -54,7 +57,6 @@ class GameScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<GameController>();
-    final state = controller.state;
     // 残局模式下注入了 CanjuController；分析/对弈模式下未注入，这里取不到。
     final canju = _tryWatchCanju(context);
     // 对弈模式：由 GameController.playMode 控制，隐藏全部工具条与面板
@@ -95,62 +97,128 @@ class GameScreen extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-        child: Column(
-          children: [
-            // 对弈模式顶部：对手头像框（点击可更换对手）
-            if (isPlay) _PlayOpponentBar(controller: controller),
-            // 非残局非对弈：顶部 AI 配置条
-            if (!isCanju && !isPlay)
-              _AiConfigRow(
-                controller: controller,
-              ),
-            // 上半部分：棋盘（整体可缩放，五角星把手上下拖动调整大小）
-            // 对弈模式下隐藏缩放把手
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-              child: _ScalableBoard(
-                showHandle: !isCanju && !isPlay,
-                boardAreaKey: boardAreaKey,
-                // 打谱页棋盘滑动：上滑前进一步，下滑后退一步
-                onSwipeUp:
-                    (!isCanju && !isPlay) ? controller.goForward : null,
-                onSwipeDown:
-                    (!isCanju && !isPlay) ? controller.goBack : null,
-                child: BoardWidget(
-                  key: boardKey,
-                  board: state.board,
-                  selected: state.selected,
-                  hints: controller.selectedHints.toSet(),
-                  onTap: controller.onTap,
-                  branchMarkers: _buildBranchMarkers(controller),
-                  onBranchTap: controller.selectBranch,
-                  analysisArrows: _buildAnalysisArrows(controller),
-                  lastMove: _lastMoveOf(controller),
-                  hintArrow: controller.hintMark,
-                  flipped: controller.boardFlipped,
-                  moveAnim: controller.moveAnim,
-                ),
-              ),
-            ),
-            // 残局切换条（上一局/下一局），位于棋盘下方
-            if (isCanju) _CanjuBar(controller: canju!),
-            // 对弈模式控制区：悔棋按钮 + 执子方选择/退出
-            if (isPlay) _PlayControls(controller: controller),
-            // 下半部分：三标签打谱面板（占据棋盘外剩余的全部空间）
-            if (!isCanju && !isPlay)
-              Expanded(
-                child: ReviewPanel(
-                  controller: controller,
-                  boardAreaKey: boardAreaKey,
-                ),
-              ),
-          ],
-        ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // 提取的通用组件
+              final topBar = _buildTopBar(controller, isPlay, isCanju);
+              final bottomBar =
+                  _buildBottomBar(controller, canju, isPlay, isCanju);
+              final review =
+                  (!isCanju && !isPlay) ? _buildReviewPanel(controller) : null;
+              final board = _buildBoard(controller, isPlay, isCanju);
+
+              // 竖屏（高 ≥ 宽）：保持原有上下布局
+              if (constraints.maxWidth <= constraints.maxHeight) {
+                return Column(
+                  children: [
+                    ?topBar,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: board,
+                    ),
+                    ?bottomBar,
+                    if (review != null) Expanded(child: review),
+                  ],
+                );
+              }
+
+              // 横屏（宽 > 高）：棋盘独占左侧放大，其余组件按原顺序放右侧
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: SizedBox(
+                      width: _landscapeBoardWidth(constraints),
+                      child: board,
+                    ),
+                  ),
+                  const VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: Color(0x44C9B68C),
+                  ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        ?topBar,
+                        ?bottomBar,
+                        if (review != null) Expanded(child: review),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
       // 监听结束态，触发弹窗
       floatingActionButton: _ResultWatcher(boardKey: boardKey),
     );
+  }
+
+  /// 顶部工具条：对弈模式显示对手头像框，分析模式显示 AI 配置条，
+  /// 残局模式无顶部条（残局标题在 AppBar 中）。
+  Widget? _buildTopBar(GameController controller, bool isPlay, bool isCanju) {
+    if (isPlay) return _PlayOpponentBar(controller: controller);
+    if (!isCanju && !isPlay) return _AiConfigRow(controller: controller);
+    return null;
+  }
+
+  /// 棋盘下方组件：残局切换条 / 对弈控制区；分析模式为 null。
+  Widget? _buildBottomBar(GameController controller, CanjuController? canju,
+      bool isPlay, bool isCanju) {
+    if (isCanju) return _CanjuBar(controller: canju!);
+    if (isPlay) return _PlayControls(controller: controller);
+    return null;
+  }
+
+  /// 打谱面板（棋谱注释 / 引擎 / 云库三标签），仅分析模式显示。
+  Widget _buildReviewPanel(GameController controller) {
+    return ReviewPanel(controller: controller, boardAreaKey: boardAreaKey);
+  }
+
+  /// 棋盘区域（可整体缩放 + 滑动翻谱），竖屏横屏共用。
+  Widget _buildBoard(GameController controller, bool isPlay, bool isCanju) {
+    final state = controller.state;
+    return _ScalableBoard(
+      showHandle: !isCanju && !isPlay,
+      boardAreaKey: boardAreaKey,
+      // 打谱页棋盘滑动：上滑前进一步，下滑后退一步
+      onSwipeUp: (!isCanju && !isPlay) ? controller.goForward : null,
+      onSwipeDown: (!isCanju && !isPlay) ? controller.goBack : null,
+      child: BoardWidget(
+        key: boardKey,
+        board: state.board,
+        selected: state.selected,
+        hints: controller.selectedHints.toSet(),
+        onTap: controller.onTap,
+        branchMarkers: _buildBranchMarkers(controller),
+        onBranchTap: controller.selectBranch,
+        analysisArrows: _buildAnalysisArrows(controller),
+        lastMove: _lastMoveOf(controller),
+        hintArrow: controller.hintMark,
+        flipped: controller.boardFlipped,
+        moveAnim: controller.moveAnim,
+      ),
+    );
+  }
+
+  /// 横屏模式下左侧棋盘区的宽度：按可用高度反推棋盘最大宽度，使
+  /// 棋盘尽量占满高度；同时不超过总宽度的一半。
+  ///
+  /// 棋盘画布高 = (宽 - 2×边距) × (行数-1+棋子比例) / (列数-1+棋子比例)
+  /// + 2×边距（[BoardLayout.sizeForWidth] 的反推）。
+  double _landscapeBoardWidth(BoxConstraints constraints) {
+    const cols = BoardConstants.columnCount - 1 + BoardLayout.pieceRatio;
+    const rows = BoardConstants.rowCount - 1 + BoardLayout.pieceRatio;
+    // 扣除棋盘区上下各 4px 边距与 2px 余量
+    final availH = constraints.maxHeight - 10;
+    var w = (availH - BoardLayout.outerMargin * 2) * cols / rows +
+        BoardLayout.outerMargin * 2;
+    final maxW = constraints.maxWidth * 0.5;
+    return w > maxW ? maxW : w;
   }
 
   /// 取可选的 [CanjuController]：残局模式返回实例，其它模式返回 null。
