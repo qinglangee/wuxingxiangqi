@@ -66,7 +66,30 @@ class HomeScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+                  // 底部「软件介绍」链接式按钮
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () =>
+                          Navigator.of(context).pushNamed('/instruction'),
+                      icon: const Icon(Icons.info_outline, size: 18),
+                      label: const Text(
+                        '软件介绍',
+                        style: TextStyle(
+                          fontSize: 14,
+                          decoration: TextDecoration.underline,
+                          decorationColor: Color(0xFF8B6B3D),
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF8B6B3D),
+                        minimumSize: const Size(0, 40),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),

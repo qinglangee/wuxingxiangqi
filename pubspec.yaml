@@ -16,6 +16,7 @@ dependencies:
   gbk_codec: ^0.4.0
   audioplayers: ^6.8.1
   archive: ^4.0.0
+  flutter_markdown: ^0.7.7+1
 
 dev_dependencies:
   flutter_test:
@@ -36,6 +37,7 @@ flutter:
     - assets/images/pieces/红绿石头/
     - assets/canju/
     - assets/sounds/chess/
+    - assets/markdown/
 
 # 应用图标生成配置（运行 dart run flutter_launcher_icons 生效）
 flutter_launcher_icons:

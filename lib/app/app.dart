@@ -8,6 +8,7 @@ import '../presentation/canju/canju_controller.dart';
 import '../presentation/controllers/game_controller.dart';
 import '../presentation/game/game_screen.dart';
 import '../presentation/home/home_screen.dart';
+import '../presentation/home/instruction_screen.dart';
 import '../presentation/library/notation_manager_widget.dart'
     show NotationManagerScreen;
 import '../presentation/session/game_session_store.dart';
@@ -109,6 +110,7 @@ class App extends StatelessWidget {
           );
         },
         '/settings': (_) => const SettingsScreen(),
+        '/instruction': (_) => const InstructionScreen(),
         // 棋谱管理页面：参数为 String 时表示起始目录（默认 books 根）；
         // 参数为 (String root, String? label) 记录时以 root 为浏览根目录
         // （用于外部棋谱仓库）。
