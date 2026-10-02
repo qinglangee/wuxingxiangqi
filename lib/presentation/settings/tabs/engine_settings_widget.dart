@@ -232,54 +232,6 @@ class _EvalFileTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 11.5, color: Color(0xFF8B6B4A)),
           ),
-          // 未配置时，除了「选择文件」按钮，也提示可自行把文件放到
-          // 应用默认数据目录（放好后引擎下次启动会自动识别）。
-          if (!ready) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF4DC),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFFE0C486)),
-              ),
-              child: FutureBuilder<String>(
-                future: EvalFileService.canonicalPath(),
-                builder: (context, snapshot) {
-                  final target = snapshot.data;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '也可以自行把 pikafish.nnue 权重文件放到以下位置，'
-                        '应用下次使用引擎时会自动识别：',
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            color: Color(0xFF6B4A28),
-                            height: 1.45),
-                      ),
-                      const SizedBox(height: 4),
-                      if (target != null)
-                        SelectableText(
-                          target,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: Color(0xFF3A2410),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      else
-                        const Text(
-                          '路径读取中…',
-                          style: TextStyle(
-                              fontSize: 11.5, color: Color(0xFFB0A48A)),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
         ],
       ),
     );
