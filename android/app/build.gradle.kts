@@ -45,6 +45,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // 编译出的 apk 文件名前缀：app → 五星象棋
+    // 输出形如：五星象棋-release.apk / 五星象棋-debug.apk
+    applicationVariants.all {
+        outputs.all {
+            if (this is com.android.build.gradle.internal.api.ApkVariantOutputImpl) {
+                outputFileName = outputFileName.replaceFirst("^app", "五星象棋")
+            }
+        }
+    }
 }
 
 kotlin {
