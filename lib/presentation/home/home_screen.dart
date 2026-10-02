@@ -31,69 +31,125 @@ class HomeScreen extends StatelessWidget {
         ),
         child: SafeArea(
           child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(
-                children: [
-                  const SizedBox(height: 56),
-                  _buildTitleBar(context),
-                  const SizedBox(height: 48),
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      children: [
-                        _MenuCard(
-                          title: '棋谱',
-                          subtitle: '收藏与浏览经典棋谱',
-                          icon: const _MenuImage('assets/images/app/item01.jpg'),
-                          onTap: () => _openNotationManager(context),
-                        ),
-                        const SizedBox(height: 24),
-                        _MenuCard(
-                          title: '残局',
-                          subtitle: '练习经典残局破解',
-                          icon: const _MenuImage('assets/images/app/item02.jpg'),
-                          onTap: () => _openCanju(context),
-                        ),
-                        const SizedBox(height: 24),
-                        _MenuCard(
-                          title: '打谱',
-                          subtitle: '开始一局新棋',
-                          icon: const _MenuImage('assets/images/app/item03.jpg'),
-                          highlight: true,
-                          onTap: () => Navigator.of(context).pushNamed('/play'),
-                        ),
-                      ],
-                    ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isLandscape =
+                    constraints.maxWidth > constraints.maxHeight;
+                return ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: isLandscape ? double.infinity : 480,
                   ),
-                  const SizedBox(height: 16),
-                  // 底部「软件介绍」链接式按钮
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () =>
-                          Navigator.of(context).pushNamed('/instruction'),
-                      icon: const Icon(Icons.info_outline, size: 18),
-                      label: const Text(
-                        '软件介绍',
-                        style: TextStyle(
-                          fontSize: 14,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Color(0xFF8B6B3D),
-                        ),
+                  child: Column(
+                    children: [
+                      SizedBox(height: isLandscape ? 16 : 56),
+                      _buildTitleBar(context),
+                      SizedBox(height: isLandscape ? 16 : 48),
+                      Expanded(
+                        child: isLandscape
+                            ? _buildLandscapeCards(context)
+                            : _buildPortraitCards(context),
                       ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF8B6B3D),
-                        minimumSize: const Size(0, 40),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
+                      const SizedBox(height: 16),
+                      _buildFooter(context),
+                      SizedBox(height: isLandscape ? 12 : 20),
+                    ],
                   ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                );
+              },
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 竖屏：三个菜单卡片垂直排列。
+  Widget _buildPortraitCards(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      children: [
+        _MenuCard(
+          title: '棋谱',
+          subtitle: '收藏与浏览经典棋谱',
+          icon: const _MenuImage('assets/images/app/item01.jpg'),
+          onTap: () => _openNotationManager(context),
+        ),
+        const SizedBox(height: 24),
+        _MenuCard(
+          title: '残局',
+          subtitle: '练习经典残局破解',
+          icon: const _MenuImage('assets/images/app/item02.jpg'),
+          onTap: () => _openCanju(context),
+        ),
+        const SizedBox(height: 24),
+        _MenuCard(
+          title: '打谱',
+          subtitle: '开始一局新棋',
+          icon: const _MenuImage('assets/images/app/item03.jpg'),
+          highlight: true,
+          onTap: () => Navigator.of(context).pushNamed('/play'),
+        ),
+      ],
+    );
+  }
+
+  /// 横屏：三个菜单卡片水平并排。
+  Widget _buildLandscapeCards(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Row(
+        children: [
+          Expanded(
+            child: _MenuCard(
+              title: '棋谱',
+              subtitle: '收藏与浏览经典棋谱',
+              icon: const _MenuImage('assets/images/app/item01.jpg'),
+              onTap: () => _openNotationManager(context),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: _MenuCard(
+              title: '残局',
+              subtitle: '练习经典残局破解',
+              icon: const _MenuImage('assets/images/app/item02.jpg'),
+              onTap: () => _openCanju(context),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: _MenuCard(
+              title: '打谱',
+              subtitle: '开始一局新棋',
+              icon: const _MenuImage('assets/images/app/item03.jpg'),
+              highlight: true,
+              onTap: () => Navigator.of(context).pushNamed('/play'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 底部「软件介绍」链接式按钮。
+  Widget _buildFooter(BuildContext context) {
+    return Center(
+      child: TextButton.icon(
+        onPressed: () => Navigator.of(context).pushNamed('/instruction'),
+        icon: const Icon(Icons.info_outline, size: 18),
+        label: const Text(
+          '软件介绍',
+          style: TextStyle(
+            fontSize: 14,
+            decoration: TextDecoration.underline,
+            decorationColor: Color(0xFF8B6B3D),
+          ),
+        ),
+        style: TextButton.styleFrom(
+          foregroundColor: const Color(0xFF8B6B3D),
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
     );
