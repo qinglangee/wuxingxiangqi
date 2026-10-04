@@ -70,14 +70,14 @@ class HomeScreen extends StatelessWidget {
       children: [
         _MenuCard(
           title: '棋谱',
-          subtitle: '收藏与浏览经典棋谱',
+          subtitle: '收藏与浏览棋谱',
           icon: const _MenuImage('assets/images/app/item01.jpg'),
           onTap: () => _openNotationManager(context),
         ),
         const SizedBox(height: 24),
         _MenuCard(
           title: '残局',
-          subtitle: '练习经典残局破解',
+          subtitle: '练习残局破解',
           icon: const _MenuImage('assets/images/app/item02.jpg'),
           onTap: () => _openCanju(context),
         ),
@@ -102,7 +102,7 @@ class HomeScreen extends StatelessWidget {
           Expanded(
             child: _MenuCard(
               title: '棋谱',
-              subtitle: '收藏与浏览经典棋谱',
+              subtitle: '收藏与浏览棋谱',
               icon: const _MenuImage('assets/images/app/item01.jpg'),
               onTap: () => _openNotationManager(context),
             ),
@@ -111,7 +111,7 @@ class HomeScreen extends StatelessWidget {
           Expanded(
             child: _MenuCard(
               title: '残局',
-              subtitle: '练习经典残局破解',
+              subtitle: '练习残局破解',
               icon: const _MenuImage('assets/images/app/item02.jpg'),
               onTap: () => _openCanju(context),
             ),
