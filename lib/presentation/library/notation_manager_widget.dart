@@ -358,13 +358,19 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     });
   }
 
-  /// 批量移动：弹出目标目录选择器（可在内置 books 与已配置的外部仓库
+  /// 多选入口：移动全部选中项。
+  Future<void> _moveSelected() async {
+    if (_selected.isEmpty) return;
+    await _movePaths(_selected.toList());
+    _exitMultiSelect();
+  }
+
+  /// 移动给定条目：弹出目标目录选择器（可在内置 books 与已配置的外部仓库
   /// 两个根之间切换）→ 校验目标可写（必要时引导授权）→ 逐项移动；
   /// 跨文件系统 rename 失败时退回复制+删除。同名冲突或失败的项收集后
-  /// 统一提示。
-  Future<void> _moveSelected() async {
-    if (_rootPath == null || _selected.isEmpty) return;
-    final sources = _selected.toList();
+  /// 统一提示。多选操作与单条目操作菜单共用。
+  Future<void> _movePaths(List<String> sources) async {
+    if (_rootPath == null || sources.isEmpty) return;
 
     // 构建可选根列表：当前根 + 另一个根（books ↔ 外部仓库）
     final roots = <({String path, String label})>[
@@ -445,7 +451,6 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
         failed.add('$name：移动失败（$e）');
       }
     }
-    _exitMultiSelect();
     await _reload();
     if (!mounted) return;
     if (failed.isEmpty) {
@@ -503,10 +508,15 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     }
   }
 
-  /// 改名（仅单个选中项可用）。
+  /// 多选入口：改名（仅单个选中项可用）。
   Future<void> _renameSelected() async {
     if (_selected.length != 1) return;
-    final src = _selected.single;
+    await _renamePath(_selected.single);
+    _exitMultiSelect();
+  }
+
+  /// 对给定条目重命名（多选操作与单条目操作菜单共用）。
+  Future<void> _renamePath(String src) async {
     final oldName = src.split(Platform.pathSeparator).last;
     final controller = TextEditingController(text: oldName);
     final newName = await showDialog<String>(
@@ -559,21 +569,33 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
       showErrorDialog(context, '重命名失败：$e');
       return;
     }
-    _exitMultiSelect();
     await _reload();
   }
 
-  /// 批量删除：确认后执行；目录递归删除。
+  /// 多选入口：删除全部选中项。
   Future<void> _deleteSelected() async {
     if (_selected.isEmpty) return;
-    final count = _selected.length;
+    await _deletePaths(_selected);
+    _exitMultiSelect();
+  }
+
+  /// 删除给定条目：确认后执行；目录递归删除（多选操作与单条目操作
+  /// 菜单共用）。
+  Future<void> _deletePaths(Set<String> paths) async {
+    if (paths.isEmpty) return;
+    final count = paths.length;
+    final name = count == 1
+        ? paths.single.split(Platform.pathSeparator).last
+        : '';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除确认'),
         content: Text(
-          '确定删除选中的 $count 项吗？\n\n'
-          '目录将被连同其内部全部内容一起删除，此操作不可恢复。',
+          count == 1
+              ? '确定删除「$name」吗？\n\n如果是目录，将连同其内部全部内容一起删除，此操作不可恢复。'
+              : '确定删除选中的 $count 项吗？\n\n'
+                  '目录将被连同其内部全部内容一起删除，此操作不可恢复。',
         ),
         actions: [
           TextButton(
@@ -589,7 +611,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     );
     if (ok != true || !mounted) return;
     final failed = <String>[];
-    for (final p in _selected) {
+    for (final p in paths) {
       try {
         final type = await FileSystemEntity.type(p);
         if (type == FileSystemEntityType.directory) {
@@ -601,7 +623,6 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
         failed.add('${p.split(Platform.pathSeparator).last}：$e');
       }
     }
-    _exitMultiSelect();
     await _reload();
     if (failed.isNotEmpty && mounted) {
       await showDialog<void>(
@@ -880,6 +901,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
       leading: icon,
       title: Text(name, overflow: TextOverflow.ellipsis),
       subtitle: subtitle,
+      trailing: _buildItemActions(path),
       dense: true,
       onTap: () {
         if (isDir) {
@@ -889,6 +911,47 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
         }
       },
       onLongPress: () => _startMultiSelect(path),
+    );
+  }
+
+  /// 单个条目尾部的操作菜单：移动 / 改名 / 删除（合谱仅在多选栏提供）。
+  Widget _buildItemActions(String path) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 20),
+      tooltip: '操作',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 132),
+      onSelected: (v) {
+        switch (v) {
+          case 'move':
+            _movePaths([path]);
+          case 'rename':
+            _renamePath(path);
+          case 'delete':
+            _deletePaths({path});
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: 'move',
+          child: _ActionMenuItem(
+            icon: Icons.drive_file_move,
+            label: '移动',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'rename',
+          child: _ActionMenuItem(icon: Icons.edit, label: '改名'),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: _ActionMenuItem(
+            icon: Icons.delete_outline,
+            label: '删除',
+            color: Color(0xFFC62828),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1281,6 +1344,34 @@ class _MergeProgressDialogState extends State<_MergeProgressDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 单条目操作菜单项
+// ---------------------------------------------------------------------------
+
+/// 操作弹出菜单中的图标 + 文字条目。
+class _ActionMenuItem extends StatelessWidget {
+  const _ActionMenuItem({
+    required this.icon,
+    required this.label,
+    this.color = const Color(0xFF5A3A1A),
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 10),
+        Text(label, style: TextStyle(fontSize: 14, color: color)),
+      ],
     );
   }
 }
