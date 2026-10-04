@@ -396,7 +396,8 @@ class GameController extends ChangeNotifier {
       _current = node;
       _restoreStateFromCurrent();
       final coord = coords[i];
-      if (!_applyAndRecord(coord.from, coord.to, selectAsMain: false)) {
+      if (!_applyAndRecord(coord.from, coord.to,
+          selectAsMain: false, silent: true)) {
         // 理论上不会发生（resolve 已验证），这里做防御性兜底
         throw NotationParseException(
           '$where第 ${i + 1} 步着法不符合规则：${line[i].moveText}',
@@ -1187,10 +1188,13 @@ class GameController extends ChangeNotifier {
 
   /// 执行走法并写入棋谱树。
   ///
-  /// 若当前节点已有续着（后退后另走），新走法作为分支加入，
+  /// 若当前节点已存在续着（后退后另走），新走法作为分支加入，
   /// 且前进指针自动指向新分支。
+  ///
+  /// [silent] 为 true 时不播放走子音效——仅用于加载棋谱时批量建树
+  /// （主线与全部变着），避免一局棋谱触发一连串音效。
   bool _applyAndRecord(Position from, Position to,
-      {bool animate = false, bool selectAsMain = true}) {
+      {bool animate = false, bool selectAsMain = true, bool silent = false}) {
     final before = _state.board.clone();
     final moving = before.pieceAt(from);
     if (moving == null) return false;
@@ -1225,7 +1229,7 @@ class GameController extends ChangeNotifier {
             .add(kMoveAnimFrameSlack);
       }
       // 复用已有节点：终局计数不重复增加（该节点早已记录过结果）
-      _playMoveSound(captured);
+      if (!silent) _playMoveSound(captured);
       boardChange.emit();
       return true;
     }
@@ -1255,7 +1259,7 @@ class GameController extends ChangeNotifier {
       selectAsMain: selectAsMain,
     );
     if (_state.isOver) _resultTick++;
-    _playMoveSound(captured);
+    if (!silent) _playMoveSound(captured);
     // 走子完成 = 走棋方改变（loadParsedGame 批量回放时的连续通知
     // 由订阅方的 FEN 门控与防抖自然合并）
     boardChange.emit();
