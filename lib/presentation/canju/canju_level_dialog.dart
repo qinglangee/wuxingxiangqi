@@ -49,6 +49,31 @@ class _CanjuLevelDialogState extends State<CanjuLevelDialog> {
   late final ScrollController _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // 网格渲染完成后自动滚动到当前选中项
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final idx = widget.currentIndex;
+      if (idx != null && _scrollController.hasClients) {
+        // 每行 5 个，计算选中项所在行，滚动到该行顶部
+        const crossAxisCount = 5;
+        final row = idx ~/ crossAxisCount;
+        // 估算每行高度（含间距）：childAspectRatio 1.2，宽度按比例
+        final itemWidth =
+            (_scrollController.position.viewportDimension - 12 * 2) /
+                crossAxisCount;
+        final itemHeight = itemWidth / 1.2;
+        const mainAxisSpacing = 10.0;
+        final target = (row * (itemHeight + mainAxisSpacing)).clamp(
+          0.0,
+          _scrollController.position.maxScrollExtent,
+        );
+        _scrollController.jumpTo(target);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();

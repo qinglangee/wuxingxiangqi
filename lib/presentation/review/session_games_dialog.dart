@@ -8,7 +8,7 @@ import '../../../core/theme/app_theme.dart';
 /// 文件（打开棋谱时同目录下的全部棋谱，名称升序），当前局高亮。
 ///
 /// 点击条目后通过 [Navigator.pop] 返回所选下标（0-based），取消返回 null。
-class SessionGamesDialog extends StatelessWidget {
+class SessionGamesDialog extends StatefulWidget {
   const SessionGamesDialog({
     super.key,
     required this.paths,
@@ -38,6 +38,36 @@ class SessionGamesDialog extends StatelessWidget {
 
   static String _fileNameOf(String path) =>
       path.split(Platform.pathSeparator).last;
+
+  @override
+  State<SessionGamesDialog> createState() => _SessionGamesDialogState();
+}
+
+class _SessionGamesDialogState extends State<SessionGamesDialog> {
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // 列表渲染完成后自动滚动到当前选中项
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final idx = widget.currentIndex;
+      if (idx != null && _scrollController.hasClients) {
+        const itemHeight = 48.0; // 每项估算高度（dense ListTile + margin）
+        final target = (idx * itemHeight).clamp(
+          0.0,
+          _scrollController.position.maxScrollExtent,
+        );
+        _scrollController.jumpTo(target);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +112,7 @@ class SessionGamesDialog extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '共 ${paths.length} 局',
+            '共 ${widget.paths.length} 局',
             style: const TextStyle(fontSize: 12, color: Color(0xFFF5E6C8)),
           ),
           const SizedBox(width: 8),
@@ -99,7 +129,7 @@ class SessionGamesDialog extends StatelessWidget {
   }
 
   Widget _buildList(BuildContext context) {
-    if (paths.isEmpty) {
+    if (widget.paths.isEmpty) {
       return const Center(
         child: Text(
           '当前会话没有棋谱列表',
@@ -108,14 +138,15 @@ class SessionGamesDialog extends StatelessWidget {
       );
     }
     return ListView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.all(8),
-      itemCount: paths.length,
+      itemCount: widget.paths.length,
       itemBuilder: (ctx, i) {
-        final name = _fileNameOf(paths[i]);
+        final name = SessionGamesDialog._fileNameOf(widget.paths[i]);
         final dot = name.lastIndexOf('.');
         final title = dot > 0 ? name.substring(0, dot) : name;
         final ext = dot > 0 ? name.substring(dot + 1).toUpperCase() : '';
-        final isCurrent = i == currentIndex;
+        final isCurrent = i == widget.currentIndex;
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 2),
           decoration: BoxDecoration(
