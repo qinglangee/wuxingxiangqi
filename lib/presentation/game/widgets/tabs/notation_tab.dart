@@ -280,7 +280,7 @@ class _MoveRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (node.parent!.children.length > 1)
+            if (node.parent!.children.length > 1 || node.children.length > 1)
               // 分支标记：圆角背景上显示「分支总数 + 当前分支序号字母」
               Container(
                 margin: const EdgeInsets.only(left: 4),
@@ -291,8 +291,8 @@ class _MoveRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${node.children.length}'
-                  '${branchLetter(node.parent!.children.indexOf(node))}',
+                  '${node.parent!.children.length > 1 ? branchLetter(node.parent!.children.indexOf(node)) : ''}'
+                  '${node.children.length > 1 ? node.children.length : ''}',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
