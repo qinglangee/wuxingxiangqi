@@ -1,14 +1,26 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 
-/// 音效播放服务：走子 / 吃子 / 游戏结束的自定义音效。
+/// 音效播放服务：走子 / 吃子 / 将军 / 终局等音效。
 ///
-/// 单播放器模式：只维护一个常驻 [AudioPlayer]，所有音效共用。
-/// 播放前先把该 player 停掉（无论当前是否在播），再切到新音效源播放，
-/// 保证每次请求都能立即出声、不受前一次播放状态影响。
+/// 多播放器模式：每个音效维护一个**独立且常驻**的 [AudioPlayer]，
+/// 在 [preload] 阶段一次性完成：
+/// 1. 音频文件解码进 [AudioCache]（只读一次盘）；
+/// 2. 对每个 player `setSource` 预置好声源；
+/// 3. 统一设置低延迟模式 + [ReleaseMode.stop]，使播放结束后只暂停回零、
+///    声源继续常驻内存（默认的 release 模式播完即释放声源）。
 ///
-/// 音效数据在 [preload] 时缓存到 [AudioCache]，播放时直接通过缓存键
-/// 引用，避免重复解码。
+/// 播放时只做 `stop() + resume()`，不再临时切换声源，因此：
+/// - 不同音效各用各的 player，可并发播放、互不打断、不争用同一文件句柄
+///   （避免 Windows 上并发访问缓存文件的 errno 32 锁冲突）；
+/// - 同一音效被快速连续触发时，仅重启自己的 player，延迟最低；
+/// - 每个 player 有独立的串行链，保证同一音效快速连点时 stop/resume
+///   按序执行；不同音效之间不互相排队阻塞。
+///
+/// 注意：不能用 Dart 层的 `seek(0)` 重启——Android 低延迟模式底层是
+/// SoundPool，不会回调 `onSeekComplete`，Dart 端 `seek()` 会等到超时；
+/// 而原生 `stop()` 在 stop 释放模式下内部即「暂停 + 回零」，不涉及该事件。
+/// 这与官方 audioplayers 为短促音效提供的 AudioPool 做法一致。
 class SoundService {
   SoundService._();
 
@@ -22,66 +34,102 @@ class SoundService {
   static const _chuaPath = '$_dir/chua.mp3';
   static const _errorPath = '$_dir/error.mp3';
 
-  static final AudioPlayer _player = AudioPlayer();
   static final AudioCache _cache = AudioCache(prefix: 'assets/');
   static bool _preloaded = false;
+
+  /// 每个音效一个独立播放器，声源在预加载阶段一次性预置。
+  /// 共用同一个 [_cache]，预热与实际播放命中同一份缓存文件，避免重复拷贝。
+  static AudioPlayer _newPlayer() => AudioPlayer()..audioCache = _cache;
+  static final AudioPlayer _movePlayer = _newPlayer();
+  static final AudioPlayer _eatPlayer = _newPlayer();
+  static final AudioPlayer _checkPlayer = _newPlayer();
+  static final AudioPlayer _winPlayer = _newPlayer();
+  static final AudioPlayer _alarmPlayer = _newPlayer();
+  static final AudioPlayer _chuaPlayer = _newPlayer();
+  static final AudioPlayer _errorPlayer = _newPlayer();
 
   /// 每次播放「游戏结束」音效时自增，供 UI 监听以同步播放绝杀动画等。
   static final ValueNotifier<int> winTick = ValueNotifier(0);
 
-  /// 预加载三个音效到缓存并初始化播放器。
+  /// 预加载：解码全部音效到缓存，并为每个播放器预置声源。
   static Future<void> preload() async {
     if (_preloaded) return;
     _preloaded = true;
-    _player.setPlayerMode(PlayerMode.lowLatency);
-    // 预热缓存：把音频文件解码进内存，播放时不再读盘
+
+    const paths = [
+      _movePath,
+      _eatPath,
+      _checkPath,
+      _winPath,
+      _alarmPath,
+      _chuaPath,
+      _errorPath,
+    ];
+    // 1) 统一低延迟模式 + stop 释放模式：播完只暂停回零，声源常驻不销毁
+    for (final p in _allPlayers) {
+      await p.setPlayerMode(PlayerMode.lowLatency);
+      await p.setReleaseMode(ReleaseMode.stop);
+    }
+    // 2) 音频文件解码进内存缓存（各文件并行加载，只读一次盘）
+    await Future.wait(paths.map((f) => _cache.load(f)));
+    // 3) 每个播放器预置自己的声源，之后播放无需再读文件
     await Future.wait([
-      _cache.load(_movePath),
-      _cache.load(_eatPath),
-      _cache.load(_checkPath),
-      _cache.load(_winPath),
-      _cache.load(_alarmPath),
-      _cache.load(_chuaPath),
-      _cache.load(_errorPath),
+      for (var i = 0; i < paths.length; i++)
+        _allPlayers[i].setSource(AssetSource(paths[i])),
     ]);
   }
 
   /// 走子音效。
-  static void playMove() => _play(_movePath);
+  static void playMove() => _restart(_movePlayer);
 
   /// 吃子音效。
-  static void playEat() => _play(_eatPath);
+  static void playEat() => _restart(_eatPlayer);
 
   /// 将军音效。
-  static void playCheck() => _play(_checkPath);
+  static void playCheck() => _restart(_checkPlayer);
 
   /// 游戏结束音效。
   static void playWin() {
     winTick.value++;
-    _play(_winPath);
+    _restart(_winPlayer);
   }
 
   /// 取消选中提示音效。
-  static void playAlarm() => _play(_alarmPath);
+  static void playAlarm() => _restart(_alarmPlayer);
 
   /// 切换分析状态音效。
-  static void playChua() => _play(_chuaPath);
+  static void playChua() => _restart(_chuaPlayer);
 
   /// 走子错误提示音效（如背谱时走了与棋谱不一致的着法）。
-  static void playError() => _play(_errorPath);
+  static void playError() => _restart(_errorPlayer);
 
-  /// 串行化播放队列：前一次 stop+play 完成后才执行下一次，
-  /// 避免多个 play 并发访问同一缓存文件导致 Windows 文件锁冲突。
-  static Future<void> _playQueue = Future.value();
+  static List<AudioPlayer> get _allPlayers => [
+        _movePlayer,
+        _eatPlayer,
+        _checkPlayer,
+        _winPlayer,
+        _alarmPlayer,
+        _chuaPlayer,
+        _errorPlayer,
+      ];
 
-  static void _play(String path) {
-    _playQueue = _playQueue.then((_) async {
-      // 无论当前状态（idle/playing/completed/paused）都先停掉，
-      // 确保下一次 play 立即生效且从头播放。
-      await _player.stop();
-      await _player.play(AssetSource(path));
+  /// 每个播放器各自的串行链：同一音效快速连点时，保证 stop/resume
+  /// 按序执行；不同播放器的链彼此独立，不互相阻塞。
+  static final Map<AudioPlayer, Future<void>> _chains = {};
+
+  /// 从头重启指定播放器（声源已预置）。
+  ///
+  /// 不使用 Dart 层 `seek()`：Android 低延迟模式（SoundPool）不回调
+  /// seekComplete，会导致 seek 调用挂起直至超时。原生 `stop()` 在
+  /// [ReleaseMode.stop] 下本身就是「暂停 + 回到起点」且声源不释放，
+  /// 随后 `resume()` 即从头播放，重启延迟最低。
+  static void _restart(AudioPlayer player) {
+    final chain = (_chains[player] ?? Future.value()).then((_) async {
+      // 兼容 playing/completed/paused/stopped：停止回零后立即重新播放。
+      await player.stop();
+      await player.resume();
     });
-    // 队列出错时不阻塞后续播放
-    _playQueue = _playQueue.catchError((_) {});
+    // 单个播放器出错不阻塞该播放器后续播放
+    _chains[player] = chain.catchError((_) {});
   }
 }
