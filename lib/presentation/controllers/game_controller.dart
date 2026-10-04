@@ -859,6 +859,16 @@ class GameController extends ChangeNotifier {
     await Future.delayed(wait);
   }
 
+  /// 等待上一个走子动画（用户走子 / 提示走子等）播放完毕；
+  /// 动画已结束时立即返回，不额外耗时。
+  ///
+  /// 引擎思考可与动画并行，但 AI 落子必须等动画播完，否则两步动画
+  /// 会同时进行（引擎在简单局面可能远早于思考预算返回）。
+  Future<void> _waitForMoveAnim() async {
+    final remain = _animEndTime.difference(DateTime.now());
+    if (remain > Duration.zero) await Future.delayed(remain);
+  }
+
   /// 请求引擎为当前局面给出 bestmove，并根据 [autoMove] 决定处理方式。
   ///
   /// - [autoMove] 为 true：直接按 bestmove 走子，并交给
@@ -1401,6 +1411,13 @@ class GameController extends ChangeNotifier {
       final win = _simulateWinLine(lineUci);
 
       final (from, to) = Fen.parseUciMove(uci);
+      // 引擎可能在走子动画结束前就返回结果：落子前先等用户/提示的
+      // 走子动画播完，保证两步动画依次播放、互不覆盖。
+      await _waitForMoveAnim();
+      // 等待期间局面可能已变（重开/跳转/终局），重新校验后再走
+      if (isOver || !atTip || _analysisOn || !_isAiSide(aiSide)) {
+        return;
+      }
       // AI 引擎走子播放移动动画
       if (_applyAndRecord(from, to, animate: true)) {
         moveApplied = true;
