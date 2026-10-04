@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/config/config_manager.dart';
 import '../shared/error_dialog.dart';
@@ -357,16 +358,45 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     });
   }
 
-  /// 批量移动：弹出目标目录选择器 → 校验目标可写（必要时引导授权）→
-  /// 逐项 rename；同名冲突或失败的项收集后统一提示。
+  /// 批量移动：弹出目标目录选择器（可在内置 books 与已配置的外部仓库
+  /// 两个根之间切换）→ 校验目标可写（必要时引导授权）→ 逐项移动；
+  /// 跨文件系统 rename 失败时退回复制+删除。同名冲突或失败的项收集后
+  /// 统一提示。
   Future<void> _moveSelected() async {
     if (_rootPath == null || _selected.isEmpty) return;
     final sources = _selected.toList();
+
+    // 构建可选根列表：当前根 + 另一个根（books ↔ 外部仓库）
+    final roots = <({String path, String label})>[
+      (path: _rootPath!, label: _rootLabel),
+    ];
+    final dataDir = await ConfigManager.instance.dataDirPath;
+    final booksPath = p.join(dataDir, 'books');
+    final externalPath =
+        ConfigManager.instance.config.library.notationLibraryPath;
+    final bool atBooks = p.equals(_rootPath!, booksPath);
+    final otherPath = atBooks ? externalPath : booksPath;
+    final otherLabel = atBooks
+        ? (otherPath != null && otherPath.isNotEmpty
+            ? p.basename(otherPath)
+            : '')
+        : 'books';
+    if (otherPath != null && otherPath.isNotEmpty) {
+      // books 根不存在时自动创建；外部仓库根要求已存在
+      if (!atBooks) {
+        await Directory(otherPath).create(recursive: true);
+      }
+      if (await Directory(otherPath).exists()) {
+        roots.add((path: otherPath, label: otherLabel));
+      }
+    }
+
+    if (!mounted) return;
     final target = await showDialog<String>(
       context: context,
       builder: (_) => _DirectoryPickerDialog(
-        rootPath: _rootPath!,
-        rootLabel: _rootLabel,
+        roots: roots,
+        initialRootPath: _rootPath!,
         forbidden: sources,
       ),
     );
@@ -409,11 +439,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
           failed.add('$name：目标目录已存在同名项');
           continue;
         }
-        if (await FileSystemEntity.type(src) == FileSystemEntityType.directory) {
-          await Directory(src).rename(dest);
-        } else {
-          await File(src).rename(dest);
-        }
+        await _moveEntity(src, dest);
         moved++;
       } catch (e) {
         failed.add('$name：移动失败（$e）');
@@ -439,6 +465,41 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
           ],
         ),
       );
+    }
+  }
+
+  /// 移动单个文件/目录：优先 rename（同文件系统原子操作）；
+  /// 跨文件系统（如 books 与外置 SD 卡上的外部仓库）rename 会抛
+  /// FileSystemException，此时递归复制到目标后再删除源。
+  Future<void> _moveEntity(String src, String dest) async {
+    final type = await FileSystemEntity.type(src);
+    try {
+      if (type == FileSystemEntityType.directory) {
+        await Directory(src).rename(dest);
+      } else {
+        await File(src).rename(dest);
+      }
+    } on FileSystemException {
+      if (type == FileSystemEntityType.directory) {
+        await _copyDirectory(Directory(src), Directory(dest));
+        await Directory(src).delete(recursive: true);
+      } else {
+        await File(src).copy(dest);
+        await File(src).delete();
+      }
+    }
+  }
+
+  /// 递归复制目录 [src] 到 [dest]。
+  Future<void> _copyDirectory(Directory src, Directory dest) async {
+    await dest.create(recursive: true);
+    await for (final e in src.list(followLinks: false)) {
+      final to = p.join(dest.path, p.basename(e.path));
+      if (e is Directory) {
+        await _copyDirectory(e, Directory(to));
+      } else if (e is File) {
+        await e.copy(to);
+      }
     }
   }
 
@@ -878,22 +939,29 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
 
 // ---------------------------------------------------------------------------
 // 移动目标目录选择器：从 books 根开始浏览目录树，选择一个目标目录。
+// 配置了外部仓库时可在 books 与外部仓库两个根之间切换。
 // ---------------------------------------------------------------------------
 
-/// 目标目录选择对话框：从 [rootPath] 开始浏览（仅显示子目录），
+/// 可切换的浏览根（路径 + 显示名称）。
+typedef _PickerRoot = ({String path, String label});
+
+/// 目标目录选择对话框：从 [roots] 之一开始浏览（仅显示子目录），
 /// 返回所选目录的绝对路径（pop 结果）；取消返回 null。
+///
+/// [roots] 有多个时（内置 books + 配置的外部仓库），标题栏可切换根目录；
+/// [initialRootPath] 指定打开时默认所在的根。
 ///
 /// [forbidden] 为被移动项的绝对路径列表：目标目录不能是其中任意一项
 /// 自身或其子目录（否则「移动到此处」按钮禁用并提示原因）。
 class _DirectoryPickerDialog extends StatefulWidget {
   const _DirectoryPickerDialog({
-    required this.rootPath,
+    required this.roots,
+    required this.initialRootPath,
     required this.forbidden,
-    this.rootLabel = 'books',
   });
 
-  final String rootPath;
-  final String rootLabel;
+  final List<_PickerRoot> roots;
+  final String initialRootPath;
   final List<String> forbidden;
 
   @override
@@ -901,13 +969,25 @@ class _DirectoryPickerDialog extends StatefulWidget {
 }
 
 class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
-  late String _current = widget.rootPath;
+  late _PickerRoot _root = widget.roots
+      .firstWhere((r) => r.path == widget.initialRootPath);
+  late String _current = _root.path;
   List<Directory> _dirs = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _reload();
+  }
+
+  /// 切换浏览根（books ↔ 外部仓库），重置到目标根目录。
+  void _switchRoot(_PickerRoot root) {
+    if (root.path == _root.path) return;
+    setState(() {
+      _root = root;
+      _current = root.path;
+    });
     _reload();
   }
 
@@ -939,11 +1019,12 @@ class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
       d.path.split(Platform.pathSeparator).last;
 
   String get _displayPath {
-    final root = widget.rootPath;
-    if (_current == root) return widget.rootLabel;
+    final root = _root.path;
+    if (_current == root) return _root.label;
     final sep = Platform.pathSeparator;
+    if (!_current.startsWith(root + sep)) return _root.label;
     final rel = _current.substring(root.length + sep.length);
-    return '${widget.rootLabel} / ${rel.replaceAll(sep, ' / ')}';
+    return '${_root.label} / ${rel.replaceAll(sep, ' / ')}';
   }
 
   /// 当前浏览目录是否可作为移动目标。
@@ -954,6 +1035,60 @@ class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
       if (_current.startsWith('$src$sep')) return false;
     }
     return true;
+  }
+
+  /// 标题区：多根时显示根目录切换菜单，单根时仅显示标题。
+  Widget _buildTitle() {
+    if (widget.roots.length <= 1) {
+      return const Expanded(
+        child: Text(
+          '选择目标目录',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      );
+    }
+    return Expanded(
+      child: Center(
+        child: PopupMenuButton<String>(
+          initialValue: _root.path,
+          tooltip: '切换根目录',
+          onSelected: (path) {
+            final r = widget.roots.firstWhere((r) => r.path == path);
+            _switchRoot(r);
+          },
+          itemBuilder: (_) => [
+            for (final r in widget.roots)
+              PopupMenuItem<String>(
+                value: r.path,
+                child: Row(
+                  children: [
+                    Icon(
+                      r.path == _root.path
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      size: 18,
+                      color: const Color(0xFF8B5A2B),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(child: Text(r.label)),
+                  ],
+                ),
+              ),
+          ],
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '选择目标目录 · 切换根',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              Icon(Icons.arrow_drop_down),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -967,7 +1102,7 @@ class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
             Row(
               children: [
                 IconButton(
-                  onPressed: _current != widget.rootPath
+                  onPressed: _current != _root.path
                       ? () {
                           setState(() =>
                               _current = Directory(_current).parent.path);
@@ -977,13 +1112,7 @@ class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
                   icon: const Icon(Icons.arrow_upward),
                   tooltip: '上一级',
                 ),
-                const Expanded(
-                  child: Text(
-                    '选择目标目录',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
+                _buildTitle(),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close),
@@ -991,18 +1120,34 @@ class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
                 ),
               ],
             ),
+            // 当前所在根（多根时提示可切换）
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '移动到：$_displayPath',
+                  widget.roots.length > 1
+                      ? '根目录：${_root.label}'
+                      : '移动到：$_displayPath',
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 13, color: Color(0xFF8B6B4A)),
+                      fontSize: 12, color: Color(0xFFB0A48A)),
                 ),
               ),
             ),
+            if (widget.roots.length > 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '移动到：$_displayPath',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13, color: Color(0xFF8B6B4A)),
+                  ),
+                ),
+              ),
             const Divider(height: 12),
             Expanded(
               child: _loading
