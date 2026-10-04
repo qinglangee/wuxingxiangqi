@@ -18,9 +18,14 @@ class OtherSettingsTab extends StatelessWidget {
       future: ConfigManager.instance.configDirPath,
       builder: (context, snapshot) {
         final dir = snapshot.data;
-        return ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          children: [
+        return ListenableBuilder(
+          listenable: ConfigManager.instance,
+          builder: (context, _) {
+            final ui = ConfigManager.instance.config.ui;
+            return ListView(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              children: [
             const Text(
               '存储位置',
               style: TextStyle(
@@ -69,6 +74,41 @@ class OtherSettingsTab extends StatelessWidget {
                         fontSize: 12, color: Color(0xFF8B6B4A)),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              '棋谱',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF5A3A1A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDF6E3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFC9B68C)),
+              ),
+              child: SwitchListTile(
+                title: const Text(
+                  '加载棋谱时验证棋谱',
+                  style:
+                      TextStyle(fontSize: 14, color: Color(0xFF5A3A1A)),
+                ),
+                subtitle: const Text(
+                  '开启后，加载棋谱前会完整回放并校验每一步着法，'
+                  '有误会拒绝打开；关闭后直接按棋谱加载，使用时出错再提示',
+                  style:
+                      TextStyle(fontSize: 12, color: Color(0xFF8B6B4A)),
+                ),
+                value: ui.validateNotationOnLoad,
+                activeThumbColor: AppTheme.boardLine,
+                onChanged: (v) => ConfigManager.instance.updateUi(
+                  (c) => c.copyWith(validateNotationOnLoad: v),
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -230,7 +270,9 @@ class OtherSettingsTab extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
-          ],
+              ],
+            );
+          },
         );
       },
     );

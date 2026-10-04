@@ -58,7 +58,12 @@ class NotationReplay {
   /// 解析起始局面并把所有着法（主线 + 全部分支线）走一遍进行校验。
   ///
   /// 失败时抛 [NotationParseException]，message 可直接展示给用户。
-  static ReplayData resolve(ParsedGame game) {
+  ///
+  /// [validate] 为 false 时不做事前规则校验（忽略回合标记不一致、
+  /// 不检查着法合法性），但仍会反解每步坐标并尝试推进局面，以便后续
+  /// 中文着法能够继续反解。棋谱确有错误时，错误会在后续加载/使用
+  /// 阶段自然抛出。
+  static ReplayData resolve(ParsedGame game, {bool validate = true}) {
     // 1. 起始局面
     final Board startBoard;
     final Side startSide;
@@ -78,10 +83,13 @@ class NotationReplay {
 
     // 2. 递归回放主线与全部分支（分支在独立克隆的状态上校验，
     //    不影响主线进度）
-    final moves = _resolveLine(game.moves, startBoard, startSide, '主线');
+    final moves = _resolveLine(game.moves, startBoard, startSide, '主线',
+        validate: validate);
     final rootBranches = [
       for (var i = 0; i < game.rootBranches.length; i++)
-        _resolveLine(game.rootBranches[i], startBoard, startSide, '根变着 ${i + 1}'),
+        _resolveLine(game.rootBranches[i], startBoard, startSide,
+            '根变着 ${i + 1}',
+            validate: validate),
     ];
 
     return ReplayData(
@@ -98,8 +106,9 @@ class NotationReplay {
     List<ParsedMove> line,
     Board board,
     Side side,
-    String where,
-  ) {
+    String where, {
+    bool validate = true,
+  }) {
     final state = GameState();
     final engine = GameEngine(state);
     state.restoreFrom(
@@ -113,9 +122,10 @@ class NotationReplay {
     for (var i = 0; i < line.length; i++) {
       final text = line[i].moveText;
 
-      // 回合标记声明的走子方应与当前实际轮次一致；不一致说明回合结构错乱
+      // 回合标记声明的走子方应与当前实际轮次一致；不一致说明回合结构错乱。
+      // 非验证模式忽略此项，按棋谱书写顺序继续反解。
       final markedSide = line[i].side;
-      if (markedSide != null && markedSide != state.currentSide) {
+      if (validate && markedSide != null && markedSide != state.currentSide) {
         throw NotationParseException(
           '$where第 ${i + 1} 步「$text」回合标记为'
           '${markedSide == Side.red ? "红方" : "黑方"}，'
@@ -138,7 +148,9 @@ class NotationReplay {
           '$where第 ${i + 1} 步「$text」解析失败：${e.message}',
         );
       }
-      if (!engine.tryMove(from, to)) {
+      // 仍尝试推进局面（中文着法的后续反解依赖更新后的盘面）；
+      // 验证模式下着法非法即报错，非验证模式下交给后续加载/使用阶段暴露。
+      if (!engine.tryMove(from, to) && validate) {
         throw NotationParseException(
           '$where第 ${i + 1} 步着法不符合规则：$text（$from → $to）',
           cause: 'where=$where, step=$i, move=$text',
@@ -154,6 +166,7 @@ class NotationReplay {
             state.board,
             state.currentSide,
             '$where第 ${i + 1} 步变着 ${k + 1}',
+            validate: validate,
           ),
       ];
 

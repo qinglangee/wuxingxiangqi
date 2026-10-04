@@ -338,7 +338,13 @@ class GameController extends ChangeNotifier {
     ReplayData? replay,
     String? sourcePath,
   }) {
-    final data = replay ?? NotationReplay.resolve(game);
+    // 已传入 replay 表示调用方（打开棋谱时的预验证路径）已做完整校验；
+    // 否则按设置决定加载前是否回放验证：关闭验证时仅反解坐标、跳过
+    // 规则校验，错误在使用阶段自然暴露。
+    final validate =
+        ConfigManager.instance.config.ui.validateNotationOnLoad;
+    final data =
+        replay ?? NotationReplay.resolve(game, validate: validate);
 
     _sourceFilePath = sourcePath;
     _gameInfo = game.info;
@@ -490,9 +496,9 @@ class GameController extends ChangeNotifier {
     try {
       final bytes = await File(path).readAsBytes();
       final parsed = NotationLoader.load(path: path, bytes: bytes);
-      final replay = NotationReplay.resolve(parsed);
       _sessionGameIndex = index;
-      loadParsedGame(parsed, replay: replay, sourcePath: path);
+      // 是否回放验证由设置决定（见 loadParsedGame）
+      loadParsedGame(parsed, sourcePath: path);
       return null;
     } catch (e) {
       return '打开棋谱失败：$e';

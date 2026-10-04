@@ -210,6 +210,7 @@ class UiConfig {
     this.showScaleStar = true,
     this.showMenuStar = true,
     this.showTabStar = true,
+    this.validateNotationOnLoad = true,
     Map<String, ButtonBarConfig>? buttonBars,
   }) : buttonBars = buttonBars ?? <String, ButtonBarConfig>{};
 
@@ -246,6 +247,13 @@ class UiConfig {
   /// 是否显示绿色标签星（打谱页，切换三个标签的显隐）。
   bool showTabStar;
 
+  /// 加载棋谱时是否先完整回放验证（回合结构、着法合法性等）。
+  ///
+  /// true（默认）：打开前逐着校验，任一步有误即拒绝打开并提示；
+  /// false：不做事前验证，直接按棋谱正确进行加载，使用过程中出错
+  /// 时再报错。
+  bool validateNotationOnLoad;
+
   /// 各按钮工具条（按其 id 索引）的个性化配置：按钮顺序、常驻列表、
   /// 非统一管理时该工具条自身的文字显示开关。
   Map<String, ButtonBarConfig> buttonBars;
@@ -265,6 +273,8 @@ class UiConfig {
         showScaleStar: json['showScaleStar'] as bool? ?? true,
         showMenuStar: json['showMenuStar'] as bool? ?? true,
         showTabStar: json['showTabStar'] as bool? ?? true,
+        validateNotationOnLoad:
+            json['validateNotationOnLoad'] as bool? ?? true,
         buttonBars: (json['buttonBars'] is Map)
             ? Map<String, dynamic>.from(json['buttonBars'] as Map).map(
                 (k, v) => MapEntry(
@@ -286,6 +296,7 @@ class UiConfig {
         'showScaleStar': showScaleStar,
         'showMenuStar': showMenuStar,
         'showTabStar': showTabStar,
+        'validateNotationOnLoad': validateNotationOnLoad,
         'buttonBars':
             buttonBars.map((k, v) => MapEntry(k, v.toJson())),
       };
@@ -301,6 +312,7 @@ class UiConfig {
     bool? showScaleStar,
     bool? showMenuStar,
     bool? showTabStar,
+    bool? validateNotationOnLoad,
     Map<String, ButtonBarConfig>? buttonBars,
   }) =>
       UiConfig(
@@ -316,6 +328,8 @@ class UiConfig {
         showScaleStar: showScaleStar ?? this.showScaleStar,
         showMenuStar: showMenuStar ?? this.showMenuStar,
         showTabStar: showTabStar ?? this.showTabStar,
+        validateNotationOnLoad:
+            validateNotationOnLoad ?? this.validateNotationOnLoad,
         buttonBars: buttonBars ?? this.buttonBars,
       );
 }

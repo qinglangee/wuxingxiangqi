@@ -31,8 +31,9 @@ class App extends StatelessWidget {
       home: const HomeScreen(),
       routes: {
         // 路由参数支持以下形态：
-        // - (ParsedGame, ReplayData, String?, List<String>, int)：
-        //   棋谱模式，附带会话棋谱列表（同目录棋谱文件）与当前局下标
+        // - (ParsedGame, ReplayData?, String?, List<String>, int)：
+        //   棋谱模式，附带会话棋谱列表（同目录棋谱文件）与当前局下标；
+        //   关闭加载验证时 ReplayData 为 null，由 GameController 按设置处理
         // - (ParsedGame, ReplayData, String?)：棋谱模式（无会话列表）
         // - (ParsedGame, ReplayData)：棋谱模式，首页已完成解析与回放校验
         // - ParsedGame：兼容只传棋谱的情况
@@ -69,7 +70,7 @@ class App extends StatelessWidget {
           String? sourcePath;
           List<String>? sessionGames;
           int sessionGameIndex = -1;
-          if (args is (ParsedGame, ReplayData, String?, List<String>, int)) {
+          if (args is (ParsedGame, ReplayData?, String?, List<String>, int)) {
             game = args.$1;
             replay = args.$2;
             sourcePath = args.$3;
@@ -95,6 +96,26 @@ class App extends StatelessWidget {
                       replay: replay, sourcePath: sourcePath);
                 } catch (e) {
                   debugPrint('载入棋谱失败: $e');
+                  // 关闭加载验证时，棋谱本身的错误要到载入阶段才暴露：
+                  // 首帧后弹窗提示（create 期间不能直接弹对话框）
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    final nav = appNavigatorKey.currentState;
+                    if (nav != null) {
+                      showDialog<void>(
+                        context: nav.context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('载入棋谱失败'),
+                          content: Text('$e'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('知道了'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  });
                 }
                 // 会话棋谱列表：供复盘导航条「上一局/下一局/选谱」切换
                 if (sessionGames != null) {

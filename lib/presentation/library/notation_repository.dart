@@ -14,8 +14,12 @@ import 'notation_manager_widget.dart';
 /// 支持的棋谱文件扩展名。
 const List<String> kNotationExtensions = ['pgn', 'xqf', 'cbf', 'txt'];
 
-/// 打开棋谱文件：读取字节、解析并完整回放校验，成功后跳转打谱页面；
-/// 任何一步失败都弹窗提示且不跳转（避免在页面构建期抛异常）。
+/// 打开棋谱文件：读取字节、解析，按设置决定是否完整回放校验，成功后
+/// 跳转打谱页面；解析/校验失败则弹窗提示且不跳转（避免在页面构建期
+/// 抛异常）。
+///
+/// 设置中关闭「加载棋谱时验证」时不做事前回放验证，直接跳转，
+/// 棋谱使用过程中出错再提示。
 ///
 /// [path] 为棋谱文件的绝对路径。
 Future<void> openNotationFile(BuildContext context, String path) async {
@@ -25,8 +29,10 @@ Future<void> openNotationFile(BuildContext context, String path) async {
   String? errMsg;
   try {
     parsed = NotationLoader.load(path: path, bytes: bytes);
-    // 完整回放验证：起始 FEN、每步坐标反解与规则校验
-    replay = NotationReplay.resolve(parsed);
+    // 按设置决定是否完整回放验证：起始 FEN、每步坐标反解与规则校验
+    if (ConfigManager.instance.config.ui.validateNotationOnLoad) {
+      replay = NotationReplay.resolve(parsed);
+    }
   } on NotationParseException catch (e) {
     errMsg = e.message;
   } catch (e) {
@@ -37,16 +43,17 @@ Future<void> openNotationFile(BuildContext context, String path) async {
   // 再检查 mounted，避免跨 async 使用 BuildContext）。
   var sessionGames = [path];
   var sessionGameIndex = 0;
-  if (parsed != null && replay != null) {
+  if (parsed != null && errMsg == null) {
     sessionGames = await _listSessionGames(path);
     sessionGameIndex = sessionGames
         .indexWhere((p) => p.toLowerCase() == path.toLowerCase());
   }
 
   if (!context.mounted) return;
-  if (parsed != null && replay != null) {
-    // 解析与回放均成功：把棋谱、已验证坐标与来源文件路径一起传给打谱页
-    // （来源路径用于保存时「覆盖原文件」）
+  if (parsed != null && errMsg == null) {
+    // 解析成功（按设置可能已附带验证坐标）：把棋谱、已验证坐标（关闭
+    // 验证时为 null，由打谱页按设置自行处理）与来源文件路径一起传给
+    // 打谱页（来源路径用于保存时「覆盖原文件」）。
     // 同时把同目录下的全部棋谱文件作为当前会话的棋谱列表传入，
     // 供复盘导航条「上一局/下一局/选谱」切换。
     Navigator.of(context).pushNamed(
