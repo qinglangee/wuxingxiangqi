@@ -22,6 +22,20 @@ class CommentArea extends StatefulWidget {
   /// 走到带注释的着法时注释框是否浅绿高亮（由导航条 check 按钮控制）。
   final bool highlightEnabled;
 
+  /// 弹出编辑注释对话框并保存结果（棋谱注释页「添加注释/编辑注释」
+  /// 按钮与复盘导航条「注释」按钮共用同一实现）。
+  static Future<void> editComment(
+      BuildContext context, GameController controller) async {
+    final initial = controller.currentComment;
+    final edited = await showDialog<String>(
+      context: context,
+      builder: (_) => _CommentDialog(initial: initial),
+    );
+    if (edited != null) {
+      controller.setCurrentComment(edited);
+    }
+  }
+
   @override
   State<CommentArea> createState() => _CommentAreaState();
 }
@@ -178,16 +192,9 @@ class _CommentAreaState extends State<CommentArea>
     return path.split(Platform.pathSeparator).last;
   }
 
-  Future<void> _editComment(BuildContext context) async {
-    final initial = controller.currentComment;
-    final edited = await showDialog<String>(
-      context: context,
-      builder: (_) => _CommentDialog(initial: initial),
-    );
-    if (edited != null) {
-      controller.setCurrentComment(edited);
-    }
-  }
+  /// 弹出编辑注释对话框（复用 [CommentArea.editComment]）。
+  Future<void> _editComment(BuildContext context) =>
+      CommentArea.editComment(context, controller);
 }
 
 class _CommentDialog extends StatefulWidget {

@@ -15,6 +15,7 @@ import '../../shared/floating_toggle_star.dart';
 import 'board_setup_screen.dart';
 import 'cloud_base_controller.dart';
 import 'tabs/cloud_base_panel.dart';
+import 'tabs/comment_area.dart';
 import 'tabs/notation_tab.dart';
 import 'tabs/engine_tab.dart';
 
@@ -240,7 +241,13 @@ class _ReviewPanelState extends State<ReviewPanel>
           if (controller.atBranch) BranchSelectorBar(controller: controller),
           AdjustableButtonBar(
             id: 'review_nav_bar',
-            defaultPinnedIds: const {'上一分支', '下一分支', '前进', '后退'},
+            defaultPinnedIds: const {
+              '上一分支',
+              '下一分支',
+              '前进',
+              '后退',
+              '注释',
+            },
             buttons: navButtons,
           ),
         ],
@@ -332,6 +339,14 @@ class _ReviewPanelState extends State<ReviewPanel>
                 icon: Icons.save,
                 label: '保存',
                 onTap: () => GameSaver.saveGame(context, controller),
+              ),
+              FreeButton(
+                id: '注释',
+                icon: Icons.edit_note,
+                label: '注释',
+                // 与「棋谱注释」页的添加/编辑注释按钮完全相同：
+                // 为当前着法（根节点为开局评注）添加或编辑注释
+                onTap: () => CommentArea.editComment(context, controller),
               ),
               FreeButton(
                 id: '背谱',
