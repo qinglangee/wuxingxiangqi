@@ -46,12 +46,28 @@ android {
         }
     }
 
-    // 编译出的 apk 文件名前缀：app → 五星象棋
-    // 输出形如：五星象棋-release.apk / 五星象棋-debug.apk
-    applicationVariants.all {
-        outputs.all {
-            if (this is com.android.build.gradle.internal.api.ApkVariantOutputImpl) {
-                outputFileName = outputFileName.replaceFirst("^app", "五星象棋")
+    // 编译出的 apk 文件名：app → 五星象棋-<版本号>
+    // 输出形如：五星象棋-0.1.0-release.apk / 五星象棋-0.1.0-debug.apk
+    //
+    // AGP 9 已移除旧的 applicationVariants API，改用 androidComponents。
+    // 公共 VariantOutput 接口未开放文件名设置，需转为其实现类
+    // VariantOutputImpl（AGP 9.1 内部实现，仍随插件发布）设置
+    // outputFileName，影响 outputs/apk/<变体>/ 下的产物。
+    // 版本号取自该 output 的 versionName（来自 pubspec.yaml 的 version，
+    // 如 0.1.0+1 中的 0.1.0）。
+    androidComponents {
+        onVariants { variant ->
+            variant.outputs.forEach { output ->
+                val impl =
+                    output as com.android.build.api.variant.impl.VariantOutputImpl
+                impl.outputFileName.set(
+                    impl.outputFileName
+                        .get()
+                        .replaceFirst(
+                            "app",
+                            "五星象棋-${output.versionName.get()}",
+                        ),
+                )
             }
         }
     }
