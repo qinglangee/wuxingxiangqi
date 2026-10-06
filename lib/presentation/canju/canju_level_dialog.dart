@@ -51,25 +51,17 @@ class _CanjuLevelDialogState extends State<CanjuLevelDialog> {
   @override
   void initState() {
     super.initState();
-    // 网格渲染完成后自动滚动到当前选中项
+    // 网格渲染完成后自动滚动到当前选中项：与跳转按钮条相同的按比例
+    // 滚动方式（按 选中索引/总题数 折算到可滚动区间），比按行高估算更精确。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final idx = widget.currentIndex;
-      if (idx != null && _scrollController.hasClients) {
-        // 每行 5 个，计算选中项所在行，滚动到该行顶部
-        const crossAxisCount = 5;
-        final row = idx ~/ crossAxisCount;
-        // 估算每行高度（含间距）：childAspectRatio 1.2，宽度按比例
-        final itemWidth =
-            (_scrollController.position.viewportDimension - 12 * 2) /
-                crossAxisCount;
-        final itemHeight = itemWidth / 1.2;
-        const mainAxisSpacing = 10.0;
-        final target = (row * (itemHeight + mainAxisSpacing)).clamp(
-          0.0,
-          _scrollController.position.maxScrollExtent,
-        );
-        _scrollController.jumpTo(target);
-      }
+      if (idx == null || !_scrollController.hasClients) return;
+      final pos = _scrollController.position;
+      if (widget.count <= 0 || pos.maxScrollExtent <= 0) return;
+      final target =
+          (idx / widget.count * pos.maxScrollExtent)
+              .clamp(0.0, pos.maxScrollExtent);
+      _scrollController.jumpTo(target);
     });
   }
 
