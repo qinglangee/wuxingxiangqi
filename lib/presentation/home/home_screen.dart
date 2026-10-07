@@ -241,19 +241,22 @@ class HomeScreen extends StatelessWidget {
     final names = await CanjuLibraryLoader.listNames();
     if (names.isEmpty) {
       if (!context.mounted) return;
-      showErrorDialog(context, 'assets/canju/ 目录下没有残局库');
+      showErrorDialog(context, '没有可用的残局库');
       return;
     }
 
     final last = store.lastLibrary;
     if (last != null && names.contains(last)) {
-      // 直跳：载入上次库的上次局
+      // 直跳：载入上次库的上次局（库可能已被清空，如收藏被删空，
+      // 此时落入下方弹窗让用户重选）
       final lib = await CanjuLibraryLoader.load(last);
-      if (!context.mounted) return;
-      final rec = store.recordOf(last);
-      final idx = rec.currentIndex.clamp(0, lib.length - 1);
-      _navigateToCanju(context, lib, idx, store);
-      return;
+      if (lib.isNotEmpty) {
+        if (!context.mounted) return;
+        final rec = store.recordOf(last);
+        final idx = rec.currentIndex.clamp(0, lib.length - 1);
+        _navigateToCanju(context, lib, idx, store);
+        return;
+      }
     }
 
     // 首次或上次库已不存在：弹窗让用户选

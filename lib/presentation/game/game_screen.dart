@@ -352,7 +352,33 @@ class _CanjuBar extends StatelessWidget {
           closesDrawer: true,
           onTap: () => _pickLevel(context),
         ),
+        FreeButton(
+          id: '收藏',
+          icon: controller.isFavoritesLibrary
+              ? Icons.bookmark_remove_outlined
+              : Icons.bookmark_add_outlined,
+          label: controller.isFavoritesLibrary ? '取消收藏' : '收藏',
+          closesDrawer: true,
+          onTap: () => _toggleFavorite(context),
+        ),
       ],
+    );
+  }
+
+  /// 收藏 / 取消收藏当前残局：在非收藏库中收藏当前局的初始 FEN；
+  /// 在收藏库中则把当前局从收藏中删除。完成后给出轻量提示。
+  Future<void> _toggleFavorite(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (controller.isFavoritesLibrary) {
+      await controller.unfavoriteCurrent();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('已取消收藏')),
+      );
+      return;
+    }
+    final added = await controller.favoriteCurrent();
+    messenger.showSnackBar(
+      SnackBar(content: Text(added ? '已收藏' : '该残局已在收藏中')),
     );
   }
 

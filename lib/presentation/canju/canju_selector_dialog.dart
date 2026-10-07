@@ -119,7 +119,7 @@ class _CanjuSelectorDialogState extends State<CanjuSelectorDialog> {
         child: Padding(
           padding: EdgeInsets.all(16),
           child: Text(
-            'assets/canju/ 目录下没有可用的残局库',
+            '没有可用的残局库',
             style: TextStyle(fontSize: 14, color: Color(0xFF8B6B3D)),
           ),
         ),
@@ -162,12 +162,15 @@ class _CanjuSelectorDialogState extends State<CanjuSelectorDialog> {
             ),
           ),
           subtitle: Text(
-            '共 ${lib.length} 局 · 当前第 ${rec.currentIndex + 1} 局',
+            lib.isEmpty
+                ? '共 0 局'
+                : '共 ${lib.length} 局 · 当前第 ${rec.currentIndex + 1} 局',
             style: const TextStyle(fontSize: 12, color: Color(0xFF8B6B3D)),
           ),
           trailing: const Icon(Icons.chevron_right,
               color: Color(0xFFC9B68C), size: 20),
-          onTap: () => Navigator.pop(context, lib),
+          // 空库（如清空后的收藏库）不可选
+          onTap: lib.isEmpty ? null : () => Navigator.pop(context, lib),
         );
       },
     );

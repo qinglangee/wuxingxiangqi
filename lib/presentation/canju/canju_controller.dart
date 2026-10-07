@@ -101,6 +101,54 @@ class CanjuController extends ChangeNotifier {
   /// 当前局 FEN（方便 UI 显示或外部读取）。
   String get currentFen => library[_currentIndex];
 
+  /// 当前库是否为收藏库（决定收藏按钮显示为收藏还是取消收藏）。
+  bool get isFavoritesLibrary => library.name == CanjuFavorites.libraryName;
+
+  /// 收藏当前残局：把当前局的初始 FEN 追加到收藏文件。
+  /// 返回是否发生了变更（已在收藏中时为 false）。
+  Future<bool> favoriteCurrent() async {
+    if (isFavoritesLibrary) return false;
+    return CanjuFavorites.add(currentFen);
+  }
+
+  /// 取消收藏当前局：从收藏文件中删除当前局的初始 FEN，
+  /// 并重新载入收藏库（当前索引越界时收紧到末局）。
+  ///
+  /// 收藏库被清空时自动切换到第一个可用的其它库；没有任何可用库时
+  /// 保持现状（盘面不动）。当前不在收藏库中时无操作。
+  Future<void> unfavoriteCurrent() async {
+    if (!isFavoritesLibrary) return;
+    await CanjuFavorites.remove(library[_currentIndex]);
+    CanjuLibrary lib;
+    try {
+      lib = await CanjuLibraryLoader.load(CanjuFavorites.libraryName);
+    } catch (_) {
+      lib = const CanjuLibrary(
+          name: CanjuFavorites.libraryName, fens: []);
+    }
+    if (lib.isEmpty) {
+      // 收藏已清空：自动切到第一个可用的其它库
+      final all = await CanjuLibraryLoader.loadAll();
+      final fallback = all.firstWhere(
+        (l) => l.name != CanjuFavorites.libraryName && l.isNotEmpty,
+        orElse: () => lib,
+      );
+      if (fallback.isNotEmpty) {
+        await switchLibrary(fallback);
+        return;
+      }
+      // 没有其它库可用：保持现状
+      notifyListeners();
+      return;
+    }
+    library = lib;
+    _currentIndex = _currentIndex.clamp(0, lib.length - 1);
+    _alreadyClearedForCurrent = false;
+    _loadCurrent();
+    notifyListeners();
+    await store.setCurrentIndex(library.name, _currentIndex);
+  }
+
   /// 切换「提示自动」开关。
   void setAutoHint(bool v) {
     _autoHint = v;
@@ -172,8 +220,10 @@ class CanjuController extends ChangeNotifier {
   }
 
   /// 切换残局库：载入该库记录的上次局索引，并持久化「上次打开的库」。
+  /// 空库（如清空后的收藏库）不切换。
   Future<void> switchLibrary(CanjuLibrary lib) async {
     if (lib.name == library.name) return;
+    if (lib.isEmpty) return;
     library = lib;
     final rec = store.recordOf(lib.name);
     _currentIndex = rec.currentIndex.clamp(0, lib.length - 1);
