@@ -36,6 +36,9 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
   // 数据目录棋子套系目录路径（可删除），刷新时重新加载
   List<String> _dataPieceSets = const [];
 
+  // 棋子图片命名说明的显示与隐藏（默认隐藏）
+  bool _showPieceHelp = false;
+
   Future<void> _reloadDataBoards() async {
     final dataDir = await ConfigManager.instance.dataDirPath;
     final boards = await AssetCatalog.loadDataBoards(dataDir);
@@ -428,21 +431,96 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
           slivers: [
             // 顶部：棋子大小与阴影设置
             const SliverToBoxAdapter(child: _PieceAdjustSettings()),
-            // 导入棋子按钮
+            // 导入棋子按钮 + 帮助图标
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _importPieceSet,
-                    icon: const Icon(Icons.create_new_folder, size: 20),
-                    label: const Text('导入棋子(请先改好目录名， 同名目录会覆盖现有棋子)'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.boardLine,
-                      side: const BorderSide(color: AppTheme.boardLine),
-                      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 22),
+                child: Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: _importPieceSet,
+                      icon: const Icon(Icons.create_new_folder, size: 20),
+                      label: const Text('导入棋子(请先改好目录名， 同名目录会覆盖现有棋子)'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.boardLine,
+                        side: const BorderSide(color: AppTheme.boardLine),
+                        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 22),
+                      ),
                     ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: '棋子图片命名说明',
+                      onPressed: () =>
+                          setState(() => _showPieceHelp = !_showPieceHelp),
+                      icon: Icon(
+                        _showPieceHelp
+                            ? Icons.help_outline
+                            : Icons.help_outline_outlined,
+                        size: 22,
+                        color: AppTheme.boardLine,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // 棋子图片命名说明（点帮助图标显示，默认隐藏）
+            if (_showPieceHelp)
+              SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFDF6E3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFC9B68C)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '棋子图片命名说明',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF8B6B3D),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '把一套 14 张棋子图片放进一个目录，目录名即套系名'
+                        '（导入前先改好，同名目录会覆盖）。图片文件名必须按'
+                        '「颜色 + 棋子字母」命名，扩展名支持 png/jpg/webp/gif：',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: const Color(0xFF6B5A3F),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '颜色：红方用 w（也可用 r），黑方用 b\n'
+                        '棋子字母：k=帅/将、a=士/仕、b=相/象、'
+                        'n=马、r=车、c=炮、p=兵/卒',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.6,
+                          color: const Color(0xFF6B5A3F),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '示例：wk.png（红帅）、bk.png（黑将）、wr.png（红车）、'
+                        'bn.png（黑马）……共 14 张。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: const Color(0xFF6B5A3F),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
