@@ -381,8 +381,8 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                     ),
                     // 删除按钮
                     Positioned(
-                      right: 0,
-                      top: 0,
+                      right: 10,
+                      bottom: 0,
                       child: _DeleteBoardButton(
                         onPressed: () => _deleteDataBoard(filePath),
                       ),
@@ -576,26 +576,29 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                       selected: selected,
                       label: name,
                       onTap: () => _pickDataPieceSet(dirPath),
-                      child: Stack(
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _piecePreviewFile(dirPath, Side.red),
-                              const SizedBox(width: 4),
-                              _piecePreviewFile(dirPath, Side.black),
-                            ],
-                          ),
-                          // 删除按钮：右下角
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: _DeleteBoardButton(
-                              onPressed: () =>
-                                  _deleteDataPieceSet(dirPath),
+                      child: SizedBox.expand(
+                        child:Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _piecePreviewFile(dirPath, Side.red),
+                                const SizedBox(width: 4),
+                                _piecePreviewFile(dirPath, Side.black),
+                              ],
                             ),
-                          ),
-                        ],
+                            // 删除按钮：右下角
+                            Positioned(
+                              right: 10,
+                              bottom: 0,
+                              child: _DeleteBoardButton(
+                                onPressed: () =>
+                                    _deleteDataPieceSet(dirPath),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
