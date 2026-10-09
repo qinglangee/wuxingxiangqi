@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart';
 ///
 /// 多播放器模式：每个音效维护一个**独立且常驻**的 [AudioPlayer]，
 /// 在 [preload] 阶段一次性完成：
-/// 1. 音频文件解码进 [AudioCache]（只读一次盘）；
-/// 2. 对每个 player `setSource` 预置好声源；
-/// 3. 统一设置低延迟模式 + [ReleaseMode.stop]，使播放结束后只暂停回零、
+/// 1. 全局设为 mixWithOthers（Android 不请求音频焦点），避免不同音效
+///    播放时因抢占音频焦点而互相掐断；
+/// 2. 音频文件解码进 [AudioCache]（只读一次盘）；
+/// 3. 对每个 player `setSource` 预置好声源；
+/// 4. 统一设置低延迟模式 + [ReleaseMode.stop]，使播放结束后只暂停回零、
 ///    声源继续常驻内存（默认的 release 模式播完即释放声源）。
 ///
 /// 播放时只做 `stop() + resume()`，不再临时切换声源，因此：
@@ -56,6 +58,15 @@ class SoundService {
     if (_preloaded) return;
     _preloaded = true;
 
+    // 0) 全局混音：不向系统请求音频焦点。默认 focus=gain 时，每个 player
+    //    播放前都会请求 AUDIOFOCUS_GAIN，于是后播放的音效（如 AI 快速
+    //    跟出的走子音）会让正在播放的音效（将军音）收到焦点丢失回调而
+    //    被原生层直接暂停——表现为不同音效互相掐断。mixWithOthers 在
+    //    Android 上映射为 AUDIOFOCUS_NONE（各音效自由混音叠加），
+    //    iOS 上则打开 AVAudioSession mixWithOthers 选项。
+    await AudioPlayer.global.setAudioContext(
+      AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build(),
+    );
     const paths = [
       _movePath,
       _eatPath,
