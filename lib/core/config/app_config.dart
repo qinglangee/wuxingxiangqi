@@ -580,20 +580,31 @@ class BoardConfig {
 
 /// 棋谱仓库相关配置。
 class LibraryConfig {
-  LibraryConfig({this.notationLibraryPath});
+  LibraryConfig({this.notationLibraryPath, this.lastSaveFormat});
 
   /// 棋谱仓库根目录（绝对路径）。为空表示尚未配置，需要用户先选择。
   String? notationLibraryPath;
 
+  /// 上次保存棋谱时选用的格式扩展名（如 'pgn'/'xqf'），作为下次保存的
+  /// 默认格式偏好。为空或不可写时退回 'pgn'。
+  String? lastSaveFormat;
+
   factory LibraryConfig.fromJson(Map<String, dynamic> json) => LibraryConfig(
         notationLibraryPath: json['notationLibraryPath'] as String?,
+        lastSaveFormat: json['lastSaveFormat'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
         'notationLibraryPath': notationLibraryPath,
+        'lastSaveFormat': lastSaveFormat,
       };
 
-  LibraryConfig copyWith({String? notationLibraryPath}) => LibraryConfig(
+  LibraryConfig copyWith({
+    String? notationLibraryPath,
+    String? lastSaveFormat,
+  }) =>
+      LibraryConfig(
         notationLibraryPath: notationLibraryPath ?? this.notationLibraryPath,
+        lastSaveFormat: lastSaveFormat ?? this.lastSaveFormat,
       );
 }

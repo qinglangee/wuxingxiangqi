@@ -58,15 +58,29 @@ class GameSaver {
     }
 
     if (!context.mounted) return;
+    // 默认格式：优先用户上次保存时选用的格式（偏好），否则新对局取
+    // 'pgn'、覆盖原文件取原扩展名（用户选了「另存为」时也走这里）。
+    final lib = ConfigManager.instance.config.library;
+    final savedFmt = lib.lastSaveFormat;
+    final defaultExt =
+        (savedFmt != null && NotationLoader.writableExtensions.contains(savedFmt))
+            ? savedFmt
+            : (source == null ? 'pgn' : p.extension(source).substring(1));
     final picked = await _SaveAsDialog.show(
       context,
       dataDir: dataDir,
       defaultName: _defaultFileName(game),
-      defaultExt: source == null ? 'pgn' : p.extension(source).substring(1),
+      defaultExt: defaultExt,
     );
     if (picked == null || !context.mounted) return;
 
+    // 把本次选择的格式记为用户偏好，下次保存默认选中它。
+    await ConfigManager.instance.updateLibrary(
+      (c) => c.copyWith(lastSaveFormat: picked.ext),
+    );
+
     final path = p.join(picked.directory, '${picked.fileName}.${picked.ext}');
+    if (!context.mounted) return;
     await _writeTo(
       context,
       game: game,
