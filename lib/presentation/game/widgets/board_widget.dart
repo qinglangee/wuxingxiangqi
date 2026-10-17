@@ -175,9 +175,12 @@ class _BoardWidgetState extends State<BoardWidget>
             onTapDown: (details) {
               final local = details.localPosition;
               // 优先检测分支箭头：点击连线/三角箭头/序号圆点直接选分支，
-              // 命中则不再按格子走子点选处理
+              // 命中则不再按格子走子点选处理。
+              // 例外：已有棋子被选中时不做箭头命中检测——此时用户点击是
+              // 要走子，若被分支箭头拦截会无法直接走子（分支也保持不动）。
               if (widget.branchMarkers.isNotEmpty &&
-                  widget.onBranchTap != null) {
+                  widget.onBranchTap != null &&
+                  widget.selected == null) {
                 final idx = MoveArrowPainter.hitTestArrow(
                   point: local,
                   arrows: widget.branchMarkers,
