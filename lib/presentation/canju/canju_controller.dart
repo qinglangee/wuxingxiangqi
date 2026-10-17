@@ -79,10 +79,19 @@ class CanjuController extends ChangeNotifier {
   bool _analysisMode = false;
   bool get analysisMode => _analysisMode;
 
+  /// 进入分析模式前的黑棋 AI 开关状态（退出分析时恢复）。
+  bool _blackAiBeforeAnalysis = false;
+
   /// 进入分析模式。
   void enterAnalysisMode() {
     if (_analysisMode) return;
     _analysisMode = true;
+    // 进入分析状态时关闭黑棋 AI 控制：否则用户拆解走红棋后黑 AI 会
+    // 自动应手，无法自由摆棋。退出分析时恢复（残局默认黑棋由 AI 控制）。
+    // 若黑 AI 正在思考，其搜索完成后的落子校验会发现黑棋已不再受 AI
+    // 控制而自动丢弃，无需额外取消。
+    _blackAiBeforeAnalysis = gameController.blackIsAi;
+    gameController.setBlackAi(false);
     notifyListeners();
   }
 
@@ -90,6 +99,8 @@ class CanjuController extends ChangeNotifier {
   void exitAnalysisMode() {
     if (!_analysisMode) return;
     _analysisMode = false;
+    // 恢复进入分析前的黑棋 AI 控制状态
+    gameController.setBlackAi(_blackAiBeforeAnalysis);
     notifyListeners();
   }
 
