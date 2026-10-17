@@ -11,6 +11,8 @@ import '../presentation/home/home_screen.dart';
 import '../presentation/home/instruction_screen.dart';
 import '../presentation/library/notation_manager_widget.dart'
     show NotationManagerScreen;
+import '../presentation/library/notation_repository.dart'
+    show openExternalRepository, openInternalRepository;
 import '../presentation/session/game_session_store.dart';
 import '../presentation/settings/settings_screen.dart';
 
@@ -142,10 +144,13 @@ class App extends StatelessWidget {
               rootDirectory: args.$1,
               rootLabel: args.$2,
               title: args.$2 != null ? '外部仓库 · ${args.$2}' : '棋谱管理',
+              onSwitchRepository: () => openInternalRepository(ctx),
             );
           }
           return NotationManagerScreen(
             initialDirectory: args is String ? args : null,
+            onSwitchRepository: () =>
+                openExternalRepository(ctx, replace: true),
           );
         },
       },

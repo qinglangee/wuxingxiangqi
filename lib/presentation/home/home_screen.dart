@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/canju/canju_library.dart';
 import '../../core/canju/canju_progress.dart';
+import '../../core/config/config_manager.dart';
 import '../canju/canju_controller.dart';
 import '../canju/canju_selector_dialog.dart';
 import '../library/notation_manager_widget.dart';
@@ -187,14 +188,24 @@ class HomeScreen extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------------------
-  // 棋谱入口：浮动窗口内嵌棋谱管理控件，打开默认 books 目录
+  // 棋谱入口：默认打开上次使用的仓库（内置 books 浮动窗口 / 外部仓库页面）
   // ---------------------------------------------------------------------------
 
-  /// 点击「棋谱」：弹出全屏浮动窗口，内嵌棋谱管理控件浏览应用数据
-  /// 目录 `wuxingxiangqi/books` 下的棋谱。「外部仓库」按钮先关闭浮动
-  /// 窗口，再以同一套棋谱管理页面打开已配置的外部仓库目录
-  /// （[openExternalRepository]，未配置时引导选择目录）。
+  /// 点击「棋谱」：按配置中上次使用的仓库打开——
+  /// - 上次用外部仓库（且已配置路径）：直接打开外部仓库页面
+  ///   （[openExternalRepository]，未配置或失效时引导选择目录）；
+  /// - 否则弹出全屏浮动窗口，内嵌棋谱管理控件浏览应用数据目录
+  ///   `wuxingxiangqi/books` 下的棋谱；浮动窗口里的「外部仓库」按钮
+  ///   先关闭浮动窗口，再以同一套棋谱管理页面打开外部仓库。
   void _openNotationManager(BuildContext context) {
+    // 上次使用的是外部仓库：直接打开（目录失效时由 openExternalRepository
+    // 引导重选）
+    final lib = ConfigManager.instance.config.library;
+    if (lib.lastRepoExternal &&
+        (lib.notationLibraryPath?.isNotEmpty ?? false)) {
+      openExternalRepository(context);
+      return;
+    }
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -214,7 +225,7 @@ class HomeScreen extends StatelessWidget {
             ),
             body: SafeArea(
               child: NotationManagerWidget(
-                onExternalRepository: () {
+                onSwitchRepository: () {
                   Navigator.of(dialogCtx).pop();
                   openExternalRepository(context);
                 },

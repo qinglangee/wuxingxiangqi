@@ -580,7 +580,11 @@ class BoardConfig {
 
 /// 棋谱仓库相关配置。
 class LibraryConfig {
-  LibraryConfig({this.notationLibraryPath, this.lastSaveFormat});
+  LibraryConfig({
+    this.notationLibraryPath,
+    this.lastSaveFormat,
+    this.lastRepoExternal = false,
+  });
 
   /// 棋谱仓库根目录（绝对路径）。为空表示尚未配置，需要用户先选择。
   String? notationLibraryPath;
@@ -589,22 +593,30 @@ class LibraryConfig {
   /// 默认格式偏好。为空或不可写时退回 'pgn'。
   String? lastSaveFormat;
 
+  /// 上次打开棋谱使用的是否为外部仓库（true=外部仓库，false=内置
+  /// books）。首页「棋谱」入口默认打开上次使用的仓库。
+  bool lastRepoExternal;
+
   factory LibraryConfig.fromJson(Map<String, dynamic> json) => LibraryConfig(
         notationLibraryPath: json['notationLibraryPath'] as String?,
         lastSaveFormat: json['lastSaveFormat'] as String?,
+        lastRepoExternal: json['lastRepoExternal'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
         'notationLibraryPath': notationLibraryPath,
         'lastSaveFormat': lastSaveFormat,
+        'lastRepoExternal': lastRepoExternal,
       };
 
   LibraryConfig copyWith({
     String? notationLibraryPath,
     String? lastSaveFormat,
+    bool? lastRepoExternal,
   }) =>
       LibraryConfig(
         notationLibraryPath: notationLibraryPath ?? this.notationLibraryPath,
         lastSaveFormat: lastSaveFormat ?? this.lastSaveFormat,
+        lastRepoExternal: lastRepoExternal ?? this.lastRepoExternal,
       );
 }

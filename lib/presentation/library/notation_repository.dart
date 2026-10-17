@@ -177,15 +177,22 @@ Future<bool> ensureDirectoryWritable(
   return ConfigManager.isDirectoryWritable(dir);
 }
 
-/// 打开外部棋谱仓库（首页浮动窗口中的「外部仓库」按钮）：
+/// 打开外部棋谱仓库（仓库切换按钮 / 首页「棋谱」按上次使用记录直开）：
 /// 1. 读取配置中的 [LibraryConfig.notationLibraryPath]；
 /// 2. 已配置且目录可写入 → 直接用棋谱管理页面打开该目录（与内置 books
 ///    同一套浏览/多选/改名/删除界面）；
 /// 3. 未配置或目录失效 → 提示并引导用户选择目录，验证可写后保存配置，
 ///    再打开棋谱管理页面。
 ///
+/// 成功打开后把「上次使用的仓库」记为外部仓库（下次首页「棋谱」直开）。
+/// [replace] 为 true 时用新页面替换当前页面（内置 ↔ 外部互跳时保持
+/// 导航栈不累积）；为 false 时正常压栈。
+///
 /// 调用前应先关闭浮动窗口（若有），避免管理页面被遮挡。
-Future<void> openExternalRepository(BuildContext context) async {
+Future<void> openExternalRepository(
+  BuildContext context, {
+  bool replace = false,
+}) async {
   final mgr = ConfigManager.instance;
   var path = mgr.config.library.notationLibraryPath;
 
@@ -235,13 +242,40 @@ Future<void> openExternalRepository(BuildContext context) async {
 
   // 已配置：用棋谱管理页面打开外部仓库（与内置 books 同一套界面）
   if (!context.mounted) return;
+  // 记录上次使用的仓库为外部仓库（下次首页「棋谱」直开）
+  await mgr.updateLibrary((c) => c.copyWith(lastRepoExternal: true));
+  if (!context.mounted) return;
   final label = path.split(Platform.pathSeparator).last;
-  await Navigator.of(context).push(
+  final route = MaterialPageRoute<void>(
+    builder: (pageCtx) => NotationManagerScreen(
+      rootDirectory: path,
+      rootLabel: label,
+      title: '外部仓库 · $label',
+      // 外部仓库页面的「内置仓库」按钮：替换式跳回内置 books
+      onSwitchRepository: () => openInternalRepository(pageCtx),
+    ),
+  );
+  if (replace) {
+    await Navigator.of(context).pushReplacement(route);
+  } else {
+    await Navigator.of(context).push(route);
+  }
+}
+
+/// 打开内置 books 棋谱仓库（外部仓库页面的「内置仓库」按钮）：
+/// 以默认 books 根打开棋谱管理页面并替换当前页（保持导航栈不累积），
+/// 同时把「上次使用的仓库」记为内置仓库。
+void openInternalRepository(BuildContext context) {
+  // 记录上次使用的仓库为内置 books
+  ConfigManager.instance.updateLibrary(
+    (c) => c.copyWith(lastRepoExternal: false),
+  );
+  Navigator.of(context).pushReplacement(
     MaterialPageRoute<void>(
-      builder: (_) => NotationManagerScreen(
-        rootDirectory: path,
-        rootLabel: label,
-        title: '外部仓库 · $label',
+      builder: (pageCtx) => NotationManagerScreen(
+        // 内置仓库页面的「外部仓库」按钮：替换式跳到外部仓库
+        onSwitchRepository: () =>
+            openExternalRepository(pageCtx, replace: true),
       ),
     ),
   );

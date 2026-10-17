@@ -16,6 +16,7 @@ class NotationManagerScreen extends StatelessWidget {
     this.rootDirectory,
     this.rootLabel,
     this.title = '棋谱管理',
+    this.onSwitchRepository,
   });
 
   /// 起始浏览目录；为空时打开根目录。
@@ -31,6 +32,9 @@ class NotationManagerScreen extends StatelessWidget {
   /// 页面标题。
   final String title;
 
+  /// 「内置仓库 / 外部仓库」切换按钮回调；为 null 时不显示该按钮。
+  final VoidCallback? onSwitchRepository;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,6 +44,7 @@ class NotationManagerScreen extends StatelessWidget {
           initialDirectory: initialDirectory,
           rootDirectory: rootDirectory,
           rootLabel: rootLabel,
+          onSwitchRepository: onSwitchRepository,
         ),
       ),
     );
@@ -53,8 +58,8 @@ class NotationManagerScreen extends StatelessWidget {
 /// - 长按任意条目进入多选模式，可对文件与目录执行移动、改名、删除；
 ///   移动时弹出目标目录选择器，目标不能是被移动项自身或其子目录，
 ///   且目标目录必须可写（Android 上必要时引导授权）；
-/// - [onExternalRepository] 非空时显示「外部仓库」按钮（首页浮动窗口
-///   中用于切换到配置的外部仓库，由 [openExternalRepository] 处理）。
+/// - [onSwitchRepository] 非空时显示仓库切换按钮：浏览内置 books 时
+///   显示「外部仓库」，浏览外部仓库时显示「内置仓库」，点击跳到对方；
 /// - [rootDirectory] 非空时本控件直接浏览该外部目录，内置 books 与外部
 ///   仓库共用同一套浏览/多选/改名/移动/删除界面。
 /// - [onOpenFile] 非空时点击棋谱文件交给外部处理（如先关闭所在浮动
@@ -65,7 +70,7 @@ class NotationManagerWidget extends StatefulWidget {
     this.initialDirectory,
     this.rootDirectory,
     this.rootLabel,
-    this.onExternalRepository,
+    this.onSwitchRepository,
     this.onOpenFile,
   });
 
@@ -79,8 +84,8 @@ class NotationManagerWidget extends StatefulWidget {
   /// 根目录在路径栏中的显示名称（默认 books；外部仓库传目录名）。
   final String? rootLabel;
 
-  /// 「外部仓库」按钮回调；为 null 时不显示该按钮。
-  final VoidCallback? onExternalRepository;
+  /// 仓库切换按钮（内置 ↔ 外部）回调；为 null 时不显示该按钮。
+  final VoidCallback? onSwitchRepository;
 
   /// 点击棋谱文件回调（入参为文件绝对路径）；为 null 时控件自行
   /// 打开打谱页。
@@ -201,6 +206,17 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
   }
 
   bool get _canGoUp => _rootPath != null && _currentPath != _rootPath;
+
+  /// 当前浏览根是否为配置的外部仓库（决定切换按钮显示为「内置仓库」
+  /// 还是「外部仓库」）。
+  bool get _atExternalRepo {
+    final ext = ConfigManager.instance.config.library.notationLibraryPath;
+    final root = _rootPath;
+    return ext != null &&
+        ext.isNotEmpty &&
+        root != null &&
+        p.equals(ext, root);
+  }
 
   // ---------------------------------------------------------------------------
   // 浏览交互
@@ -782,7 +798,7 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
     );
   }
 
-  /// 顶部工具行：普通模式为返回上级 + 路径 + 刷新 + 外部仓库；
+  /// 顶部工具行：普通模式为返回上级 + 路径 + 刷新 + 新建目录 + 仓库切换；
   /// 多选模式为退出 + 已选数量 + 全选。
   Widget _buildToolBar() {
     if (_multiSelect) {
@@ -831,11 +847,16 @@ class _NotationManagerWidgetState extends State<NotationManagerWidget> {
           icon: const Icon(Icons.create_new_folder),
           tooltip: '新建目录',
         ),
-        if (widget.onExternalRepository != null)
+        if (widget.onSwitchRepository != null)
           TextButton.icon(
-            onPressed: widget.onExternalRepository,
-            icon: const Icon(Icons.collections_bookmark, size: 18),
-            label: const Text('外部仓库'),
+            onPressed: widget.onSwitchRepository,
+            icon: Icon(
+              _atExternalRepo
+                  ? Icons.library_books
+                  : Icons.collections_bookmark,
+              size: 18,
+            ),
+            label: Text(_atExternalRepo ? '内置仓库' : '外部仓库'),
           ),
       ],
     );
