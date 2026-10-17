@@ -148,6 +148,7 @@ class _ReviewPanelState extends State<ReviewPanel>
     return ListenableBuilder(
       listenable: ConfigManager.instance,
       builder: (context, _) {
+        final config = ConfigManager.instance.config;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.85),
@@ -158,8 +159,10 @@ class _ReviewPanelState extends State<ReviewPanel>
       child: Column(
         children: [
           // 浮动红星：管理复盘导航条的全部按钮（不参与布局，
-          // 通过 Overlay 浮在所有组件上方）；「菜单星」显隐由界面设置控制
-          if (ConfigManager.instance.config.ui.showMenuStar)
+          // 通过 Overlay 浮在所有组件上方）；显隐由两处共同作用：
+          // 黄星（缩放把手）处于禁用状态（灰色）时红星不显示，
+          // 黄星可用（黄色）时再按界面设置「菜单星」开关决定
+          if (config.board.boardHandleEnabled && config.ui.showMenuStar)
             FloatingStarMenu(
               id: 'review_floating_star',
               buttons: navButtons,
@@ -167,8 +170,10 @@ class _ReviewPanelState extends State<ReviewPanel>
               defaultAnchorKey: widget.boardAreaKey,
             ),
           // 浮动绿星：三态循环——0 全部显示（深绿）、1 隐藏标签（浅绿）、
-          // 2 隐藏标签与面板（灰绿）；「标签星」显隐由界面设置控制
-          if (ConfigManager.instance.config.ui.showTabStar)
+          // 2 隐藏标签与面板（灰绿）；显隐由两处共同作用：
+          // 黄星（缩放把手）处于禁用状态（灰色）时绿星不显示，
+          // 黄星可用（黄色）时再按界面设置「标签星」开关决定
+          if (config.board.boardHandleEnabled && config.ui.showTabStar)
             FloatingToggleStar(
               id: 'review_tab_toggle_star',
               state: _tabStarState,
