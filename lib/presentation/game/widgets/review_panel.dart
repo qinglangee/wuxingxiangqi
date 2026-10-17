@@ -141,6 +141,37 @@ class _ReviewPanelState extends State<ReviewPanel>
     await _loadSessionGame(chosen);
   }
 
+  /// 「删着」：与棋谱页长按着法的删除功能完全相同——弹确认框，用户
+  /// 确认后删除当前着法及其全部后代（子分支一并删除）；当前节点在
+  /// 被删子树中，[GameController.deleteMove] 会自动回退到上一着法。
+  Future<void> _confirmDeleteCurrentMove() async {
+    final node = controller.currentNode;
+    if (node.isRoot) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除着法'),
+        content: Text('将删除「${node.move!.notation}」及其后续所有着法和分支，'
+            '此操作不可撤销。确认删除？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC62828),
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    controller.deleteMove(node);
+  }
+
   @override
   Widget build(BuildContext context) {
     final navButtons = _buildNavButtons();
@@ -252,6 +283,7 @@ class _ReviewPanelState extends State<ReviewPanel>
               '前进',
               '后退',
               '注释',
+              '删着',
             },
             buttons: navButtons,
           ),
@@ -352,6 +384,16 @@ class _ReviewPanelState extends State<ReviewPanel>
                 // 与「棋谱注释」页的添加/编辑注释按钮完全相同：
                 // 为当前着法（根节点为开局评注）添加或编辑注释
                 onTap: () => CommentArea.editComment(context, controller),
+              ),
+              FreeButton(
+                id: '删着',
+                icon: Icons.delete_outline,
+                label: '删着',
+                // 根节点（开局局面）无着法可删
+                enabled: controller.canGoBack,
+                // 与棋谱页长按着法的删除功能完全相同：
+                // 确认后删除当前着法及其全部后代，回退到上一着法
+                onTap: _confirmDeleteCurrentMove,
               ),
               FreeButton(
                 id: '背谱',
