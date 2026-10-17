@@ -440,7 +440,7 @@ class _PieceBoardSettingsState extends State<PieceBoardTab>
                     TextButton.icon(
                       onPressed: _importPieceSet,
                       icon: const Icon(Icons.create_new_folder, size: 20),
-                      label: const Text('导入棋子(请先改好目录名， 同名目录会覆盖现有棋子)'),
+                      label: const Text('导入棋子(同名目录会覆盖)'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.boardLine,
                         side: const BorderSide(color: AppTheme.boardLine),
