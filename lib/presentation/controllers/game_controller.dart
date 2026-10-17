@@ -520,15 +520,25 @@ class GameController extends ChangeNotifier {
   /// 把当前整棵棋谱树（含全部分支与注释）导出为 [ParsedGame]，供保存。
   ///
   /// - 起始 FEN 取根节点盘面；首步走子方取根节点行棋方；
-  /// - 主线沿各节点 mainChild 指针，其余孩子作为同位变着递归导出；
+  /// - 主线沿各节点的**第一个孩子**（创建顺序），其余孩子作为同位
+  ///   变着递归导出——不能用 mainChildIndex 重排：那只是浏览指针
+  ///   （新分支产生时指向新分支），若按它把当前分支提到首位，保存后
+  ///   再打开分支顺序就会被打乱（两个分支时表现为完全反转）；
   /// - 每步同时输出 UCI 坐标与中文记谱；
   /// - 根节点 [NotationNode.comment] 作为开局评注；
-  /// - 结果取主线末梢节点的胜负状态（进行中时保留载入时的原结果）。
+  /// - 结果取主线（第一孩子链）末梢节点的胜负状态（进行中时保留
+  ///   载入时的原结果）。
   ParsedGame exportParsedGame() {
     final startFen = Fen.fromBoard(_root.board, _root.sideToMove);
 
+    // 主线末梢：沿各节点第一个孩子（保存后的主线即此链）
+    var tip = _root;
+    while (tip.children.isNotEmpty) {
+      tip = tip.children.first;
+    }
+
     String? result;
-    switch (_root.mainLine().last.result.status) {
+    switch (tip.result.status) {
       case GameResultStatus.redWins:
         result = '1-0';
       case GameResultStatus.blackWins:
@@ -539,12 +549,11 @@ class GameController extends ChangeNotifier {
         result = _gameInfo.result;
     }
 
-    final orderedRoot = _orderedChildren(_root);
-    final moves = orderedRoot.isEmpty
+    final moves = _root.children.isEmpty
         ? <ParsedMove>[]
-        : _exportLine(orderedRoot.first);
+        : _exportLine(_root.children.first);
     final rootBranches =
-        orderedRoot.skip(1).map((n) => _exportLine(n)).toList();
+        _root.children.skip(1).map((n) => _exportLine(n)).toList();
 
     return ParsedGame(
       info: GameInfo(
@@ -565,21 +574,11 @@ class GameController extends ChangeNotifier {
     );
   }
 
-  /// 节点的续着列表：当前主线孩子排首位，其余分支按原顺序在后。
-  List<NotationNode> _orderedChildren(NotationNode node) {
-    if (node.children.isEmpty) return const [];
-    final mi = node.mainChildIndex.clamp(0, node.children.length - 1);
-    final main = node.children[mi];
-    return [
-      main,
-      ...node.children.where((n) => !identical(n, main)),
-    ];
-  }
-
-  /// 从某着法节点起导出一条着法线（主线续着在前，分支挂在各步上）。
+  /// 从某着法节点起导出一条着法线（第一个孩子为主线续着，其余孩子
+  /// 按创建顺序作为同位变着挂在各步上）。
   List<ParsedMove> _exportLine(NotationNode first) {
     final rec = first.move!;
-    final children = _orderedChildren(first);
+    final children = first.children;
     final branches =
         children.skip(1).map((sib) => _exportLine(sib)).toList();
     final pm = ParsedMove(
